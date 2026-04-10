@@ -36,9 +36,9 @@ export default function FilterDrawer({ open, onOpen, onClose, filters, onApply, 
 
   return (
     <SwipeableDrawer anchor="bottom" open={open} onOpen={onOpen} onClose={onClose}
-      PaperProps={{ sx: { borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: "70vh", px: 3, py: 2 } }}>
+      slotProps={{ paper: { sx: { borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: "70vh", px: 3, py: 2 } } }}>
       <Box sx={{ width: 40, height: 4, bgcolor: "#444", borderRadius: 2, mx: "auto", mb: 2 }} />
-      <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>Filters</Typography>
+      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>Filters</Typography>
 
       {groups.length > 1 && (
         <>

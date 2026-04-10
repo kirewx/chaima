@@ -22,7 +22,7 @@ export default function ChemicalCard({ chemical, containers, hazardTags, locatio
       <CardActionArea onClick={() => setExpanded(!expanded)} sx={{ p: 1.5 }}>
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 0.5 }}>
           <Box>
-            <Typography variant="body1" fontWeight={600}>{chemical.name}</Typography>
+            <Typography variant="body1" sx={{ fontWeight: 600 }}>{chemical.name}</Typography>
             <Typography variant="caption" color="text.secondary">
               {chemical.cas ?? "No CAS"}
               {chemical.structure && ` · ${chemical.structure}`}

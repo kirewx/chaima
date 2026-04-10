@@ -142,12 +142,12 @@ export default function StoragePage() {
             })}
           </Breadcrumbs>
           {currentNode && (
-            <Typography variant="h6" fontWeight={600} sx={{ mt: 0.5 }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, mt: 0.5 }}>
               {currentNode.name}
             </Typography>
           )}
           {!currentNode && (
-            <Typography variant="h6" fontWeight={600} sx={{ mt: 0.5 }}>
+            <Typography variant="h6" sx={{ fontWeight: 600, mt: 0.5 }}>
               Storage Locations
             </Typography>
           )}
@@ -185,7 +185,7 @@ export default function StoragePage() {
                   }}
                 >
                   <Box>
-                    <Typography variant="body1" fontWeight={500}>
+                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
                       {child.name}
                     </Typography>
                     <Typography variant="caption" color="text.secondary">

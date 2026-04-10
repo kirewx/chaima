@@ -11,17 +11,17 @@ interface SearchBarProps {
 
 export default function SearchBar({ value, onChange, debounceMs = 300 }: SearchBarProps) {
   const [localValue, setLocalValue] = useState(value);
-  const timerRef = useRef<ReturnType<typeof setTimeout>>();
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { setLocalValue(value); }, [value]);
 
   const handleChange = (newValue: string) => {
     setLocalValue(newValue);
-    clearTimeout(timerRef.current);
+    clearTimeout(timerRef.current ?? undefined);
     timerRef.current = setTimeout(() => onChange(newValue), debounceMs);
   };
 
-  useEffect(() => { return () => clearTimeout(timerRef.current); }, []);
+  useEffect(() => { return () => clearTimeout(timerRef.current ?? undefined); }, []);
 
   return (
     <TextField

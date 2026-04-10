@@ -52,7 +52,7 @@ export default function ContainerForm() {
 
   return (
     <Box sx={{ p: 2, maxWidth: 600 }}>
-      <Typography variant="h5" fontWeight={700} sx={{ mb: 2 }}>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
         Add Container
       </Typography>
 

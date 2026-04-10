@@ -51,7 +51,7 @@ export default function SettingsPage() {
 
   return (
     <Box sx={{ p: 2, maxWidth: 600 }}>
-      <Typography variant="h5" fontWeight={700} sx={{ mb: 2 }}>
+      <Typography variant="h5" sx={{ fontWeight: 700, mb: 2 }}>
         Settings
       </Typography>
 
@@ -142,7 +142,7 @@ function SuperuserPanel() {
 
   return (
     <Box sx={{ mt: 2 }}>
-      <Typography variant="h6" fontWeight={700} sx={{ mb: 1 }}>
+      <Typography variant="h6" sx={{ fontWeight: 700, mb: 1 }}>
         Admin Panel
       </Typography>
 
@@ -238,7 +238,7 @@ function GroupAdminPanel({
   return (
     <Box sx={{ mt: 2 }}>
       <Box sx={{ display: "flex", alignItems: "center", mb: 1, gap: 1 }}>
-        <Typography variant="h6" fontWeight={700} sx={{ flex: 1 }}>
+        <Typography variant="h6" sx={{ fontWeight: 700, flex: 1 }}>
           {group.name}
         </Typography>
         <Button size="small" onClick={onClose}>

@@ -76,7 +76,7 @@ export default function Layout() {
                 <ListItemIcon sx={{ minWidth: 0, justifyContent: "center", color: "inherit" }}>
                   {item.icon}
                 </ListItemIcon>
-                <ListItemText primary={item.label} primaryTypographyProps={{ fontSize: 10, textAlign: "center" }} />
+                <ListItemText primary={item.label} slotProps={{ primary: { style: { fontSize: 10, textAlign: "center" } } }} />
               </ListItemButton>
             ))}
           </List>

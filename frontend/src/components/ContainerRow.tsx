@@ -15,7 +15,7 @@ export default function ContainerRow({ container, locationPath, supplierName, ex
       <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
         <Box>
           <Typography variant="body2" component="span">
-            <Typography component="span" variant="body2" color="success.main" fontWeight={600}>
+            <Typography component="span" variant="body2" color="success.main" sx={{ fontWeight: 600 }}>
               {container.amount} {container.unit}
             </Typography>
             {supplierName && (
@@ -26,7 +26,7 @@ export default function ContainerRow({ container, locationPath, supplierName, ex
             )}
           </Typography>
           {expanded && (
-            <Typography variant="caption" color="text.secondary" display="block">
+            <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
               ID: {container.identifier}
               {container.purchased_at && ` · Purchased ${container.purchased_at}`}
             </Typography>
