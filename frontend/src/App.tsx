@@ -1,5 +1,9 @@
-import { Routes, Route } from "react-router-dom";
+import { Routes, Route, Navigate } from "react-router-dom";
 import { Typography, Box } from "@mui/material";
+import Layout from "./components/Layout";
+import ProtectedRoute from "./components/ProtectedRoute";
+import LoginPage from "./pages/LoginPage";
+import RegisterPage from "./pages/RegisterPage";
 
 function Placeholder({ name }: { name: string }) {
   return (
@@ -12,8 +16,21 @@ function Placeholder({ name }: { name: string }) {
 export default function App() {
   return (
     <Routes>
-      <Route path="/" element={<Placeholder name="Search" />} />
-      <Route path="/login" element={<Placeholder name="Login" />} />
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/register" element={<RegisterPage />} />
+      <Route element={<ProtectedRoute />}>
+        <Route element={<Layout />}>
+          <Route path="/" element={<Placeholder name="Search" />} />
+          <Route path="/add" element={<Placeholder name="Add Chemical" />} />
+          <Route path="/chemicals/:id/edit" element={<Placeholder name="Edit Chemical" />} />
+          <Route path="/containers/new" element={<Placeholder name="Add Container" />} />
+          <Route path="/containers/:id/edit" element={<Placeholder name="Edit Container" />} />
+          <Route path="/storage" element={<Placeholder name="Storage" />} />
+          <Route path="/storage/:id" element={<Placeholder name="Storage Detail" />} />
+          <Route path="/settings" element={<Placeholder name="Settings" />} />
+        </Route>
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
   );
 }
