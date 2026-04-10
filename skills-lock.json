@@ -1,0 +1,15 @@
+{
+  "version": 1,
+  "skills": {
+    "api-pagination": {
+      "source": "aj-geddes/useful-ai-prompts",
+      "sourceType": "github",
+      "computedHash": "acea4f9aca3b15201407c3f938b5421a2601e518921baa0f9d264209b8bbf527"
+    },
+    "rest-api-design": {
+      "source": "aj-geddes/useful-ai-prompts",
+      "sourceType": "github",
+      "computedHash": "e249c58df5d9d59407fc4de70b0d75bb336d917bbe0a75695d6ec8cf13cfaf35"
+    }
+  }
+}
