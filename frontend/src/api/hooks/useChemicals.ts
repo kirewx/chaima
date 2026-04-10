@@ -54,6 +54,18 @@ export function useDeleteChemical(groupId: string) {
   });
 }
 
+export function useReplaceHazardTags(groupId: string, chemicalId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ chemicalId: cId, hazardTagIds }: { chemicalId: string; hazardTagIds: string[] }) =>
+      client.put(`/groups/${groupId}/chemicals/${cId}/hazard-tags`, { hazard_tag_ids: hazardTagIds }).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["chemicals", groupId] });
+      queryClient.invalidateQueries({ queryKey: ["chemicals", groupId, chemicalId] });
+    },
+  });
+}
+
 export function useMultiGroupChemicals(groupIds: string[], params: ChemicalSearchParams) {
   return useQueries({
     queries: groupIds.map((gid) => ({

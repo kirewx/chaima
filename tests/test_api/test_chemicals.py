@@ -104,6 +104,17 @@ async def test_replace_hazard_tags(client, session, group, membership, user):
     assert len(tags) == 1
 
 
+async def test_create_duplicate_chemical_returns_409(client, session, group, membership, user):
+    session.add(Chemical(group_id=group.id, name="Ethanol", created_by=user.id))
+    await session.commit()
+
+    resp = await client.post(
+        f"/api/v1/groups/{group.id}/chemicals",
+        json={"name": "Ethanol"},
+    )
+    assert resp.status_code == 409
+
+
 async def test_not_member(client, group):
     resp = await client.get(f"/api/v1/groups/{group.id}/chemicals")
     assert resp.status_code == 403

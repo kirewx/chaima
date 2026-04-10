@@ -220,3 +220,4 @@ src/chaima/static/
 
 # Database
 chaima.db
+.playwright-cli/

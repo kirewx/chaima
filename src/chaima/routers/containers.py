@@ -163,7 +163,7 @@ async def list_containers(
     sort: str = Query("identifier"),
     order: str = Query("asc"),
     offset: int = Query(0, ge=0),
-    limit: int = Query(20, ge=1, le=100),
+    limit: int = Query(20, ge=1, le=500),
 ) -> PaginatedResponse[ContainerRead]:
     """List all containers in a group.
 

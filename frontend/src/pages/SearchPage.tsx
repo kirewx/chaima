@@ -7,13 +7,16 @@ import { useMultiGroupChemicals } from "../api/hooks/useChemicals";
 import { useHazardTags } from "../api/hooks/useHazardTags";
 import { useGHSCodes } from "../api/hooks/useGHSCodes";
 import { useGroups } from "../api/hooks/useGroups";
+import { useContainers, useUnarchiveContainer } from "../api/hooks/useContainers";
+import { useSuppliers } from "../api/hooks/useSuppliers";
+import { useStorageTree } from "../api/hooks/useStorageLocations";
 import SearchBar from "../components/SearchBar";
 import FilterDrawer, { type FilterState } from "../components/FilterDrawer";
 import FilterBadges, { type FilterBadge } from "../components/FilterBadges";
 import ChemicalCard from "../components/ChemicalCard";
 import SwipeableRow from "../components/SwipeableRow";
 import UndoSnackbar from "../components/UndoSnackbar";
-import { useUnarchiveContainer } from "../api/hooks/useContainers";
+import type { StorageLocationNode, ContainerRead } from "../types";
 
 export default function SearchPage() {
   const { groupId: mainGroupId } = useGroup();
@@ -52,10 +55,42 @@ export default function SearchPage() {
 
   const hazardTagsQuery = useHazardTags(mainGroupId);
   const ghsCodesQuery = useGHSCodes();
+  const containersQuery = useContainers(mainGroupId, { limit: 500 });
+  const suppliersQuery = useSuppliers(mainGroupId);
+  const storageTreeQuery = useStorageTree(mainGroupId);
   const unarchiveContainer = useUnarchiveContainer(mainGroupId);
 
   const hazardTags = hazardTagsQuery.data?.items ?? [];
   const ghsCodes = ghsCodesQuery.data?.items ?? [];
+
+  const containersByChemical = useMemo(() => {
+    const map: Record<string, ContainerRead[]> = {};
+    for (const c of containersQuery.data?.items ?? []) {
+      (map[c.chemical_id] ??= []).push(c);
+    }
+    return map;
+  }, [containersQuery.data]);
+
+  const supplierNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const s of suppliersQuery.data?.items ?? []) {
+      map[s.id] = s.name;
+    }
+    return map;
+  }, [suppliersQuery.data]);
+
+  const locationPaths = useMemo(() => {
+    const map: Record<string, string> = {};
+    const buildPaths = (nodes: StorageLocationNode[], prefix: string) => {
+      for (const node of nodes) {
+        const path = prefix ? `${prefix} / ${node.name}` : node.name;
+        map[node.id] = path;
+        buildPaths(node.children, path);
+      }
+    };
+    buildPaths(storageTreeQuery.data ?? [], "");
+    return map;
+  }, [storageTreeQuery.data]);
 
   const groupNames = useMemo(() => {
     const map: Record<string, string> = {};
@@ -118,7 +153,7 @@ export default function SearchPage() {
         {isError && <Typography color="error" sx={{ textAlign: "center", py: 4 }}>Failed to load chemicals</Typography>}
         {chemicals.map((chemical) => (
           <SwipeableRow key={chemical.id} onSwipeRight={() => navigate(`/containers/new?chemicalId=${chemical.id}`)}>
-            <ChemicalCard chemical={chemical} containers={[]} hazardTags={[]} locationPaths={{}} supplierNames={{}} onAddContainer={() => navigate(`/containers/new?chemicalId=${chemical.id}`)} />
+            <ChemicalCard chemical={chemical} containers={containersByChemical[chemical.id] ?? []} hazardTags={[]} locationPaths={locationPaths} supplierNames={supplierNames} onAddContainer={() => navigate(`/containers/new?chemicalId=${chemical.id}`)} />
           </SwipeableRow>
         ))}
         {!isLoading && chemicals.length === 0 && (

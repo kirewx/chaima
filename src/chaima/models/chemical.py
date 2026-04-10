@@ -1,12 +1,13 @@
 import datetime
 import uuid as uuid_pkg
 
-from sqlalchemy import Column, DateTime, func
+from sqlalchemy import Column, DateTime, UniqueConstraint, func
 from sqlmodel import Field, Relationship, SQLModel
 
 
 class Chemical(SQLModel, table=True):
     __tablename__ = "chemical"
+    __table_args__ = (UniqueConstraint("name", "group_id"),)
 
     id: uuid_pkg.UUID = Field(default_factory=uuid_pkg.uuid4, primary_key=True)
     group_id: uuid_pkg.UUID = Field(foreign_key="group.id", index=True)

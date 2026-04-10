@@ -2,6 +2,7 @@
 from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
+from sqlalchemy.exc import IntegrityError
 
 from chaima.dependencies import CurrentUserDep, GroupMemberDep, SessionDep
 from chaima.schemas.chemical import (
@@ -116,22 +117,35 @@ async def create_chemical(
     ChemicalRead
         The newly created chemical.
     """
-    chem = await chemical_service.create_chemical(
-        session,
-        group_id=group_id,
-        created_by=user.id,
-        name=body.name,
-        cas=body.cas,
-        smiles=body.smiles,
-        cid=body.cid,
-        structure=body.structure,
-        molar_mass=body.molar_mass,
-        density=body.density,
-        melting_point=body.melting_point,
-        boiling_point=body.boiling_point,
-        comment=body.comment,
-    )
-    await session.commit()
+    try:
+        chem = await chemical_service.create_chemical(
+            session,
+            group_id=group_id,
+            created_by=user.id,
+            name=body.name,
+            cas=body.cas,
+            smiles=body.smiles,
+            cid=body.cid,
+            structure=body.structure,
+            molar_mass=body.molar_mass,
+            density=body.density,
+            melting_point=body.melting_point,
+            boiling_point=body.boiling_point,
+            comment=body.comment,
+        )
+    except chemical_service.DuplicateNameError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A chemical with this name already exists in the group",
+        )
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A chemical with this name already exists in the group",
+        )
     return ChemicalRead.model_validate(chem, from_attributes=True)
 
 

@@ -91,7 +91,8 @@ def upgrade() -> None:
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.ForeignKeyConstraint(['created_by'], ['user.id'], ),
     sa.ForeignKeyConstraint(['group_id'], ['group.id'], ),
-    sa.PrimaryKeyConstraint('id')
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('name', 'group_id')
     )
     op.create_index(op.f('ix_chemical_cas'), 'chemical', ['cas'], unique=False)
     op.create_index(op.f('ix_chemical_group_id'), 'chemical', ['group_id'], unique=False)

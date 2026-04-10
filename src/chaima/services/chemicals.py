@@ -15,6 +15,10 @@ class CrossGroupError(Exception):
     """Raised when linking a chemical to a hazard tag from a different group."""
 
 
+class DuplicateNameError(Exception):
+    """Raised when a chemical name already exists within the same group."""
+
+
 async def create_chemical(
     session: AsyncSession,
     *,
@@ -67,6 +71,18 @@ async def create_chemical(
     Chemical
         The newly created chemical.
     """
+    existing = (
+        await session.exec(
+            select(Chemical).where(
+                Chemical.group_id == group_id, Chemical.name == name
+            )
+        )
+    ).first()
+    if existing is not None:
+        raise DuplicateNameError(
+            f"Chemical '{name}' already exists in this group"
+        )
+
     chem = Chemical(
         group_id=group_id,
         created_by=created_by,

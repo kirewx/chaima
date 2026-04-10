@@ -6,13 +6,23 @@ import {
   Button,
   Typography,
   Alert,
+  Autocomplete,
+  createFilterOptions,
 } from "@mui/material";
 import { useGroup } from "../components/GroupContext";
 import { useCreateContainer } from "../api/hooks/useContainers";
 import { useStorageTree } from "../api/hooks/useStorageLocations";
-import { useSuppliers } from "../api/hooks/useSuppliers";
+import { useSuppliers, useCreateSupplier } from "../api/hooks/useSuppliers";
 import LocationPicker from "../components/LocationPicker";
-import type { ContainerCreate } from "../types";
+import type { ContainerCreate, SupplierRead } from "../types";
+
+interface SupplierOption {
+  id?: string;
+  name: string;
+  isNew?: boolean;
+}
+
+const supplierFilter = createFilterOptions<SupplierOption>();
 
 export default function ContainerForm() {
   const { groupId } = useGroup();
@@ -23,20 +33,35 @@ export default function ContainerForm() {
   const createMutation = useCreateContainer(groupId, chemicalId);
   const storageTree = useStorageTree(groupId);
   const suppliersQuery = useSuppliers(groupId);
+  const createSupplier = useCreateSupplier(groupId);
 
   const [locationId, setLocationId] = useState("");
   const [locationPath, setLocationPath] = useState("");
-  const [supplierId, setSupplierId] = useState("");
+  const [supplierOption, setSupplierOption] = useState<SupplierOption | null>(null);
   const [identifier, setIdentifier] = useState("");
   const [amount, setAmount] = useState("");
   const [unit, setUnit] = useState("mL");
   const [purchasedAt, setPurchasedAt] = useState("");
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const suppliers = suppliersQuery.data?.items ?? [];
+  const suppliers: SupplierOption[] = (suppliersQuery.data?.items ?? []).map((s: SupplierRead) => ({
+    id: s.id,
+    name: s.name,
+  }));
 
-  const handleSubmit = (e: FormEvent) => {
+  const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+
+    let supplierId: string | undefined;
+    if (supplierOption) {
+      if (supplierOption.isNew) {
+        const created = await createSupplier.mutateAsync({ name: supplierOption.name });
+        supplierId = created.id;
+      } else {
+        supplierId = supplierOption.id;
+      }
+    }
+
     const data: ContainerCreate = {
       location_id: locationId,
       supplier_id: supplierId || undefined,
@@ -82,22 +107,35 @@ export default function ContainerForm() {
           {locationPath || "Select storage location *"}
         </Button>
 
-        <TextField
-          label="Supplier"
-          select
-          value={supplierId}
-          onChange={(e) => setSupplierId(e.target.value)}
-          fullWidth
+        <Autocomplete
+          value={supplierOption}
+          onChange={(_, newValue) => {
+            if (typeof newValue === "string") {
+              setSupplierOption({ name: newValue, isNew: true });
+            } else {
+              setSupplierOption(newValue);
+            }
+          }}
+          filterOptions={(options, params) => {
+            const filtered = supplierFilter(options, params);
+            if (params.inputValue !== "" && !filtered.some((o) => o.name === params.inputValue)) {
+              filtered.push({ name: params.inputValue, isNew: true });
+            }
+            return filtered;
+          }}
+          options={suppliers}
+          getOptionLabel={(option) => {
+            if (typeof option === "string") return option;
+            return option.isNew ? `Create "${option.name}"` : option.name;
+          }}
+          isOptionEqualToValue={(option, value) => option.id === value.id && option.name === value.name}
+          freeSolo
+          selectOnFocus
+          clearOnBlur
+          handleHomeEndKeys
+          renderInput={(params) => <TextField {...params} label="Supplier" />}
           sx={{ mb: 2 }}
-          slotProps={{ select: { native: true } }}
-        >
-          <option value="">None</option>
-          {suppliers.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.name}
-            </option>
-          ))}
-        </TextField>
+        />
 
         <Box sx={{ display: "grid", gridTemplateColumns: "2fr 1fr", gap: 2, mb: 2 }}>
           <TextField

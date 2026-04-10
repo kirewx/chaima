@@ -18,7 +18,7 @@ export default function ChemicalCard({ chemical, containers, hazardTags, locatio
   const hasStock = activeContainers.length > 0;
 
   return (
-    <Card sx={{ opacity: hasStock ? 1 : 0.6 }}>
+    <Card sx={{ opacity: hasStock ? 1 : 0.7, bgcolor: "background.paper" }}>
       <CardActionArea onClick={() => setExpanded(!expanded)} sx={{ p: 1.5 }}>
         <Box sx={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", mb: 0.5 }}>
           <Box>
