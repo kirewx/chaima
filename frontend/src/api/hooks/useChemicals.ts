@@ -1,4 +1,4 @@
-import { useInfiniteQuery, useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useInfiniteQuery, useQuery, useMutation, useQueryClient, useQueries } from "@tanstack/react-query";
 import client from "../client";
 import type { PaginatedResponse, ChemicalRead, ChemicalDetail, ChemicalCreate, ChemicalUpdate, ChemicalSearchParams } from "../../types";
 
@@ -51,5 +51,17 @@ export function useDeleteChemical(groupId: string) {
     mutationFn: (chemicalId: string) =>
       client.delete(`/groups/${groupId}/chemicals/${chemicalId}`),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["chemicals", groupId] }); },
+  });
+}
+
+export function useMultiGroupChemicals(groupIds: string[], params: ChemicalSearchParams) {
+  return useQueries({
+    queries: groupIds.map((gid) => ({
+      queryKey: ["chemicals", gid, params] as const,
+      queryFn: () =>
+        client.get(`/groups/${gid}/chemicals`, {
+          params: { ...params, offset: 0, limit: params.limit ?? 100 },
+        }).then((r) => r.data as PaginatedResponse<ChemicalRead>),
+    })),
   });
 }

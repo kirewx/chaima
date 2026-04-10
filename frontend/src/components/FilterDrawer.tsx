@@ -1,5 +1,5 @@
 import { SwipeableDrawer, Box, Typography, Switch, FormControlLabel, Chip, Stack, Button, Divider, TextField, MenuItem } from "@mui/material";
-import type { HazardTagRead, GHSCodeRead } from "../types";
+import type { HazardTagRead, GHSCodeRead, GroupRead } from "../types";
 
 export interface FilterState {
   hasContainers: boolean | undefined;
@@ -7,6 +7,7 @@ export interface FilterState {
   ghsCodeId: string | undefined;
   sort: string;
   order: "asc" | "desc";
+  selectedGroupIds: string[];
 }
 
 interface FilterDrawerProps {
@@ -17,16 +18,48 @@ interface FilterDrawerProps {
   onApply: (filters: FilterState) => void;
   hazardTags: HazardTagRead[];
   ghsCodes: GHSCodeRead[];
+  groups: GroupRead[];
+  mainGroupId: string;
 }
 
-export default function FilterDrawer({ open, onOpen, onClose, filters, onApply, hazardTags, ghsCodes }: FilterDrawerProps) {
+export default function FilterDrawer({ open, onOpen, onClose, filters, onApply, hazardTags, ghsCodes, groups, mainGroupId }: FilterDrawerProps) {
   const handleChange = (patch: Partial<FilterState>) => { onApply({ ...filters, ...patch }); };
+
+  const toggleGroup = (groupId: string) => {
+    const current = filters.selectedGroupIds;
+    const updated = current.includes(groupId)
+      ? current.filter((id) => id !== groupId)
+      : [...current, groupId];
+    if (updated.length > 0) {
+      handleChange({ selectedGroupIds: updated });
+    }
+  };
 
   return (
     <SwipeableDrawer anchor="bottom" open={open} onOpen={onOpen} onClose={onClose}
       PaperProps={{ sx: { borderTopLeftRadius: 16, borderTopRightRadius: 16, maxHeight: "70vh", px: 3, py: 2 } }}>
       <Box sx={{ width: 40, height: 4, bgcolor: "#444", borderRadius: 2, mx: "auto", mb: 2 }} />
       <Typography variant="subtitle1" fontWeight={600} sx={{ mb: 2 }}>Filters</Typography>
+
+      {groups.length > 1 && (
+        <>
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>Groups</Typography>
+          <Stack direction="row" spacing={0.5} sx={{ flexWrap: "wrap", gap: 0.5, mb: 2 }}>
+            {groups.map((g) => (
+              <Chip
+                key={g.id}
+                label={g.name}
+                size="small"
+                color={filters.selectedGroupIds.includes(g.id) ? "primary" : "default"}
+                variant={filters.selectedGroupIds.includes(g.id) ? "filled" : "outlined"}
+                onClick={() => toggleGroup(g.id)}
+              />
+            ))}
+          </Stack>
+          <Divider sx={{ my: 2 }} />
+        </>
+      )}
+
       <FormControlLabel
         control={<Switch checked={filters.hasContainers === true} onChange={(_, checked) => handleChange({ hasContainers: checked ? true : undefined })} />}
         label="Has stock"

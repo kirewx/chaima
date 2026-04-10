@@ -3,9 +3,10 @@ import { useNavigate } from "react-router-dom";
 import { Box, IconButton, CircularProgress, Typography } from "@mui/material";
 import TuneIcon from "@mui/icons-material/Tune";
 import { useGroup } from "../components/GroupContext";
-import { useChemicals } from "../api/hooks/useChemicals";
+import { useMultiGroupChemicals } from "../api/hooks/useChemicals";
 import { useHazardTags } from "../api/hooks/useHazardTags";
 import { useGHSCodes } from "../api/hooks/useGHSCodes";
+import { useGroups } from "../api/hooks/useGroups";
 import SearchBar from "../components/SearchBar";
 import FilterDrawer, { type FilterState } from "../components/FilterDrawer";
 import FilterBadges, { type FilterBadge } from "../components/FilterBadges";
@@ -14,42 +15,67 @@ import SwipeableRow from "../components/SwipeableRow";
 import UndoSnackbar from "../components/UndoSnackbar";
 import { useArchiveContainer, useUnarchiveContainer } from "../api/hooks/useContainers";
 
-const DEFAULT_FILTERS: FilterState = {
-  hasContainers: undefined,
-  hazardTagId: undefined,
-  ghsCodeId: undefined,
-  sort: "name",
-  order: "asc",
-};
-
 export default function SearchPage() {
-  const { groupId } = useGroup();
+  const { groupId: mainGroupId } = useGroup();
   const navigate = useNavigate();
+  const groupsQuery = useGroups();
+  const allGroups = groupsQuery.data ?? [];
   const [search, setSearch] = useState("");
-  const [filters, setFilters] = useState<FilterState>(DEFAULT_FILTERS);
+  const [filters, setFilters] = useState<FilterState>({
+    hasContainers: undefined,
+    hazardTagId: undefined,
+    ghsCodeId: undefined,
+    sort: "name",
+    order: "asc",
+    selectedGroupIds: [mainGroupId],
+  });
   const [drawerOpen, setDrawerOpen] = useState(false);
   const [undoState, setUndoState] = useState<{ open: boolean; containerId: string; message: string }>({ open: false, containerId: "", message: "" });
 
-  const chemicalsQuery = useChemicals(groupId, {
+  const searchParams = {
     search: search || undefined,
     has_containers: filters.hasContainers,
     hazard_tag_id: filters.hazardTagId,
     ghs_code_id: filters.ghsCodeId,
     sort: filters.sort as "name" | "created_at" | "updated_at" | "cas",
     order: filters.order,
-  });
+  };
 
-  const hazardTagsQuery = useHazardTags(groupId);
+  const chemicalQueries = useMultiGroupChemicals(filters.selectedGroupIds, searchParams);
+
+  const chemicals = useMemo(() => {
+    return chemicalQueries.flatMap((q) => q.data?.items ?? []);
+  }, [chemicalQueries]);
+
+  const isLoading = chemicalQueries.some((q) => q.isLoading);
+  const isError = chemicalQueries.some((q) => q.isError);
+
+  const hazardTagsQuery = useHazardTags(mainGroupId);
   const ghsCodesQuery = useGHSCodes();
-  const archiveContainer = useArchiveContainer(groupId);
-  const unarchiveContainer = useUnarchiveContainer(groupId);
+  const archiveContainer = useArchiveContainer(mainGroupId);
+  const unarchiveContainer = useUnarchiveContainer(mainGroupId);
 
   const hazardTags = hazardTagsQuery.data?.items ?? [];
   const ghsCodes = ghsCodesQuery.data?.items ?? [];
-  const chemicals = useMemo(() => chemicalsQuery.data?.pages.flatMap((p) => p.items) ?? [], [chemicalsQuery.data]);
+
+  const groupNames = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const g of allGroups) map[g.id] = g.name;
+    return map;
+  }, [allGroups]);
 
   const badges = useMemo(() => {
     const result: FilterBadge[] = [];
+    if (
+      filters.selectedGroupIds.length !== 1 ||
+      filters.selectedGroupIds[0] !== mainGroupId
+    ) {
+      for (const gid of filters.selectedGroupIds) {
+        if (gid !== mainGroupId && groupNames[gid]) {
+          result.push({ key: `group:${gid}`, label: groupNames[gid], color: "primary" });
+        }
+      }
+    }
     if (filters.hasContainers) result.push({ key: "hasContainers", label: "Has stock", color: "success" });
     if (filters.hazardTagId) {
       const tag = hazardTags.find((t) => t.id === filters.hazardTagId);
@@ -60,10 +86,18 @@ export default function SearchPage() {
       if (code) result.push({ key: "ghsCodeId", label: code.code, color: "warning" });
     }
     return result;
-  }, [filters, hazardTags, ghsCodes]);
+  }, [filters, hazardTags, ghsCodes, mainGroupId, groupNames]);
 
   const handleRemoveBadge = useCallback((key: string) => {
-    setFilters((prev) => ({ ...prev, [key]: undefined }));
+    if (key.startsWith("group:")) {
+      const gid = key.slice(6);
+      setFilters((prev) => ({
+        ...prev,
+        selectedGroupIds: prev.selectedGroupIds.filter((id) => id !== gid),
+      }));
+    } else {
+      setFilters((prev) => ({ ...prev, [key]: undefined }));
+    }
   }, []);
 
   const handleArchive = useCallback((containerId: string, identifier: string) => {
@@ -87,20 +121,30 @@ export default function SearchPage() {
       </Box>
       <FilterBadges badges={badges} onRemove={handleRemoveBadge} />
       <Box sx={{ display: "flex", flexDirection: "column", gap: 1, mt: 1 }}>
-        {chemicalsQuery.isLoading && <Box sx={{ textAlign: "center", py: 4 }}><CircularProgress /></Box>}
-        {chemicalsQuery.isError && <Typography color="error" sx={{ textAlign: "center", py: 4 }}>Failed to load chemicals</Typography>}
+        {isLoading && <Box sx={{ textAlign: "center", py: 4 }}><CircularProgress /></Box>}
+        {isError && <Typography color="error" sx={{ textAlign: "center", py: 4 }}>Failed to load chemicals</Typography>}
         {chemicals.map((chemical) => (
           <SwipeableRow key={chemical.id} onSwipeRight={() => navigate(`/containers/new?chemicalId=${chemical.id}`)}>
             <ChemicalCard chemical={chemical} containers={[]} hazardTags={[]} locationPaths={{}} supplierNames={{}} onAddContainer={() => navigate(`/containers/new?chemicalId=${chemical.id}`)} />
           </SwipeableRow>
         ))}
-        {!chemicalsQuery.isLoading && chemicals.length === 0 && (
+        {!isLoading && chemicals.length === 0 && (
           <Typography color="text.secondary" sx={{ textAlign: "center", py: 4 }}>
             {search ? "No chemicals found" : "No chemicals yet"}
           </Typography>
         )}
       </Box>
-      <FilterDrawer open={drawerOpen} onOpen={() => setDrawerOpen(true)} onClose={() => setDrawerOpen(false)} filters={filters} onApply={setFilters} hazardTags={hazardTags} ghsCodes={ghsCodes} />
+      <FilterDrawer
+        open={drawerOpen}
+        onOpen={() => setDrawerOpen(true)}
+        onClose={() => setDrawerOpen(false)}
+        filters={filters}
+        onApply={setFilters}
+        hazardTags={hazardTags}
+        ghsCodes={ghsCodes}
+        groups={allGroups}
+        mainGroupId={mainGroupId}
+      />
       <UndoSnackbar open={undoState.open} message={undoState.message} onUndo={handleUndo} onClose={() => setUndoState((prev) => ({ ...prev, open: false }))} />
     </Box>
   );
