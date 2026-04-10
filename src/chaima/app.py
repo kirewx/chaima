@@ -16,6 +16,7 @@ from chaima.routers.chemicals import router as chemicals_router
 from chaima.routers.containers import router as containers_router
 from chaima.routers.ghs import router as ghs_router
 from chaima.routers.groups import router as groups_router
+from chaima.routers.users import router as users_custom_router
 from chaima.routers.hazard_tags import router as hazard_tags_router
 from chaima.routers.invites import router as invites_router
 from chaima.routers.storage_locations import router as storage_locations_router
@@ -73,6 +74,7 @@ app.include_router(
     prefix="/api/v1/auth/cookie",
     tags=["auth"],
 )
+app.include_router(users_custom_router)
 app.include_router(
     fastapi_users.get_users_router(UserRead, UserUpdate),
     prefix="/api/v1/users",
