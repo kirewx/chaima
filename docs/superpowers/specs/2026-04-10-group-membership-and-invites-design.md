@@ -37,8 +37,8 @@ from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 class AdminSettings(BaseSettings):
-    admin_email: str
-    admin_password: SecretStr
+    admin_email: str = "admin@chaima.local"
+    admin_password: SecretStr = SecretStr("changeme")
     admin_group_name: str = "Admin"
     invite_ttl_hours: int = 48
 
