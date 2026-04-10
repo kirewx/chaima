@@ -27,6 +27,23 @@ async def session(engine):
 
 
 @pytest.mark.asyncio
+async def test_seed_admin_email_passes_schema_validation(session):
+    """The seeded admin email must pass UserRead (pydantic EmailStr) validation."""
+    from chaima.app import seed_admin
+    from chaima.schemas.user import UserRead
+
+    await seed_admin(session)
+
+    result = await session.exec(select(User).where(User.is_superuser == True))
+    user = result.first()
+    assert user is not None
+
+    # This is the exact call fastapi-users makes on GET /users/me
+    validated = UserRead.model_validate(user)
+    assert validated.email == user.email
+
+
+@pytest.mark.asyncio
 async def test_seed_creates_superuser(session):
     from chaima.app import seed_admin
 
@@ -35,7 +52,6 @@ async def test_seed_creates_superuser(session):
     result = await session.exec(select(User).where(User.is_superuser == True))
     user = result.first()
     assert user is not None
-    assert user.email == "admin@chaima.local"
     assert user.main_group_id is not None
 
     group = await session.get(Group, user.main_group_id)

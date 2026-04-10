@@ -27,7 +27,7 @@ class AdminSettings(BaseSettings):
         Default time-to-live for invite links in hours.
     """
 
-    admin_email: str = "admin@chaima.local"
+    admin_email: str = "admin@chaima.dev"
     admin_password: SecretStr = SecretStr("changeme")
     admin_group_name: str = "Admin"
     invite_ttl_hours: int = 48
