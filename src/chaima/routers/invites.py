@@ -106,7 +106,7 @@ async def get_invite_info(
     group = await session.get(Group, invite.group_id)
     is_valid = (
         invite.used_by is None
-        and invite.expires_at > datetime.datetime.now(datetime.UTC)
+        and invite.expires_at > datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
     )
     return InviteInfo(
         group_name=group.name,

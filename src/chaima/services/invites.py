@@ -85,7 +85,7 @@ def _validate_invite(invite: Invite) -> None:
     """
     if invite.used_by is not None:
         raise InviteUsedError("This invite has already been used")
-    if invite.expires_at < datetime.datetime.now(datetime.UTC):
+    if invite.expires_at < datetime.datetime.now(datetime.UTC).replace(tzinfo=None):
         raise InviteExpiredError("This invite has expired")
 
 
@@ -139,7 +139,7 @@ async def accept_invite_new_user(
     session.add(link)
 
     invite.used_by = user.id
-    invite.used_at = datetime.datetime.now(datetime.UTC)
+    invite.used_at = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
     session.add(invite)
     await session.flush()
 
@@ -176,7 +176,7 @@ async def accept_invite_existing_user(
     session.add(link)
 
     invite.used_by = user.id
-    invite.used_at = datetime.datetime.now(datetime.UTC)
+    invite.used_at = datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
     session.add(invite)
     await session.flush()
 

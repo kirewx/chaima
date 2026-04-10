@@ -9,7 +9,7 @@ from chaima.config import admin_settings
 
 
 def _default_expiry() -> datetime.datetime:
-    return datetime.datetime.now(datetime.UTC) + datetime.timedelta(
+    return datetime.datetime.now(datetime.UTC).replace(tzinfo=None) + datetime.timedelta(
         hours=admin_settings.invite_ttl_hours
     )
 

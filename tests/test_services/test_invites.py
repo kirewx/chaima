@@ -144,7 +144,7 @@ async def test_accept_expired_invite(session, group, admin):
     invite = await invite_service.create_invite(
         session, group_id=group.id, created_by=admin.id
     )
-    invite.expires_at = datetime.datetime.now(datetime.UTC) - datetime.timedelta(hours=1)
+    invite.expires_at = datetime.datetime.now(datetime.UTC).replace(tzinfo=None) - datetime.timedelta(hours=1)
     session.add(invite)
     await session.flush()
 
