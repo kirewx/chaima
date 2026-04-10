@@ -4,7 +4,9 @@ from fastapi import FastAPI
 
 from chaima.auth import auth_backend, fastapi_users
 from chaima.db import create_db_and_tables
+from chaima.routers.ghs import router as ghs_router
 from chaima.routers.groups import router as groups_router
+from chaima.routers.suppliers import router as suppliers_router
 from chaima.schemas import UserCreate, UserRead, UserUpdate
 
 
@@ -32,3 +34,5 @@ app.include_router(
     tags=["users"],
 )
 app.include_router(groups_router)
+app.include_router(ghs_router)
+app.include_router(suppliers_router)

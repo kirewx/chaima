@@ -1,4 +1,5 @@
 import pytest_asyncio
+from fastapi import HTTPException, status
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
@@ -87,9 +88,12 @@ async def client(engine, session, user):
     async def _override_session():
         yield session
 
+    def _raise_forbidden():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Superuser required")
+
     app.dependency_overrides[get_async_session] = _override_session
     app.dependency_overrides[current_active_user] = lambda: user
-    app.dependency_overrides[current_superuser] = lambda: user
+    app.dependency_overrides[current_superuser] = _raise_forbidden
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
