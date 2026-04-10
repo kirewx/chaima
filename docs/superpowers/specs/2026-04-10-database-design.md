@@ -56,10 +56,11 @@ Chemical inventory management system built on FastAPI + SQLModel + fastapi-users
 
 Note: The same real-world chemical (e.g. ethanol) can exist as separate records in different groups.
 
-**ChemicalSynonym** — 1:N from Chemical
+**ChemicalSynonym** — 1:N from Chemical, with optional category metadata
 - `id: UUID` PK
 - `chemical_id: UUID` FK → Chemical
 - `name: str`
+- `category: str?` — e.g. "IUPAC", "common", "trade name"
 
 ### GHS Codes (reference table)
 
@@ -213,6 +214,7 @@ erDiagram
         UUID id PK
         UUID chemical_id FK
         string name
+        string category
     }
 
     Chemical ||--o{ ChemicalSynonym : "has synonyms"
