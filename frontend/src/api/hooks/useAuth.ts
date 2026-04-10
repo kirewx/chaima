@@ -37,9 +37,13 @@ export function useLogout() {
   });
 }
 
-export function useRegister() {
+export function useUpdateMainGroup() {
+  const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (data: { email: string; password: string }) =>
-      client.post("/auth/register", data),
+    mutationFn: (groupId: string) =>
+      client.patch("/users/me/main-group", { group_id: groupId }).then((r) => r.data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["currentUser"] });
+    },
   });
 }

@@ -12,6 +12,7 @@ export interface UserRead {
   is_superuser: boolean;
   is_verified: boolean;
   created_at: string;
+  main_group_id: string | null;
 }
 
 export interface GroupRead {
@@ -253,4 +254,25 @@ export interface ContainerSearchParams {
   sort?: "identifier" | "created_at" | "updated_at" | "amount" | "purchased_at";
   order?: "asc" | "desc";
   limit?: number;
+}
+
+export interface InviteInfo {
+  group_name: string;
+  expires_at: string;
+  is_valid: boolean;
+}
+
+export interface InviteRead {
+  id: string;
+  group_id: string;
+  token: string;
+  created_by: string;
+  expires_at: string;
+  used_by: string | null;
+  used_at: string | null;
+}
+
+export interface InviteAccept {
+  email: string;
+  password: string;
 }
