@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from "react";
-import { Link as RouterLink, useNavigate } from "react-router-dom";
-import { Box, TextField, Button, Typography, Alert, Link, Paper } from "@mui/material";
+import { useNavigate } from "react-router-dom";
+import { Box, TextField, Button, Typography, Alert, Paper } from "@mui/material";
 import { useLogin } from "../api/hooks/useAuth";
 
 export default function LoginPage() {
@@ -27,9 +27,6 @@ export default function LoginPage() {
             {login.isPending ? "Signing in..." : "Sign in"}
           </Button>
         </Box>
-        <Typography variant="body2" sx={{ mt: 2, textAlign: "center" }}>
-          No account? <Link component={RouterLink} to="/register">Register</Link>
-        </Typography>
       </Paper>
     </Box>
   );
