@@ -5,6 +5,10 @@ import ProtectedRoute from "./components/ProtectedRoute";
 import LoginPage from "./pages/LoginPage";
 import RegisterPage from "./pages/RegisterPage";
 import SearchPage from "./pages/SearchPage";
+import ChemicalForm from "./pages/ChemicalForm";
+import ContainerForm from "./pages/ContainerForm";
+import StoragePage from "./pages/StoragePage";
+import SettingsPage from "./pages/SettingsPage";
 
 function Placeholder({ name }: { name: string }) {
   return (
@@ -22,13 +26,13 @@ export default function App() {
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
           <Route path="/" element={<SearchPage />} />
-          <Route path="/add" element={<Placeholder name="Add Chemical" />} />
-          <Route path="/chemicals/:id/edit" element={<Placeholder name="Edit Chemical" />} />
-          <Route path="/containers/new" element={<Placeholder name="Add Container" />} />
+          <Route path="/add" element={<ChemicalForm />} />
+          <Route path="/chemicals/:id/edit" element={<ChemicalForm />} />
+          <Route path="/containers/new" element={<ContainerForm />} />
           <Route path="/containers/:id/edit" element={<Placeholder name="Edit Container" />} />
-          <Route path="/storage" element={<Placeholder name="Storage" />} />
-          <Route path="/storage/:id" element={<Placeholder name="Storage Detail" />} />
-          <Route path="/settings" element={<Placeholder name="Settings" />} />
+          <Route path="/storage" element={<StoragePage />} />
+          <Route path="/storage/:id" element={<StoragePage />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
