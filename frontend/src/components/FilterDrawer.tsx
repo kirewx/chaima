@@ -19,10 +19,9 @@ interface FilterDrawerProps {
   hazardTags: HazardTagRead[];
   ghsCodes: GHSCodeRead[];
   groups: GroupRead[];
-  mainGroupId: string;
 }
 
-export default function FilterDrawer({ open, onOpen, onClose, filters, onApply, hazardTags, ghsCodes, groups, mainGroupId }: FilterDrawerProps) {
+export default function FilterDrawer({ open, onOpen, onClose, filters, onApply, hazardTags, ghsCodes, groups }: FilterDrawerProps) {
   const handleChange = (patch: Partial<FilterState>) => { onApply({ ...filters, ...patch }); };
 
   const toggleGroup = (groupId: string) => {

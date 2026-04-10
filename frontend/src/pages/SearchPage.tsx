@@ -13,7 +13,7 @@ import FilterBadges, { type FilterBadge } from "../components/FilterBadges";
 import ChemicalCard from "../components/ChemicalCard";
 import SwipeableRow from "../components/SwipeableRow";
 import UndoSnackbar from "../components/UndoSnackbar";
-import { useArchiveContainer, useUnarchiveContainer } from "../api/hooks/useContainers";
+import { useUnarchiveContainer } from "../api/hooks/useContainers";
 
 export default function SearchPage() {
   const { groupId: mainGroupId } = useGroup();
@@ -52,7 +52,6 @@ export default function SearchPage() {
 
   const hazardTagsQuery = useHazardTags(mainGroupId);
   const ghsCodesQuery = useGHSCodes();
-  const archiveContainer = useArchiveContainer(mainGroupId);
   const unarchiveContainer = useUnarchiveContainer(mainGroupId);
 
   const hazardTags = hazardTagsQuery.data?.items ?? [];
@@ -100,12 +99,6 @@ export default function SearchPage() {
     }
   }, []);
 
-  const handleArchive = useCallback((containerId: string, identifier: string) => {
-    archiveContainer.mutate(containerId, {
-      onSuccess: () => { setUndoState({ open: true, containerId, message: `Container ${identifier} archived` }); },
-    });
-  }, [archiveContainer]);
-
   const handleUndo = useCallback(() => {
     unarchiveContainer.mutate(undoState.containerId);
     setUndoState((prev) => ({ ...prev, open: false }));
@@ -143,7 +136,7 @@ export default function SearchPage() {
         hazardTags={hazardTags}
         ghsCodes={ghsCodes}
         groups={allGroups}
-        mainGroupId={mainGroupId}
+
       />
       <UndoSnackbar open={undoState.open} message={undoState.message} onUndo={handleUndo} onClose={() => setUndoState((prev) => ({ ...prev, open: false }))} />
     </Box>
