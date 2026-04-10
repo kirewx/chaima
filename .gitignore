@@ -216,3 +216,6 @@ __marimo__/
 .streamlit/secrets.toml
 src/chaima/_version.py
 .superpowers/
+
+# Database
+chaima.db
