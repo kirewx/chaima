@@ -42,11 +42,15 @@ def upgrade() -> None:
     op.create_index(op.f('ix_group_name'), 'group', ['name'], unique=True)
     op.create_table('hazard_tag',
     sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('group_id', sa.Uuid(), nullable=False),
     sa.Column('name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('description', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
-    sa.PrimaryKeyConstraint('id')
+    sa.ForeignKeyConstraint(['group_id'], ['group.id'], ),
+    sa.PrimaryKeyConstraint('id'),
+    sa.UniqueConstraint('name', 'group_id')
     )
-    op.create_index(op.f('ix_hazard_tag_name'), 'hazard_tag', ['name'], unique=True)
+    op.create_index(op.f('ix_hazard_tag_group_id'), 'hazard_tag', ['group_id'], unique=False)
+    op.create_index(op.f('ix_hazard_tag_name'), 'hazard_tag', ['name'], unique=False)
     op.create_table('storage_location',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('parent_id', sa.Uuid(), nullable=True),
@@ -206,6 +210,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_storage_location_parent_id'), table_name='storage_location')
     op.drop_table('storage_location')
     op.drop_index(op.f('ix_hazard_tag_name'), table_name='hazard_tag')
+    op.drop_index(op.f('ix_hazard_tag_group_id'), table_name='hazard_tag')
     op.drop_table('hazard_tag')
     op.drop_index(op.f('ix_group_name'), table_name='group')
     op.drop_table('group')
