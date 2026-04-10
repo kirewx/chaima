@@ -1,8 +1,9 @@
 import datetime
 import uuid as uuid_pkg
+from typing import Optional
 
 from sqlalchemy import Column, DateTime, UniqueConstraint, func
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 
 class StorageLocation(SQLModel, table=True):
@@ -18,6 +19,16 @@ class StorageLocation(SQLModel, table=True):
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
     )
+
+    children: list["StorageLocation"] = Relationship(
+        back_populates="parent",
+        sa_relationship_kwargs={"remote_side": "StorageLocation.id"},
+    )
+    parent: Optional["StorageLocation"] = Relationship(
+        back_populates="children",
+        sa_relationship_kwargs={"remote_side": "StorageLocation.parent_id"},
+    )
+    containers: list["Container"] = Relationship(back_populates="location")
 
 
 class StorageLocationGroup(SQLModel, table=True):

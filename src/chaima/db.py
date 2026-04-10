@@ -8,12 +8,14 @@ from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from chaima.config import settings
 
-# Share metadata so fastapi-users (DeclarativeBase) and SQLModel
-# models all register in the same metadata. Alembic uses one target.
+# Share metadata AND registry so fastapi-users (DeclarativeBase) and SQLModel
+# models all register in the same metadata and can cross-reference each other.
+# Alembic uses one target.
 
 
 class Base(DeclarativeBase):
     metadata = SQLModel.metadata
+    registry = SQLModel._sa_registry
 
 
 engine = create_async_engine(settings.database_url, echo=False)

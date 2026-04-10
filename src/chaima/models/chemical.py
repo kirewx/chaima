@@ -2,7 +2,7 @@ import datetime
 import uuid as uuid_pkg
 
 from sqlalchemy import Column, DateTime, func
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 
 class Chemical(SQLModel, table=True):
@@ -33,6 +33,15 @@ class Chemical(SQLModel, table=True):
         ),
     )
 
+    group: "Group" = Relationship(back_populates="chemicals")
+    creator: "User" = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "Chemical.created_by"}
+    )
+    synonyms: list["ChemicalSynonym"] = Relationship(back_populates="chemical")
+    ghs_links: list["ChemicalGHS"] = Relationship(back_populates="chemical")
+    hazard_tag_links: list["ChemicalHazardTag"] = Relationship(back_populates="chemical")
+    containers: list["Container"] = Relationship(back_populates="chemical")
+
 
 class ChemicalSynonym(SQLModel, table=True):
     __tablename__ = "chemical_synonym"
@@ -41,3 +50,5 @@ class ChemicalSynonym(SQLModel, table=True):
     chemical_id: uuid_pkg.UUID = Field(foreign_key="chemical.id", index=True)
     name: str
     category: str | None = Field(default=None)
+
+    chemical: "Chemical" = Relationship(back_populates="synonyms")

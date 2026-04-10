@@ -2,7 +2,7 @@ import datetime
 import uuid as uuid_pkg
 
 from sqlalchemy import Column, DateTime, func
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 
 class Supplier(SQLModel, table=True):
@@ -15,3 +15,6 @@ class Supplier(SQLModel, table=True):
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
     )
+
+    group: "Group" = Relationship(back_populates="suppliers")
+    containers: list["Container"] = Relationship(back_populates="supplier")

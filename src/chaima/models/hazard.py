@@ -1,7 +1,7 @@
 import uuid as uuid_pkg
 
 from sqlalchemy import UniqueConstraint
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 
 class HazardTag(SQLModel, table=True):
@@ -11,6 +11,8 @@ class HazardTag(SQLModel, table=True):
     name: str = Field(unique=True, index=True)
     description: str | None = Field(default=None)
 
+    chemical_links: list["ChemicalHazardTag"] = Relationship(back_populates="hazard_tag")
+
 
 class ChemicalHazardTag(SQLModel, table=True):
     __tablename__ = "chemical_hazard_tag"
@@ -18,6 +20,9 @@ class ChemicalHazardTag(SQLModel, table=True):
 
     chemical_id: uuid_pkg.UUID = Field(foreign_key="chemical.id", primary_key=True)
     hazard_tag_id: uuid_pkg.UUID = Field(foreign_key="hazard_tag.id", primary_key=True)
+
+    chemical: "Chemical" = Relationship(back_populates="hazard_tag_links")
+    hazard_tag: "HazardTag" = Relationship(back_populates="chemical_links")
 
 
 class HazardTagIncompatibility(SQLModel, table=True):

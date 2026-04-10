@@ -2,7 +2,7 @@ import datetime
 import uuid as uuid_pkg
 
 from sqlalchemy import Column, DateTime, UniqueConstraint, func
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 
 class Group(SQLModel, table=True):
@@ -16,6 +16,9 @@ class Group(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
     )
 
+    chemicals: list["Chemical"] = Relationship(back_populates="group")
+    suppliers: list["Supplier"] = Relationship(back_populates="group")
+
 
 class UserGroupLink(SQLModel, table=True):
     __tablename__ = "user_group_link"
@@ -28,3 +31,5 @@ class UserGroupLink(SQLModel, table=True):
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
     )
+
+    group: "Group" = Relationship()

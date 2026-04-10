@@ -1,7 +1,7 @@
 import uuid as uuid_pkg
 
 from sqlalchemy import UniqueConstraint
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 
 class GHSCode(SQLModel, table=True):
@@ -13,6 +13,8 @@ class GHSCode(SQLModel, table=True):
     pictogram: str | None = Field(default=None)
     signal_word: str | None = Field(default=None)
 
+    chemical_links: list["ChemicalGHS"] = Relationship(back_populates="ghs_code")
+
 
 class ChemicalGHS(SQLModel, table=True):
     __tablename__ = "chemical_ghs"
@@ -20,3 +22,6 @@ class ChemicalGHS(SQLModel, table=True):
 
     chemical_id: uuid_pkg.UUID = Field(foreign_key="chemical.id", primary_key=True)
     ghs_id: uuid_pkg.UUID = Field(foreign_key="ghs_code.id", primary_key=True)
+
+    chemical: "Chemical" = Relationship(back_populates="ghs_links")
+    ghs_code: "GHSCode" = Relationship(back_populates="chemical_links")

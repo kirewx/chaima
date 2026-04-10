@@ -1,8 +1,9 @@
 import datetime
 import uuid as uuid_pkg
+from typing import Optional
 
 from sqlalchemy import Column, DateTime, func
-from sqlmodel import Field, SQLModel
+from sqlmodel import Field, Relationship, SQLModel
 
 
 class Container(SQLModel, table=True):
@@ -29,3 +30,10 @@ class Container(SQLModel, table=True):
         ),
     )
     is_archived: bool = Field(default=False, index=True)
+
+    chemical: "Chemical" = Relationship(back_populates="containers")
+    location: "StorageLocation" = Relationship(back_populates="containers")
+    supplier: Optional["Supplier"] = Relationship(back_populates="containers")
+    creator: "User" = Relationship(
+        sa_relationship_kwargs={"foreign_keys": "Container.created_by"}
+    )
