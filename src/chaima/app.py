@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from chaima.auth import auth_backend, fastapi_users
 from chaima.db import create_db_and_tables
 from chaima.routers.chemicals import router as chemicals_router
+from chaima.routers.containers import router as containers_router
 from chaima.routers.ghs import router as ghs_router
 from chaima.routers.groups import router as groups_router
 from chaima.routers.hazard_tags import router as hazard_tags_router
@@ -42,3 +43,4 @@ app.include_router(suppliers_router)
 app.include_router(storage_locations_router)
 app.include_router(hazard_tags_router)
 app.include_router(chemicals_router)
+app.include_router(containers_router)

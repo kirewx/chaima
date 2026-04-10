@@ -1,3 +1,4 @@
+from chaima.schemas.container import ContainerCreate, ContainerRead, ContainerUpdate
 from chaima.schemas.chemical import (
     ChemicalCreate,
     ChemicalDetail,
@@ -38,6 +39,9 @@ from chaima.schemas.supplier import SupplierCreate, SupplierRead, SupplierUpdate
 from chaima.schemas.user import UserCreate, UserRead, UserUpdate
 
 __all__ = [
+    "ContainerCreate",
+    "ContainerRead",
+    "ContainerUpdate",
     "ChemicalCreate",
     "ChemicalDetail",
     "ChemicalRead",
