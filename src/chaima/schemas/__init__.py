@@ -13,6 +13,7 @@ from chaima.schemas.chemical import (
     SynonymWrite,
 )
 from chaima.schemas.ghs import GHSCodeCreate, GHSCodeRead, GHSCodeUpdate
+from chaima.schemas.invite import InviteAccept, InviteCreate, InviteInfo, InviteRead
 from chaima.schemas.group import (
     GroupCreate,
     GroupRead,
@@ -56,6 +57,10 @@ __all__ = [
     "GHSCodeCreate",
     "GHSCodeRead",
     "GHSCodeUpdate",
+    "InviteAccept",
+    "InviteCreate",
+    "InviteInfo",
+    "InviteRead",
     "GroupCreate",
     "GroupRead",
     "GroupUpdate",
