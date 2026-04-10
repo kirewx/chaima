@@ -1,20 +1,20 @@
-"""initial schema
+"""initial_schema
 
-Revision ID: bb0857b3e226
+Revision ID: c100a96867a6
 Revises: 
-Create Date: 2026-04-10 11:55:13.788125
+Create Date: 2026-04-10 16:49:16.138716
 
 """
 from typing import Sequence, Union
 
 from alembic import op
-import sqlalchemy as sa
 import fastapi_users_db_sqlalchemy.generics
-import sqlmodel
+import sqlalchemy as sa
+import sqlmodel.sql.sqltypes
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'bb0857b3e226'
+revision: str = 'c100a96867a6'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -40,6 +40,16 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_group_name'), 'group', ['name'], unique=True)
+    op.create_table('storage_location',
+    sa.Column('id', sa.Uuid(), nullable=False),
+    sa.Column('parent_id', sa.Uuid(), nullable=True),
+    sa.Column('name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('description', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.ForeignKeyConstraint(['parent_id'], ['storage_location.id'], ),
+    sa.PrimaryKeyConstraint('id')
+    )
+    op.create_index(op.f('ix_storage_location_parent_id'), 'storage_location', ['parent_id'], unique=False)
     op.create_table('hazard_tag',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('group_id', sa.Uuid(), nullable=False),
@@ -51,17 +61,25 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_hazard_tag_group_id'), 'hazard_tag', ['group_id'], unique=False)
     op.create_index(op.f('ix_hazard_tag_name'), 'hazard_tag', ['name'], unique=False)
-    op.create_table('storage_location',
+    op.create_table('storage_location_group',
+    sa.Column('location_id', sa.Uuid(), nullable=False),
+    sa.Column('group_id', sa.Uuid(), nullable=False),
+    sa.ForeignKeyConstraint(['group_id'], ['group.id'], ),
+    sa.ForeignKeyConstraint(['location_id'], ['storage_location.id'], ),
+    sa.PrimaryKeyConstraint('location_id', 'group_id'),
+    sa.UniqueConstraint('location_id', 'group_id')
+    )
+    op.create_table('supplier',
     sa.Column('id', sa.Uuid(), nullable=False),
-    sa.Column('parent_id', sa.Uuid(), nullable=True),
     sa.Column('name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
-    sa.Column('description', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('group_id', sa.Uuid(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
-    sa.ForeignKeyConstraint(['parent_id'], ['storage_location.id'], ),
+    sa.ForeignKeyConstraint(['group_id'], ['group.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_storage_location_parent_id'), 'storage_location', ['parent_id'], unique=False)
+    op.create_index(op.f('ix_supplier_group_id'), 'supplier', ['group_id'], unique=False)
     op.create_table('user',
+    sa.Column('main_group_id', sa.Uuid(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.Column('id', fastapi_users_db_sqlalchemy.generics.GUID(), nullable=False),
     sa.Column('email', sa.String(length=320), nullable=False),
@@ -69,9 +87,19 @@ def upgrade() -> None:
     sa.Column('is_active', sa.Boolean(), nullable=False),
     sa.Column('is_superuser', sa.Boolean(), nullable=False),
     sa.Column('is_verified', sa.Boolean(), nullable=False),
+    sa.ForeignKeyConstraint(['main_group_id'], ['group.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_user_email'), 'user', ['email'], unique=True)
+    op.create_table('user_group_link',
+    sa.Column('user_id', sa.Uuid(), nullable=False),
+    sa.Column('group_id', sa.Uuid(), nullable=False),
+    sa.Column('is_admin', sa.Boolean(), nullable=False),
+    sa.Column('joined_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.ForeignKeyConstraint(['group_id'], ['group.id'], ),
+    sa.PrimaryKeyConstraint('user_id', 'group_id'),
+    sa.UniqueConstraint('user_id', 'group_id')
+    )
     op.create_table('chemical',
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('group_id', sa.Uuid(), nullable=False),
@@ -107,32 +135,21 @@ def upgrade() -> None:
     sa.PrimaryKeyConstraint('id'),
     sa.UniqueConstraint('tag_a_id', 'tag_b_id')
     )
-    op.create_table('storage_location_group',
-    sa.Column('location_id', sa.Uuid(), nullable=False),
-    sa.Column('group_id', sa.Uuid(), nullable=False),
-    sa.ForeignKeyConstraint(['group_id'], ['group.id'], ),
-    sa.ForeignKeyConstraint(['location_id'], ['storage_location.id'], ),
-    sa.PrimaryKeyConstraint('location_id', 'group_id'),
-    sa.UniqueConstraint('location_id', 'group_id')
-    )
-    op.create_table('supplier',
+    op.create_table('invite',
     sa.Column('id', sa.Uuid(), nullable=False),
-    sa.Column('name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('group_id', sa.Uuid(), nullable=False),
-    sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('token', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('created_by', sa.Uuid(), nullable=False),
+    sa.Column('expires_at', sa.DateTime(), nullable=False),
+    sa.Column('used_by', sa.Uuid(), nullable=True),
+    sa.Column('used_at', sa.DateTime(timezone=True), nullable=True),
+    sa.ForeignKeyConstraint(['created_by'], ['user.id'], ),
     sa.ForeignKeyConstraint(['group_id'], ['group.id'], ),
+    sa.ForeignKeyConstraint(['used_by'], ['user.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
-    op.create_index(op.f('ix_supplier_group_id'), 'supplier', ['group_id'], unique=False)
-    op.create_table('user_group_link',
-    sa.Column('user_id', sa.Uuid(), nullable=False),
-    sa.Column('group_id', sa.Uuid(), nullable=False),
-    sa.Column('is_admin', sa.Boolean(), nullable=False),
-    sa.Column('joined_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
-    sa.ForeignKeyConstraint(['group_id'], ['group.id'], ),
-    sa.PrimaryKeyConstraint('user_id', 'group_id'),
-    sa.UniqueConstraint('user_id', 'group_id')
-    )
+    op.create_index(op.f('ix_invite_group_id'), 'invite', ['group_id'], unique=False)
+    op.create_index(op.f('ix_invite_token'), 'invite', ['token'], unique=True)
     op.create_table('chemical_ghs',
     sa.Column('chemical_id', sa.Uuid(), nullable=False),
     sa.Column('ghs_id', sa.Uuid(), nullable=False),
@@ -197,22 +214,25 @@ def downgrade() -> None:
     op.drop_table('chemical_synonym')
     op.drop_table('chemical_hazard_tag')
     op.drop_table('chemical_ghs')
-    op.drop_table('user_group_link')
-    op.drop_index(op.f('ix_supplier_group_id'), table_name='supplier')
-    op.drop_table('supplier')
-    op.drop_table('storage_location_group')
+    op.drop_index(op.f('ix_invite_token'), table_name='invite')
+    op.drop_index(op.f('ix_invite_group_id'), table_name='invite')
+    op.drop_table('invite')
     op.drop_table('hazard_tag_incompatibility')
     op.drop_index(op.f('ix_chemical_name'), table_name='chemical')
     op.drop_index(op.f('ix_chemical_group_id'), table_name='chemical')
     op.drop_index(op.f('ix_chemical_cas'), table_name='chemical')
     op.drop_table('chemical')
+    op.drop_table('user_group_link')
     op.drop_index(op.f('ix_user_email'), table_name='user')
     op.drop_table('user')
-    op.drop_index(op.f('ix_storage_location_parent_id'), table_name='storage_location')
-    op.drop_table('storage_location')
+    op.drop_index(op.f('ix_supplier_group_id'), table_name='supplier')
+    op.drop_table('supplier')
+    op.drop_table('storage_location_group')
     op.drop_index(op.f('ix_hazard_tag_name'), table_name='hazard_tag')
     op.drop_index(op.f('ix_hazard_tag_group_id'), table_name='hazard_tag')
     op.drop_table('hazard_tag')
+    op.drop_index(op.f('ix_storage_location_parent_id'), table_name='storage_location')
+    op.drop_table('storage_location')
     op.drop_index(op.f('ix_group_name'), table_name='group')
     op.drop_table('group')
     op.drop_index(op.f('ix_ghs_code_code'), table_name='ghs_code')
