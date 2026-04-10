@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { createContext, useContext, useEffect, type ReactNode } from "react";
+import { useCurrentUser, useUpdateMainGroup } from "../api/hooks/useAuth";
 
 interface GroupContextValue {
   groupId: string | null;
@@ -12,19 +12,18 @@ const GroupContext = createContext<GroupContextValue>({
 });
 
 export function GroupProvider({ children }: { children: ReactNode }) {
-  const [groupId, setGroupIdState] = useState<string | null>(() =>
-    localStorage.getItem("chaima_group_id"),
-  );
-  const queryClient = useQueryClient();
+  const { data: user } = useCurrentUser();
+  const updateMainGroup = useUpdateMainGroup();
 
-  const setGroupId = useCallback(
-    (id: string) => {
-      localStorage.setItem("chaima_group_id", id);
-      setGroupIdState(id);
-      queryClient.clear();
-    },
-    [queryClient],
-  );
+  const groupId = user?.main_group_id ?? null;
+
+  const setGroupId = (id: string) => {
+    updateMainGroup.mutate(id);
+  };
+
+  useEffect(() => {
+    localStorage.removeItem("chaima_group_id");
+  }, []);
 
   return (
     <GroupContext.Provider value={{ groupId, setGroupId }}>
