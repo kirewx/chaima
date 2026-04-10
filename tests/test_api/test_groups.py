@@ -8,9 +8,9 @@ from chaima.schemas.group import GroupRead, MemberRead
 
 
 @pytest.mark.asyncio
-async def test_create_group_returns_201(client):
-    """POST /api/v1/groups should create a group and return 201."""
-    resp = await client.post(
+async def test_create_group_returns_201(superuser_client):
+    """POST /api/v1/groups should create a group and return 201 (superuser only)."""
+    resp = await superuser_client.post(
         "/api/v1/groups",
         json={"name": "Lab Alpha", "description": "Alpha lab group"},
     )
@@ -24,9 +24,9 @@ async def test_create_group_returns_201(client):
 
 
 @pytest.mark.asyncio
-async def test_create_group_minimal(client):
-    """POST /api/v1/groups should work with only a name."""
-    resp = await client.post(
+async def test_create_group_minimal(superuser_client):
+    """POST /api/v1/groups should work with only a name (superuser only)."""
+    resp = await superuser_client.post(
         "/api/v1/groups",
         json={"name": "Minimal Group"},
     )

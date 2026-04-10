@@ -10,6 +10,7 @@ from chaima.dependencies import (
     GroupAdminDep,
     GroupMemberDep,
     SessionDep,
+    SuperuserDep,
 )
 from chaima.models.user import User
 from chaima.schemas.group import (
@@ -53,7 +54,7 @@ async def list_groups(
 async def create_group(
     body: GroupCreate,
     session: SessionDep,
-    current_user: CurrentUserDep,
+    current_user: SuperuserDep,
 ) -> GroupRead:
     """Create a new group with the current user as admin.
 
@@ -98,6 +99,39 @@ async def get_group(
     """
     group, _link = member
     return GroupRead.model_validate(group)
+
+
+@router.get("/{group_id}/members", response_model=list[MemberRead])
+async def list_members(
+    session: SessionDep,
+    member: GroupMemberDep,
+) -> list[MemberRead]:
+    """List all members of a group.
+
+    Parameters
+    ----------
+    session : AsyncSession
+        The database session (injected).
+    member : tuple[Group, UserGroupLink]
+        The group and membership link (injected, requires group membership).
+
+    Returns
+    -------
+    list[MemberRead]
+        All members of the group with their user info.
+    """
+    group, _link = member
+    pairs = await group_service.list_members(session, group.id)
+    return [
+        MemberRead(
+            user_id=link.user_id,
+            group_id=link.group_id,
+            is_admin=link.is_admin,
+            joined_at=link.joined_at,
+            email=user.email,
+        )
+        for link, user in pairs
+    ]
 
 
 @router.patch("/{group_id}", response_model=GroupRead)
