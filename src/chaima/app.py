@@ -17,16 +17,16 @@ app = FastAPI(title="ChAIMa", lifespan=lifespan)
 
 app.include_router(
     fastapi_users.get_auth_router(auth_backend),
-    prefix="/auth/jwt",
+    prefix="/api/v1/auth/cookie",
     tags=["auth"],
 )
 app.include_router(
     fastapi_users.get_register_router(UserRead, UserCreate),
-    prefix="/auth",
+    prefix="/api/v1/auth",
     tags=["auth"],
 )
 app.include_router(
     fastapi_users.get_users_router(UserRead, UserUpdate),
-    prefix="/users",
+    prefix="/api/v1/users",
     tags=["users"],
 )
