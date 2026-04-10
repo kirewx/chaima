@@ -31,13 +31,14 @@ async def session(engine):
 
 
 @pytest_asyncio.fixture
-async def user(session):
+async def user(session, group):
     u = User(
         email="alice@example.com",
         hashed_password="fakehash",
         is_active=True,
         is_superuser=False,
         is_verified=True,
+        main_group_id=group.id,
     )
     session.add(u)
     await session.flush()
@@ -45,13 +46,14 @@ async def user(session):
 
 
 @pytest_asyncio.fixture
-async def superuser(session):
+async def superuser(session, group):
     u = User(
         email="admin@example.com",
         hashed_password="fakehash",
         is_active=True,
         is_superuser=True,
         is_verified=True,
+        main_group_id=group.id,
     )
     session.add(u)
     await session.flush()

@@ -33,7 +33,7 @@ async def group(session):
 
 
 @pytest_asyncio.fixture
-async def user(session):
+async def user(session, group):
     from chaima.models.user import User
 
     u = User(
@@ -42,6 +42,7 @@ async def user(session):
         is_active=True,
         is_superuser=False,
         is_verified=False,
+        main_group_id=group.id,
     )
     session.add(u)
     await session.flush()

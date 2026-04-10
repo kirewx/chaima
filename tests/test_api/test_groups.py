@@ -12,13 +12,13 @@ async def test_create_group_returns_201(superuser_client):
     """POST /api/v1/groups should create a group and return 201 (superuser only)."""
     resp = await superuser_client.post(
         "/api/v1/groups",
-        json={"name": "Lab Alpha", "description": "Alpha lab group"},
+        json={"name": "New Lab", "description": "A new lab group"},
     )
     assert resp.status_code == 201
 
     result = GroupRead.model_validate(resp.json())
-    assert result.name == "Lab Alpha"
-    assert result.description == "Alpha lab group"
+    assert result.name == "New Lab"
+    assert result.description == "A new lab group"
     assert result.id is not None
     assert result.created_at is not None
 
