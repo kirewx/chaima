@@ -28,8 +28,8 @@ export default function RegisterPage() {
         {errorMessage && <Alert severity="error" sx={{ mb: 2 }}>{errorMessage}</Alert>}
         <Box component="form" onSubmit={handleSubmit}>
           <TextField label="Email" type="email" value={email} onChange={(e) => setEmail(e.target.value)} fullWidth required autoFocus sx={{ mb: 2 }} />
-          <TextField label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} fullWidth required sx={{ mb: 2 }} />
-          <TextField label="Confirm Password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} fullWidth required sx={{ mb: 3 }} />
+          <TextField label="Password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} fullWidth required sx={{ mb: 2 }} slotProps={{ htmlInput: { "aria-label": "Password" } }} />
+          <TextField label="Confirm Password" type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} fullWidth required sx={{ mb: 3 }} slotProps={{ htmlInput: { "aria-label": "Confirm Password" } }} />
           <Button type="submit" variant="contained" fullWidth size="large" disabled={register.isPending}>
             {register.isPending ? "Creating account..." : "Register"}
           </Button>
