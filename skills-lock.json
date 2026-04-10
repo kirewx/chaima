@@ -6,10 +6,25 @@
       "sourceType": "github",
       "computedHash": "acea4f9aca3b15201407c3f938b5421a2601e518921baa0f9d264209b8bbf527"
     },
+    "frontend-design": {
+      "source": "anthropics/skills",
+      "sourceType": "github",
+      "computedHash": "063a0e6448123cd359ad0044cc46b0e490cc7964d45ef4bb9fd842bd2ffbca67"
+    },
+    "playwright-cli": {
+      "source": "microsoft/playwright-cli",
+      "sourceType": "github",
+      "computedHash": "45b90b409fb80cf08ee4e8b72377bddacfac3d1c1fac69bff5fd5342fad26adf"
+    },
     "rest-api-design": {
       "source": "aj-geddes/useful-ai-prompts",
       "sourceType": "github",
       "computedHash": "e249c58df5d9d59407fc4de70b0d75bb336d917bbe0a75695d6ec8cf13cfaf35"
+    },
+    "vercel-react-best-practices": {
+      "source": "vercel-labs/agent-skills",
+      "sourceType": "github",
+      "computedHash": "43ca6c197f8ec13055079da7053232d477068b03ca443f9ac1bc819b95cdd432"
     }
   }
 }

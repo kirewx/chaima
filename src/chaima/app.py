@@ -1,6 +1,9 @@
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
+from starlette.staticfiles import StaticFiles
 
 from chaima.auth import auth_backend, fastapi_users
 from chaima.db import create_db_and_tables
@@ -44,3 +47,13 @@ app.include_router(storage_locations_router)
 app.include_router(hazard_tags_router)
 app.include_router(chemicals_router)
 app.include_router(containers_router)
+
+# Serve built frontend assets when available (after `uv build` or `vite build`).
+# During development the Vite dev server proxies /api to this backend instead.
+_static_dir = Path(__file__).parent / "static"
+if _static_dir.is_dir():
+    app.mount("/assets", StaticFiles(directory=_static_dir / "assets"))
+
+    @app.get("/{path:path}", include_in_schema=False)
+    async def _spa_catch_all(path: str) -> FileResponse:  # noqa: ARG001
+        return FileResponse(_static_dir / "index.html")

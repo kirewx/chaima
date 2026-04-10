@@ -215,6 +215,7 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 src/chaima/_version.py
+src/chaima/static/
 .superpowers/
 
 # Database
