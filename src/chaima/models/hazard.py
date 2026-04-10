@@ -6,11 +6,14 @@ from sqlmodel import Field, Relationship, SQLModel
 
 class HazardTag(SQLModel, table=True):
     __tablename__ = "hazard_tag"
+    __table_args__ = (UniqueConstraint("name", "group_id"),)
 
     id: uuid_pkg.UUID = Field(default_factory=uuid_pkg.uuid4, primary_key=True)
-    name: str = Field(unique=True, index=True)
+    group_id: uuid_pkg.UUID = Field(foreign_key="group.id", index=True)
+    name: str = Field(index=True)
     description: str | None = Field(default=None)
 
+    group: "Group" = Relationship(back_populates="hazard_tags")
     chemical_links: list["ChemicalHazardTag"] = Relationship(back_populates="hazard_tag")
 
 

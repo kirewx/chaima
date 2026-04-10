@@ -18,6 +18,7 @@ class Group(SQLModel, table=True):
 
     chemicals: list["Chemical"] = Relationship(back_populates="group")
     suppliers: list["Supplier"] = Relationship(back_populates="group")
+    hazard_tags: list["HazardTag"] = Relationship(back_populates="group")
 
 
 class UserGroupLink(SQLModel, table=True):
