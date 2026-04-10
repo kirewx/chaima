@@ -1,3 +1,16 @@
+from chaima.schemas.chemical import (
+    ChemicalCreate,
+    ChemicalDetail,
+    ChemicalRead,
+    ChemicalUpdate,
+    GHSCodeBulkUpdate,
+    GHSCodeReadNested,
+    HazardTagBulkUpdate,
+    HazardTagReadNested,
+    SynonymBulkUpdate,
+    SynonymRead,
+    SynonymWrite,
+)
 from chaima.schemas.ghs import GHSCodeCreate, GHSCodeRead, GHSCodeUpdate
 from chaima.schemas.group import (
     GroupCreate,
@@ -25,6 +38,17 @@ from chaima.schemas.supplier import SupplierCreate, SupplierRead, SupplierUpdate
 from chaima.schemas.user import UserCreate, UserRead, UserUpdate
 
 __all__ = [
+    "ChemicalCreate",
+    "ChemicalDetail",
+    "ChemicalRead",
+    "ChemicalUpdate",
+    "GHSCodeBulkUpdate",
+    "GHSCodeReadNested",
+    "HazardTagBulkUpdate",
+    "HazardTagReadNested",
+    "SynonymBulkUpdate",
+    "SynonymRead",
+    "SynonymWrite",
     "GHSCodeCreate",
     "GHSCodeRead",
     "GHSCodeUpdate",
