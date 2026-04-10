@@ -4,9 +4,9 @@
 
 **Goal:** Implement all 13 database tables from the approved schema using SQLModel, with fastapi-users integration, Alembic migrations, and a minimal FastAPI entry point.
 
-**Architecture:** SQLModel models with async SQLite (aiosqlite) for dev/test. fastapi-users User model uses SQLAlchemy's DeclarativeBase sharing metadata with SQLModel so Alembic has a single metadata target. All UUIDs, adjacency list for storage hierarchy, pint-compatible unit strings.
+**Architecture:** SQLModel models with async SQLite (aiosqlite) for dev/test. fastapi-users User model uses SQLAlchemy's DeclarativeBase sharing metadata with SQLModel so Alembic has a single metadata target. All UUIDs, adjacency list for storage hierarchy, pint-compatible unit strings. Import `AsyncSession` from `sqlmodel.ext.asyncio.session` (NOT sqlalchemy). Use `session.exec()` everywhere (NOT `session.execute()` which is deprecated on SQLModel sessions).
 
-**Tech Stack:** SQLModel, FastAPI, fastapi-users, SQLAlchemy (async), aiosqlite, Alembic, pytest-asyncio, pydantic-settings
+**Tech Stack:** SQLModel, FastAPI, fastapi-users[sqlalchemy], aiosqlite, Alembic, pytest-asyncio, pydantic-settings
 
 ---
 
@@ -14,12 +14,13 @@
 
 ```
 src/chaima/
-├── __init__.py              (exists, will clear placeholder)
+├── __init__.py              (exists, clear placeholder)
 ├── _version.py              (exists, no changes)
 ├── app.py                   (create: FastAPI app factory)
 ├── config.py                (create: pydantic-settings config)
 ├── db.py                    (create: engine, session, Base)
 ├── auth.py                  (create: fastapi-users manager + backend)
+├── schemas.py               (create: user read/create/update schemas)
 ├── models/
 │   ├── __init__.py          (create: re-export all models)
 │   ├── user.py              (create: User via fastapi-users)
@@ -31,7 +32,7 @@ src/chaima/
 │   ├── supplier.py          (create: Supplier)
 │   └── container.py         (create: Container)
 tests/
-├── conftest.py              (create: async engine + session fixtures)
+├── conftest.py              (create: async fixtures + shared factories)
 ├── test_models/
 │   ├── __init__.py
 │   ├── test_group.py
@@ -54,62 +55,40 @@ alembic/
 ### Task 1: Add dependencies & create package structure
 
 **Files:**
-- Modify: `pyproject.toml`
-- Create: `src/chaima/models/__init__.py`
-- Create: `tests/__init__.py`
-- Create: `tests/test_models/__init__.py`
+- Modify: `pyproject.toml` (via uv add)
+- Create: `src/chaima/models/__init__.py`, `tests/__init__.py`, `tests/test_models/__init__.py`
 
-- [ ] **Step 1: Update pyproject.toml dependencies**
+- [ ] **Step 1: Add main dependencies**
+
+```bash
+uv add "fastapi-users[sqlalchemy]>=15.0.5" aiosqlite alembic pydantic-settings
+```
+
+Note: this replaces the existing `fastapi-users` dep with `fastapi-users[sqlalchemy]`.
+
+- [ ] **Step 2: Add dev dependencies**
+
+```bash
+uv add --group dev pytest-asyncio
+```
+
+- [ ] **Step 3: Add pytest asyncio_mode to pyproject.toml**
+
+Append to `pyproject.toml`:
 
 ```toml
-[project]
-name = "chaima"
-dynamic = ["version"]
-description = "Chemical AI Manager"
-readme = "README.md"
-requires-python = ">=3.11"
-dependencies = [
-    "fastapi>=0.135.3",
-    "fastapi-users[sqlalchemy]>=15.0.5",
-    "sqlmodel>=0.0.38",
-    "aiosqlite>=0.21.0",
-    "alembic>=1.15.0",
-    "pydantic-settings>=2.8.0",
-]
-[dependency-groups]
-dev = [
-    "pytest>=9.0.3",
-    "pytest-asyncio>=0.26.0",
-]
-
-[build-system]
-requires = ["hatchling", "hatch-vcs"]
-build-backend = "hatchling.build"
-
-[tool.hatch.version]
-source = "vcs"
-fallback-version = "0.0.0-dev"
-
-[tool.hatch.build.hooks.vcs]
-version-file = "src/chaima/_version.py"
-
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 ```
 
-- [ ] **Step 2: Create package directories**
+- [ ] **Step 4: Create package directories**
 
 ```bash
 mkdir -p src/chaima/models tests/test_models
 touch src/chaima/models/__init__.py tests/__init__.py tests/test_models/__init__.py
 ```
 
-- [ ] **Step 3: Install dependencies**
-
-Run: `uv sync`
-Expected: Dependencies resolve and install successfully.
-
-- [ ] **Step 4: Commit**
+- [ ] **Step 5: Commit**
 
 ```bash
 git add pyproject.toml uv.lock src/chaima/models/__init__.py tests/__init__.py tests/test_models/__init__.py
@@ -127,12 +106,13 @@ git commit -m "chore: add dependencies and package structure for database models
 - [ ] **Step 1: Create config.py**
 
 ```python
+from pydantic import SecretStr
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./chaima.db"
-    secret_key: str = "CHANGE-ME-IN-PRODUCTION"
+    secret_key: SecretStr = SecretStr("CHANGE-ME-IN-PRODUCTION")
 
     model_config = {"env_prefix": "CHAIMA_"}
 
@@ -145,9 +125,11 @@ settings = Settings()
 ```python
 from collections.abc import AsyncGenerator
 
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from sqlmodel import SQLModel
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 from chaima.config import settings
 
@@ -192,12 +174,13 @@ git commit -m "feat: add database configuration with async engine and shared met
 **Files:**
 - Create: `tests/conftest.py`
 
-- [ ] **Step 1: Create conftest.py with async fixtures**
+- [ ] **Step 1: Create conftest.py with async fixtures and shared factories**
 
 ```python
 import pytest_asyncio
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from sqlmodel import SQLModel
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 
 @pytest_asyncio.fixture
@@ -213,21 +196,77 @@ async def engine():
 
 @pytest_asyncio.fixture
 async def session(engine):
-    async_session = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
-    async with async_session() as session:
+    factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with factory() as session:
         yield session
+
+
+@pytest_asyncio.fixture
+async def group(session):
+    from chaima.models.group import Group
+
+    g = Group(name="Lab Alpha")
+    session.add(g)
+    await session.flush()
+    return g
+
+
+@pytest_asyncio.fixture
+async def user(session):
+    from chaima.models.user import User
+
+    u = User(
+        email="alice@example.com",
+        hashed_password="fakehash",
+        is_active=True,
+        is_superuser=False,
+        is_verified=False,
+    )
+    session.add(u)
+    await session.flush()
+    return u
+
+
+@pytest_asyncio.fixture
+async def chemical(session, group, user):
+    from chaima.models.chemical import Chemical
+
+    c = Chemical(group_id=group.id, name="Ethanol", created_by=user.id)
+    session.add(c)
+    await session.flush()
+    return c
+
+
+@pytest_asyncio.fixture
+async def storage_location(session):
+    from chaima.models.storage import StorageLocation
+
+    loc = StorageLocation(name="Room A")
+    session.add(loc)
+    await session.flush()
+    return loc
+
+
+@pytest_asyncio.fixture
+async def supplier(session, group):
+    from chaima.models.supplier import Supplier
+
+    s = Supplier(name="Sigma Aldrich", group_id=group.id)
+    session.add(s)
+    await session.flush()
+    return s
 ```
 
 - [ ] **Step 2: Verify pytest discovers fixtures**
 
 Run: `uv run pytest --collect-only`
-Expected: No errors, no tests collected yet (that's fine).
+Expected: No errors, no tests collected yet.
 
 - [ ] **Step 3: Commit**
 
 ```bash
 git add tests/conftest.py
-git commit -m "test: add async engine and session fixtures"
+git commit -m "test: add async fixtures and shared model factories"
 ```
 
 ---
@@ -244,48 +283,42 @@ git commit -m "test: add async engine and session fixtures"
 import uuid
 
 import pytest
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlmodel import select
 
 from chaima.models.group import Group, UserGroupLink
 
 
 async def test_create_group(session):
-    group = Group(name="Lab Alpha")
+    group = Group(name="Lab Beta")
     session.add(group)
     await session.commit()
 
     result = await session.get(Group, group.id)
     assert result is not None
-    assert result.name == "Lab Alpha"
+    assert result.name == "Lab Beta"
     assert result.id is not None
     assert result.created_at is not None
 
 
 async def test_group_name_unique(session):
-    session.add(Group(name="Lab Alpha"))
+    session.add(Group(name="Lab Beta"))
     await session.commit()
 
-    session.add(Group(name="Lab Alpha"))
+    session.add(Group(name="Lab Beta"))
     with pytest.raises(IntegrityError):
         await session.commit()
 
 
-async def test_create_user_group_link(session):
-    group = Group(name="Lab Alpha")
-    session.add(group)
-    await session.commit()
-
+async def test_create_user_group_link(session, group):
     user_id = uuid.uuid4()
     link = UserGroupLink(user_id=user_id, group_id=group.id, is_admin=True)
     session.add(link)
     await session.commit()
 
-    result = (
-        await session.execute(
-            select(UserGroupLink).where(UserGroupLink.user_id == user_id)
-        )
-    ).scalar_one()
+    result = (await session.exec(
+        select(UserGroupLink).where(UserGroupLink.user_id == user_id)
+    )).one()
     assert result.group_id == group.id
     assert result.is_admin is True
     assert result.joined_at is not None
@@ -362,19 +395,19 @@ from chaima.models.user import User
 
 
 async def test_create_user(session):
-    user = User(
-        email="alice@example.com",
+    u = User(
+        email="bob@example.com",
         hashed_password="fakehash",
         is_active=True,
         is_superuser=False,
         is_verified=False,
     )
-    session.add(user)
+    session.add(u)
     await session.commit()
 
-    result = await session.get(User, user.id)
+    result = await session.get(User, u.id)
     assert result is not None
-    assert result.email == "alice@example.com"
+    assert result.email == "bob@example.com"
     assert result.is_superuser is False
     assert isinstance(result.created_at, datetime.datetime)
 ```
@@ -429,33 +462,19 @@ git commit -m "feat: add User model via fastapi-users with created_at field"
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-import uuid
-
-from sqlalchemy import select
+from sqlmodel import select
 
 from chaima.models.chemical import Chemical, ChemicalSynonym
 from chaima.models.group import Group
 from chaima.models.user import User
 
 
-def _make_user(**kwargs):
-    defaults = dict(email="test@example.com", hashed_password="x", is_active=True,
-                    is_superuser=False, is_verified=False)
-    defaults.update(kwargs)
-    return User(**defaults)
-
-
-async def test_create_chemical(session):
-    group = Group(name="Lab A")
-    user = _make_user()
-    session.add_all([group, user])
-    await session.flush()
-
+async def test_create_chemical(session, group, user):
     chem = Chemical(
         group_id=group.id,
-        name="Ethanol",
-        cas="64-17-5",
-        smiles="CCO",
+        name="Acetone",
+        cas="67-64-1",
+        smiles="CC(C)=O",
         created_by=user.id,
     )
     session.add(chem)
@@ -463,18 +482,13 @@ async def test_create_chemical(session):
 
     result = await session.get(Chemical, chem.id)
     assert result is not None
-    assert result.name == "Ethanol"
-    assert result.cas == "64-17-5"
+    assert result.name == "Acetone"
+    assert result.cas == "67-64-1"
     assert result.group_id == group.id
     assert result.created_by == user.id
 
 
-async def test_chemical_optional_fields_nullable(session):
-    group = Group(name="Lab A")
-    user = _make_user()
-    session.add_all([group, user])
-    await session.flush()
-
+async def test_chemical_optional_fields_nullable(session, group, user):
     chem = Chemical(group_id=group.id, name="Water", created_by=user.id)
     session.add(chem)
     await session.commit()
@@ -485,41 +499,21 @@ async def test_chemical_optional_fields_nullable(session):
     assert result.molar_mass is None
 
 
-async def test_create_chemical_synonym(session):
-    group = Group(name="Lab A")
-    user = _make_user()
-    session.add_all([group, user])
-    await session.flush()
-
-    chem = Chemical(group_id=group.id, name="Ethanol", created_by=user.id)
-    session.add(chem)
-    await session.flush()
-
-    syn = ChemicalSynonym(chemical_id=chem.id, name="EtOH", category="common")
+async def test_create_synonym_with_category(session, chemical):
+    syn = ChemicalSynonym(chemical_id=chemical.id, name="EtOH", category="common")
     session.add(syn)
     await session.commit()
 
-    result = (
-        await session.execute(
-            select(ChemicalSynonym).where(ChemicalSynonym.chemical_id == chem.id)
-        )
-    ).scalars().all()
+    result = (await session.exec(
+        select(ChemicalSynonym).where(ChemicalSynonym.chemical_id == chemical.id)
+    )).all()
     assert len(result) == 1
     assert result[0].name == "EtOH"
     assert result[0].category == "common"
 
 
-async def test_synonym_category_optional(session):
-    group = Group(name="Lab A")
-    user = _make_user()
-    session.add_all([group, user])
-    await session.flush()
-
-    chem = Chemical(group_id=group.id, name="Ethanol", created_by=user.id)
-    session.add(chem)
-    await session.flush()
-
-    syn = ChemicalSynonym(chemical_id=chem.id, name="Alcohol")
+async def test_synonym_category_optional(session, chemical):
+    syn = ChemicalSynonym(chemical_id=chemical.id, name="Alcohol")
     session.add(syn)
     await session.commit()
 
@@ -527,11 +521,10 @@ async def test_synonym_category_optional(session):
     assert result.category is None
 
 
-async def test_same_chemical_in_different_groups(session):
-    g1 = Group(name="Lab A")
-    g2 = Group(name="Lab B")
-    user = _make_user()
-    session.add_all([g1, g2, user])
+async def test_same_chemical_in_different_groups(session, user):
+    g1 = Group(name="Lab X")
+    g2 = Group(name="Lab Y")
+    session.add_all([g1, g2])
     await session.flush()
 
     c1 = Chemical(group_id=g1.id, name="Ethanol", created_by=user.id)
@@ -599,7 +592,7 @@ class ChemicalSynonym(SQLModel, table=True):
 - [ ] **Step 4: Run tests to verify they pass**
 
 Run: `uv run pytest tests/test_models/test_chemical.py -v`
-Expected: 4 passed
+Expected: 5 passed
 
 - [ ] **Step 5: Commit**
 
@@ -620,20 +613,10 @@ git commit -m "feat: add Chemical and ChemicalSynonym models with tests"
 
 ```python
 import pytest
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlmodel import select
 
-from chaima.models.chemical import Chemical
 from chaima.models.ghs import ChemicalGHS, GHSCode
-from chaima.models.group import Group
-from chaima.models.user import User
-
-
-def _make_user(**kw):
-    defaults = dict(email="test@example.com", hashed_password="x", is_active=True,
-                    is_superuser=False, is_verified=False)
-    defaults.update(kw)
-    return User(**defaults)
 
 
 async def test_create_ghs_code(session):
@@ -654,29 +637,21 @@ async def test_ghs_code_unique(session):
         await session.commit()
 
 
-async def test_link_chemical_to_ghs(session):
-    group = Group(name="Lab A")
-    user = _make_user()
-    session.add_all([group, user])
-    await session.flush()
-
-    chem = Chemical(group_id=group.id, name="Sodium Cyanide", created_by=user.id)
+async def test_link_chemical_to_ghs(session, chemical):
     h300 = GHSCode(code="H300", description="Fatal if swallowed")
     h310 = GHSCode(code="H310", description="Fatal in contact with skin")
-    session.add_all([chem, h300, h310])
+    session.add_all([h300, h310])
     await session.flush()
 
     session.add_all([
-        ChemicalGHS(chemical_id=chem.id, ghs_id=h300.id),
-        ChemicalGHS(chemical_id=chem.id, ghs_id=h310.id),
+        ChemicalGHS(chemical_id=chemical.id, ghs_id=h300.id),
+        ChemicalGHS(chemical_id=chemical.id, ghs_id=h310.id),
     ])
     await session.commit()
 
-    result = (
-        await session.execute(
-            select(ChemicalGHS).where(ChemicalGHS.chemical_id == chem.id)
-        )
-    ).scalars().all()
+    result = (await session.exec(
+        select(ChemicalGHS).where(ChemicalGHS.chemical_id == chemical.id)
+    )).all()
     assert len(result) == 2
 ```
 
@@ -736,20 +711,10 @@ git commit -m "feat: add GHSCode and ChemicalGHS models with tests"
 
 ```python
 import pytest
-from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
+from sqlmodel import select
 
-from chaima.models.chemical import Chemical
-from chaima.models.group import Group
 from chaima.models.hazard import ChemicalHazardTag, HazardTag, HazardTagIncompatibility
-from chaima.models.user import User
-
-
-def _make_user(**kw):
-    defaults = dict(email="test@example.com", hashed_password="x", is_active=True,
-                    is_superuser=False, is_verified=False)
-    defaults.update(kw)
-    return User(**defaults)
 
 
 async def test_create_hazard_tag(session):
@@ -769,26 +734,17 @@ async def test_hazard_tag_name_unique(session):
         await session.commit()
 
 
-async def test_link_chemical_to_hazard_tag(session):
-    group = Group(name="Lab A")
-    user = _make_user()
-    session.add_all([group, user])
-    await session.flush()
-
-    chem = Chemical(group_id=group.id, name="Acetone", created_by=user.id)
+async def test_link_chemical_to_hazard_tag(session, chemical):
     tag = HazardTag(name="flammable")
-    session.add_all([chem, tag])
+    session.add(tag)
     await session.flush()
 
-    link = ChemicalHazardTag(chemical_id=chem.id, hazard_tag_id=tag.id)
-    session.add(link)
+    session.add(ChemicalHazardTag(chemical_id=chemical.id, hazard_tag_id=tag.id))
     await session.commit()
 
-    result = (
-        await session.execute(
-            select(ChemicalHazardTag).where(ChemicalHazardTag.chemical_id == chem.id)
-        )
-    ).scalars().all()
+    result = (await session.exec(
+        select(ChemicalHazardTag).where(ChemicalHazardTag.chemical_id == chemical.id)
+    )).all()
     assert len(result) == 1
     assert result[0].hazard_tag_id == tag.id
 
@@ -829,7 +785,7 @@ async def test_incompatibility_pair_unique(session):
 Run: `uv run pytest tests/test_models/test_hazard.py -v`
 Expected: FAIL — `ModuleNotFoundError`
 
-- [ ] **Step 3: Implement HazardTag, ChemicalHazardTag, HazardTagIncompatibility**
+- [ ] **Step 3: Implement models**
 
 ```python
 import uuid as uuid_pkg
@@ -887,28 +843,24 @@ git commit -m "feat: add HazardTag, ChemicalHazardTag, and HazardTagIncompatibil
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-from sqlalchemy import select
+from sqlmodel import select
 
 from chaima.models.group import Group
 from chaima.models.storage import StorageLocation, StorageLocationGroup
 
 
 async def test_create_root_location(session):
-    loc = StorageLocation(name="Room A")
+    loc = StorageLocation(name="Room B")
     session.add(loc)
     await session.commit()
 
     result = await session.get(StorageLocation, loc.id)
-    assert result.name == "Room A"
+    assert result.name == "Room B"
     assert result.parent_id is None
 
 
-async def test_create_nested_location(session):
-    room = StorageLocation(name="Room A")
-    session.add(room)
-    await session.flush()
-
-    shelf = StorageLocation(name="Shelf 1", parent_id=room.id)
+async def test_create_nested_location(session, storage_location):
+    shelf = StorageLocation(name="Shelf 1", parent_id=storage_location.id)
     session.add(shelf)
     await session.flush()
 
@@ -920,43 +872,35 @@ async def test_create_nested_location(session):
     assert result.parent_id == shelf.id
 
 
-async def test_assign_location_to_group(session):
-    group = Group(name="Lab A")
-    loc = StorageLocation(name="Room A")
-    session.add_all([group, loc])
-    await session.flush()
-
-    link = StorageLocationGroup(location_id=loc.id, group_id=group.id)
+async def test_assign_location_to_group(session, group, storage_location):
+    link = StorageLocationGroup(location_id=storage_location.id, group_id=group.id)
     session.add(link)
     await session.commit()
 
-    result = (
-        await session.execute(
-            select(StorageLocationGroup).where(StorageLocationGroup.group_id == group.id)
-        )
-    ).scalars().all()
+    result = (await session.exec(
+        select(StorageLocationGroup).where(StorageLocationGroup.group_id == group.id)
+    )).all()
     assert len(result) == 1
-    assert result[0].location_id == loc.id
+    assert result[0].location_id == storage_location.id
 
 
-async def test_location_shared_across_groups(session):
-    g1 = Group(name="Lab A")
-    g2 = Group(name="Lab B")
-    loc = StorageLocation(name="Shared Room")
-    session.add_all([g1, g2, loc])
+async def test_location_shared_across_groups(session, storage_location):
+    g1 = Group(name="Lab X")
+    g2 = Group(name="Lab Y")
+    session.add_all([g1, g2])
     await session.flush()
 
     session.add_all([
-        StorageLocationGroup(location_id=loc.id, group_id=g1.id),
-        StorageLocationGroup(location_id=loc.id, group_id=g2.id),
+        StorageLocationGroup(location_id=storage_location.id, group_id=g1.id),
+        StorageLocationGroup(location_id=storage_location.id, group_id=g2.id),
     ])
     await session.commit()
 
-    result = (
-        await session.execute(
-            select(StorageLocationGroup).where(StorageLocationGroup.location_id == loc.id)
+    result = (await session.exec(
+        select(StorageLocationGroup).where(
+            StorageLocationGroup.location_id == storage_location.id
         )
-    ).scalars().all()
+    )).all()
     assert len(result) == 2
 ```
 
@@ -1018,23 +962,18 @@ git commit -m "feat: add StorageLocation and StorageLocationGroup models with te
 - Create: `src/chaima/models/supplier.py`
 - Create: `tests/test_models/test_supplier.py`
 
-- [ ] **Step 1: Write the failing tests**
+- [ ] **Step 1: Write the failing test**
 
 ```python
-from chaima.models.group import Group
 from chaima.models.supplier import Supplier
 
 
-async def test_create_supplier(session):
-    group = Group(name="Lab A")
-    session.add(group)
-    await session.flush()
-
-    supplier = Supplier(name="Sigma Aldrich", group_id=group.id)
-    session.add(supplier)
+async def test_create_supplier(session, group):
+    s = Supplier(name="Sigma Aldrich", group_id=group.id)
+    session.add(s)
     await session.commit()
 
-    result = await session.get(Supplier, supplier.id)
+    result = await session.get(Supplier, s.id)
     assert result.name == "Sigma Aldrich"
     assert result.group_id == group.id
     assert result.created_at is not None
@@ -1090,45 +1029,15 @@ git commit -m "feat: add Supplier model with tests"
 - [ ] **Step 1: Write the failing tests**
 
 ```python
-import datetime
+from sqlmodel import select
 
-from sqlalchemy import select
-
-from chaima.models.chemical import Chemical
 from chaima.models.container import Container
-from chaima.models.group import Group
-from chaima.models.storage import StorageLocation
-from chaima.models.supplier import Supplier
-from chaima.models.user import User
 
 
-def _make_user(**kw):
-    defaults = dict(email="test@example.com", hashed_password="x", is_active=True,
-                    is_superuser=False, is_verified=False)
-    defaults.update(kw)
-    return User(**defaults)
-
-
-async def _setup(session):
-    group = Group(name="Lab A")
-    user = _make_user()
-    session.add_all([group, user])
-    await session.flush()
-
-    chem = Chemical(group_id=group.id, name="Ethanol", created_by=user.id)
-    loc = StorageLocation(name="Room A")
-    supplier = Supplier(name="Sigma", group_id=group.id)
-    session.add_all([chem, loc, supplier])
-    await session.flush()
-    return group, user, chem, loc, supplier
-
-
-async def test_create_container(session):
-    group, user, chem, loc, supplier = await _setup(session)
-
+async def test_create_container(session, chemical, storage_location, supplier, user):
     container = Container(
-        chemical_id=chem.id,
-        location_id=loc.id,
+        chemical_id=chemical.id,
+        location_id=storage_location.id,
         supplier_id=supplier.id,
         identifier="ETH-001",
         amount=500.0,
@@ -1145,12 +1054,10 @@ async def test_create_container(session):
     assert result.is_archived is False
 
 
-async def test_container_optional_supplier(session):
-    group, user, chem, loc, _supplier = await _setup(session)
-
+async def test_container_optional_supplier(session, chemical, storage_location, user):
     container = Container(
-        chemical_id=chem.id,
-        location_id=loc.id,
+        chemical_id=chemical.id,
+        location_id=storage_location.id,
         identifier="ETH-002",
         amount=1.0,
         unit="kg",
@@ -1163,12 +1070,10 @@ async def test_container_optional_supplier(session):
     assert result.supplier_id is None
 
 
-async def test_container_archive(session):
-    group, user, chem, loc, _supplier = await _setup(session)
-
+async def test_container_archive(session, chemical, storage_location, user):
     container = Container(
-        chemical_id=chem.id,
-        location_id=loc.id,
+        chemical_id=chemical.id,
+        location_id=storage_location.id,
         identifier="ETH-003",
         amount=100.0,
         unit="g",
@@ -1182,21 +1087,18 @@ async def test_container_archive(session):
     assert result.is_archived is True
 
 
-async def test_filter_excludes_archived(session):
-    group, user, chem, loc, _supplier = await _setup(session)
-
-    c1 = Container(chemical_id=chem.id, location_id=loc.id, identifier="A",
-                   amount=1.0, unit="mL", created_by=user.id, is_archived=False)
-    c2 = Container(chemical_id=chem.id, location_id=loc.id, identifier="B",
-                   amount=2.0, unit="mL", created_by=user.id, is_archived=True)
+async def test_filter_excludes_archived(session, chemical, storage_location, user):
+    c1 = Container(chemical_id=chemical.id, location_id=storage_location.id,
+                   identifier="A", amount=1.0, unit="mL", created_by=user.id)
+    c2 = Container(chemical_id=chemical.id, location_id=storage_location.id,
+                   identifier="B", amount=2.0, unit="mL", created_by=user.id,
+                   is_archived=True)
     session.add_all([c1, c2])
     await session.commit()
 
-    result = (
-        await session.execute(
-            select(Container).where(Container.is_archived == False)  # noqa: E712
-        )
-    ).scalars().all()
+    result = (await session.exec(
+        select(Container).where(Container.is_archived == False)  # noqa: E712
+    )).all()
     assert len(result) == 1
     assert result[0].identifier == "A"
 ```
@@ -1259,21 +1161,11 @@ git commit -m "feat: add Container model with soft-archive and tests"
 ### Task 12: Add Relationship attributes + models \_\_init\_\_.py
 
 **Files:**
-- Modify: `src/chaima/models/group.py`
-- Modify: `src/chaima/models/user.py`
-- Modify: `src/chaima/models/chemical.py`
-- Modify: `src/chaima/models/ghs.py`
-- Modify: `src/chaima/models/hazard.py`
-- Modify: `src/chaima/models/storage.py`
-- Modify: `src/chaima/models/supplier.py`
-- Modify: `src/chaima/models/container.py`
-- Modify: `src/chaima/models/__init__.py`
+- Modify: all model files in `src/chaima/models/`
 
 Now that all models exist, add `Relationship()` attributes for ORM navigation and create the re-export module.
 
 - [ ] **Step 1: Add relationships to group.py**
-
-Add imports and relationship fields to `Group`:
 
 ```python
 # Add to imports:
@@ -1282,13 +1174,6 @@ from sqlmodel import Field, Relationship, SQLModel
 # Add to Group class body:
     chemicals: list["Chemical"] = Relationship(back_populates="group")
     suppliers: list["Supplier"] = Relationship(back_populates="group")
-```
-
-Add relationship fields to `UserGroupLink`:
-
-```python
-# Add to imports:
-from sqlmodel import Field, Relationship, SQLModel
 
 # Add to UserGroupLink class body:
     group: "Group" = Relationship()
@@ -1310,8 +1195,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
         "Container", back_populates="creator", foreign_keys="[Container.created_by]"
     )
 ```
-
-Note: these use string forward references; SQLAlchemy resolves them at mapper configuration time.
 
 - [ ] **Step 3: Add relationships to chemical.py**
 
@@ -1379,8 +1262,6 @@ from sqlmodel import Field, Relationship, SQLModel
     containers: list["Container"] = Relationship(back_populates="location")
 ```
 
-Note: self-referential relationships in SQLModel require `sa_relationship_kwargs` with `remote_side` to disambiguate the join direction.
-
 - [ ] **Step 7: Add relationships to supplier.py**
 
 ```python
@@ -1444,7 +1325,7 @@ __all__ = [
 - [ ] **Step 10: Run all tests**
 
 Run: `uv run pytest tests/ -v`
-Expected: All tests pass (22 total).
+Expected: All 26 tests pass.
 
 - [ ] **Step 11: Commit**
 
@@ -1458,21 +1339,19 @@ git commit -m "feat: add ORM relationships and models __init__.py re-exports"
 ### Task 13: Alembic setup & initial migration
 
 **Files:**
-- Create: `alembic.ini`
-- Create: `alembic/env.py`
-- Create: `alembic/script.py.mako`
+- Create: `alembic.ini`, `alembic/env.py`, `alembic/script.py.mako`, `alembic/versions/`
 
 - [ ] **Step 1: Initialize alembic skeleton**
 
-Run: `cd /Users/fzills/tools/chaima && uv run alembic init alembic`
-
-This creates `alembic.ini` and `alembic/` directory with default files.
+```bash
+uv run alembic init alembic
+```
 
 - [ ] **Step 2: Update alembic.ini**
 
-Set the SQLAlchemy URL to a placeholder (overridden by env.py):
+Set the SQLAlchemy URL placeholder (overridden by env.py):
 
-In `alembic.ini`, change:
+In `alembic.ini`, change the `sqlalchemy.url` line to:
 ```ini
 sqlalchemy.url = sqlite+aiosqlite:///./chaima.db
 ```
@@ -1487,7 +1366,6 @@ from alembic import context
 from sqlalchemy.ext.asyncio import async_engine_from_config
 from sqlmodel import SQLModel
 
-# Import all models so metadata is populated
 from chaima.models import *  # noqa: F401, F403
 from chaima.config import settings
 
@@ -1508,7 +1386,6 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
     )
-
     with context.begin_transaction():
         context.run_migrations()
 
@@ -1551,8 +1428,8 @@ Expected: `INFO  [alembic.runtime.migration] Running upgrade  -> <rev_id>, initi
 
 - [ ] **Step 6: Verify tables exist**
 
-Run: `uv run python -c "import sqlite3; conn = sqlite3.connect('chaima.db'); print([r[0] for r in conn.execute(\"SELECT name FROM sqlite_master WHERE type='table'\").fetchall()])"`
-Expected: List containing all table names: `group`, `user`, `user_group_link`, `chemical`, `chemical_synonym`, `ghs_code`, `chemical_ghs`, `hazard_tag`, `chemical_hazard_tag`, `hazard_tag_incompatibility`, `storage_location`, `storage_location_group`, `supplier`, `container`, `alembic_version`.
+Run: `uv run python -c "import sqlite3; conn = sqlite3.connect('chaima.db'); print(sorted(r[0] for r in conn.execute(\"SELECT name FROM sqlite_master WHERE type='table'\").fetchall()))"`
+Expected: List containing all table names.
 
 - [ ] **Step 7: Add chaima.db to .gitignore**
 
@@ -1570,10 +1447,10 @@ git commit -m "feat: add Alembic async setup with initial schema migration"
 ### Task 14: FastAPI app entry point + auth wiring
 
 **Files:**
+- Create: `src/chaima/schemas.py`
 - Create: `src/chaima/auth.py`
 - Create: `src/chaima/app.py`
 - Modify: `src/chaima/__init__.py`
-- Create: `src/chaima/schemas.py`
 
 - [ ] **Step 1: Create user schemas**
 
@@ -1606,7 +1483,7 @@ from fastapi import Depends
 from fastapi_users import BaseUserManager, FastAPIUsers, UUIDIDMixin
 from fastapi_users.authentication import AuthenticationBackend, BearerTransport, JWTStrategy
 from fastapi_users.db import SQLAlchemyUserDatabase
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlmodel.ext.asyncio.session import AsyncSession
 
 from chaima.config import settings
 from chaima.db import get_async_session
@@ -1620,8 +1497,8 @@ async def get_user_db(
 
 
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
-    reset_password_token_secret = settings.secret_key
-    verification_token_secret = settings.secret_key
+    reset_password_token_secret = settings.secret_key.get_secret_value()
+    verification_token_secret = settings.secret_key.get_secret_value()
 
 
 async def get_user_manager(
@@ -1634,7 +1511,9 @@ bearer_transport = BearerTransport(tokenUrl="auth/jwt/login")
 
 
 def get_jwt_strategy() -> JWTStrategy:
-    return JWTStrategy(secret=settings.secret_key, lifetime_seconds=3600)
+    return JWTStrategy(
+        secret=settings.secret_key.get_secret_value(), lifetime_seconds=3600
+    )
 
 
 auth_backend = AuthenticationBackend(
@@ -1689,14 +1568,9 @@ app.include_router(
 )
 ```
 
-- [ ] **Step 4: Clear __init__.py placeholder**
+- [ ] **Step 4: Clear \_\_init\_\_.py placeholder**
 
-Replace `src/chaima/__init__.py` contents with:
-
-```python
-```
-
-(Empty file — remove the `print("Hello, World!")` placeholder.)
+Replace `src/chaima/__init__.py` with an empty file (remove the `print("Hello, World!")` placeholder).
 
 - [ ] **Step 5: Verify app starts**
 
@@ -1712,8 +1586,56 @@ git commit -m "feat: add FastAPI app with fastapi-users auth wiring"
 
 ---
 
-## Self-Review Checklist
+### Task 15: README update
 
-- **Spec coverage:** All 13 tables from the spec are implemented (Group, UserGroupLink, User, Chemical, ChemicalSynonym, GHSCode, ChemicalGHS, HazardTag, ChemicalHazardTag, HazardTagIncompatibility, StorageLocation, StorageLocationGroup, Supplier, Container). All fields match. All constraints (unique, FK, composite) are present.
+**Files:**
+- Modify: `README.md`
+
+- [ ] **Step 1: Update README.md**
+
+```markdown
+# ChAIMa
+
+Chemical AI Manager — inventory management for laboratory chemicals.
+
+## Setup
+
+```bash
+uv sync
+```
+
+## Run
+
+```bash
+uv run uvicorn chaima.app:app --reload
+```
+
+## Test
+
+```bash
+uv run pytest
+```
+
+## Migrations
+
+```bash
+uv run alembic upgrade head           # apply
+uv run alembic revision --autogenerate -m "description"  # generate
+```
+```
+
+- [ ] **Step 2: Commit**
+
+```bash
+git add README.md
+git commit -m "docs: update README with setup, run, test, and migration instructions"
+```
+
+---
+
+## Self-Review
+
+- **Spec coverage:** All 13 tables implemented. All fields match spec. All constraints present.
 - **Placeholder scan:** No TBDs, TODOs, or vague steps. Every code step has complete code.
-- **Type consistency:** All UUID fields use `uuid_pkg.UUID`, all FK strings match `__tablename__` values, all `Relationship` `back_populates` values match across models.
+- **Type consistency:** All UUID fields use `uuid_pkg.UUID`, all FK strings match `__tablename__`, all `Relationship` `back_populates` match across models. `session.exec()` used everywhere (no deprecated `session.execute()`). `AsyncSession` imported from `sqlmodel.ext.asyncio.session`.
+- **DRY:** Shared fixtures (`group`, `user`, `chemical`, `storage_location`, `supplier`) in `tests/conftest.py`. No repeated helper functions across test files.
