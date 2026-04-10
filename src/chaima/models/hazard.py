@@ -1,0 +1,30 @@
+import uuid as uuid_pkg
+
+from sqlalchemy import UniqueConstraint
+from sqlmodel import Field, SQLModel
+
+
+class HazardTag(SQLModel, table=True):
+    __tablename__ = "hazard_tag"
+
+    id: uuid_pkg.UUID = Field(default_factory=uuid_pkg.uuid4, primary_key=True)
+    name: str = Field(unique=True, index=True)
+    description: str | None = Field(default=None)
+
+
+class ChemicalHazardTag(SQLModel, table=True):
+    __tablename__ = "chemical_hazard_tag"
+    __table_args__ = (UniqueConstraint("chemical_id", "hazard_tag_id"),)
+
+    chemical_id: uuid_pkg.UUID = Field(foreign_key="chemical.id", primary_key=True)
+    hazard_tag_id: uuid_pkg.UUID = Field(foreign_key="hazard_tag.id", primary_key=True)
+
+
+class HazardTagIncompatibility(SQLModel, table=True):
+    __tablename__ = "hazard_tag_incompatibility"
+    __table_args__ = (UniqueConstraint("tag_a_id", "tag_b_id"),)
+
+    id: uuid_pkg.UUID = Field(default_factory=uuid_pkg.uuid4, primary_key=True)
+    tag_a_id: uuid_pkg.UUID = Field(foreign_key="hazard_tag.id")
+    tag_b_id: uuid_pkg.UUID = Field(foreign_key="hazard_tag.id")
+    reason: str | None = Field(default=None)
