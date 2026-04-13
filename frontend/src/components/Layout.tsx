@@ -52,14 +52,17 @@ export default function Layout() {
             flexShrink: 0,
             "& .MuiDrawer-paper": {
               width: SIDEBAR_WIDTH,
-              bgcolor: "#111111",
-              borderRight: "1px solid #222222",
+              bgcolor: "background.paper",
+              borderRight: "1px solid",
+              borderColor: "divider",
               overflowX: "hidden",
             },
           }}
         >
-          <Box sx={{ py: 2, textAlign: "center" }}>
-            <Box sx={{ fontWeight: 700, color: "primary.main", fontSize: 14, letterSpacing: 1 }}>Ch</Box>
+          <Box sx={{ py: 2.5, textAlign: "center" }}>
+            <Box sx={{ fontWeight: 600, fontSize: 16, letterSpacing: "-0.02em", color: "text.primary" }}>
+              Ch<Box component="span" sx={{ color: "primary.main" }}>AI</Box>
+            </Box>
           </Box>
           <List>
             {NAV_ITEMS.map((item, i) => (
