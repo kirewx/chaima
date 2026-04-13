@@ -140,16 +140,43 @@ export default function SearchPage() {
   }, [unarchiveContainer, undoState.containerId]);
 
   return (
-    <Box sx={{ p: 2, pb: 4 }}>
-      <Box sx={{ display: "flex", gap: 1, mb: 1 }}>
-        <Box sx={{ flex: 1 }}><SearchBar value={search} onChange={setSearch} /></Box>
-        <IconButton onClick={() => setDrawerOpen(true)} sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 2 }}>
-          <TuneIcon />
-        </IconButton>
+    <Box sx={{ pb: 8 }}>
+      <Box sx={{ px: 2.5, pt: 3, pb: 2 }}>
+        <Typography
+          sx={{
+            fontFamily: "'Fraunces', Georgia, serif",
+            fontSize: 32,
+            fontWeight: 500,
+            letterSpacing: "-0.025em",
+            lineHeight: 1,
+            mb: 0.5,
+          }}
+        >
+          Chemicals
+        </Typography>
+        <Typography
+          sx={{
+            fontFamily: "'JetBrains Mono', monospace",
+            fontSize: 10,
+            letterSpacing: "0.15em",
+            textTransform: "uppercase",
+            color: "text.secondary",
+            opacity: 0.7,
+            mb: 2.5,
+          }}
+        >
+          {chemicals.length} {chemicals.length === 1 ? "entry" : "entries"} · inventory
+        </Typography>
+        <Box sx={{ display: "flex", gap: 1 }}>
+          <Box sx={{ flex: 1 }}><SearchBar value={search} onChange={setSearch} /></Box>
+          <IconButton onClick={() => setDrawerOpen(true)} sx={{ bgcolor: "background.paper", border: "1px solid", borderColor: "divider", borderRadius: 0.5 }}>
+            <TuneIcon />
+          </IconButton>
+        </Box>
+        <FilterBadges badges={badges} onRemove={handleRemoveBadge} />
       </Box>
-      <FilterBadges badges={badges} onRemove={handleRemoveBadge} />
-      <Box sx={{ display: "flex", flexDirection: "column", gap: 1, mt: 1 }}>
-        {isLoading && <Box sx={{ textAlign: "center", py: 4 }}><CircularProgress /></Box>}
+      <Box sx={{ borderTop: "1px solid", borderColor: "divider" }}>
+        {isLoading && <Box sx={{ textAlign: "center", py: 6 }}><CircularProgress size={20} thickness={4} /></Box>}
         {isError && <Typography color="error" sx={{ textAlign: "center", py: 4 }}>Failed to load chemicals</Typography>}
         {chemicals.map((chemical) => (
           <SwipeableRow key={chemical.id} onSwipeRight={() => navigate(`/containers/new?chemicalId=${chemical.id}`)}>
@@ -157,7 +184,7 @@ export default function SearchPage() {
           </SwipeableRow>
         ))}
         {!isLoading && chemicals.length === 0 && (
-          <Typography color="text.secondary" sx={{ textAlign: "center", py: 4 }}>
+          <Typography color="text.secondary" sx={{ textAlign: "center", py: 6, fontFamily: "'Fraunces', serif", fontStyle: "italic" }}>
             {search ? "No chemicals found" : "No chemicals yet"}
           </Typography>
         )}
