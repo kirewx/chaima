@@ -37,14 +37,18 @@ class FrontendBuildHook(BuildHookInterface):
             )
             raise RuntimeError(msg)
 
-        if shutil.which("bun"):
+        bun_path = shutil.which("bun")
+        npm_path = shutil.which("npm")
+        npx_path = shutil.which("npx")
+
+        if bun_path:
             pkg_manager = "bun"
-            install_cmd = [pkg_manager, "install"]
-            build_cmd = [pkg_manager, "vite", "build"]
-        elif shutil.which("npm"):
+            install_cmd = [bun_path, "install"]
+            build_cmd = [bun_path, "vite", "build"]
+        elif npm_path and npx_path:
             pkg_manager = "npm"
-            install_cmd = [pkg_manager, "install"]
-            build_cmd = ["npx", "vite", "build"]
+            install_cmd = [npm_path, "install"]
+            build_cmd = [npx_path, "vite", "build"]
         else:
             msg = "Neither bun nor npm found. Cannot build frontend."
             raise RuntimeError(msg)
@@ -54,9 +58,9 @@ class FrontendBuildHook(BuildHookInterface):
             f"Building frontend with {pkg_manager} (version={pkg_version})..."
         )
 
-        subprocess.run(install_cmd, cwd=app_dir, check=True)  # noqa: S603
-
         env = os.environ.copy()
+        subprocess.run(install_cmd, cwd=app_dir, check=True, env=env)  # noqa: S603
+
         env["VITE_APP_VERSION"] = pkg_version
         subprocess.run(build_cmd, cwd=app_dir, check=True, env=env)  # noqa: S603
 
