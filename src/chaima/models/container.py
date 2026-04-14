@@ -16,6 +16,7 @@ class Container(SQLModel, table=True):
     identifier: str = Field(index=True)
     amount: float
     unit: str
+    purity: str | None = Field(default=None)
     image_path: str | None = Field(default=None)
     purchased_at: datetime.date | None = Field(default=None)
     created_by: uuid_pkg.UUID = Field(foreign_key="user.id")

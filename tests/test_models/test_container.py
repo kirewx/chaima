@@ -75,3 +75,34 @@ async def test_filter_excludes_archived(session, chemical, storage_location, use
     )).all()
     assert len(result) == 1
     assert result[0].identifier == "A"
+
+
+async def test_container_purity_optional(session, chemical, storage_location, user):
+    c = Container(
+        chemical_id=chemical.id,
+        location_id=storage_location.id,
+        identifier="AB01",
+        amount=1.0,
+        unit="L",
+        created_by=user.id,
+    )
+    session.add(c)
+    await session.commit()
+    await session.refresh(c)
+    assert c.purity is None
+
+
+async def test_container_purity_stores_string(session, chemical, storage_location, user):
+    c = Container(
+        chemical_id=chemical.id,
+        location_id=storage_location.id,
+        identifier="AB02",
+        amount=0.5,
+        unit="L",
+        purity="99.8%",
+        created_by=user.id,
+    )
+    session.add(c)
+    await session.commit()
+    await session.refresh(c)
+    assert c.purity == "99.8%"
