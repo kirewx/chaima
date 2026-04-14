@@ -366,6 +366,68 @@ async def replace_ghs_codes(
     return [GHSCodeReadNested.model_validate(c, from_attributes=True) for c in codes]
 
 
+@router.post("/{chemical_id}/archive", status_code=status.HTTP_204_NO_CONTENT)
+async def archive(
+    group_id: UUID,
+    chemical_id: UUID,
+    session: SessionDep,
+    member: GroupMemberDep,
+) -> None:
+    """Archive a chemical (hide from default listing).
+
+    Parameters
+    ----------
+    group_id : UUID
+        Group the chemical belongs to.
+    chemical_id : UUID
+        Chemical ID.
+    session : SessionDep
+        Database session.
+    member : GroupMemberDep
+        Verified group membership.
+
+    Raises
+    ------
+    HTTPException
+        404 if the chemical is not found.
+    """
+    try:
+        await chemical_service.archive_chemical(session, chemical_id)
+    except chemical_service.ChemicalNotFound:
+        raise HTTPException(status_code=404, detail="Chemical not found")
+
+
+@router.post("/{chemical_id}/unarchive", status_code=status.HTTP_204_NO_CONTENT)
+async def unarchive(
+    group_id: UUID,
+    chemical_id: UUID,
+    session: SessionDep,
+    member: GroupMemberDep,
+) -> None:
+    """Restore an archived chemical back to the default listing.
+
+    Parameters
+    ----------
+    group_id : UUID
+        Group the chemical belongs to.
+    chemical_id : UUID
+        Chemical ID.
+    session : SessionDep
+        Database session.
+    member : GroupMemberDep
+        Verified group membership.
+
+    Raises
+    ------
+    HTTPException
+        404 if the chemical is not found.
+    """
+    try:
+        await chemical_service.unarchive_chemical(session, chemical_id)
+    except chemical_service.ChemicalNotFound:
+        raise HTTPException(status_code=404, detail="Chemical not found")
+
+
 @router.put("/{chemical_id}/hazard-tags", response_model=list[HazardTagReadNested])
 async def replace_hazard_tags(
     group_id: UUID,

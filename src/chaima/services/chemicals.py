@@ -1,4 +1,5 @@
 # src/chaima/services/chemicals.py
+import datetime
 from uuid import UUID
 
 from sqlalchemy import func, or_
@@ -18,6 +19,10 @@ class CrossGroupError(Exception):
 
 class DuplicateNameError(Exception):
     """Raised when a chemical name already exists within the same group."""
+
+
+class ChemicalNotFound(LookupError):
+    """Raised when a chemical id does not exist."""
 
 
 def apply_secret_filter(stmt, viewer: User):
@@ -453,3 +458,55 @@ async def replace_hazard_tags(
         session.add(ChemicalHazardTag(chemical_id=chemical_id, hazard_tag_id=tag_id))
     await session.flush()
     return tags
+
+
+async def archive_chemical(
+    session: AsyncSession, chemical_id: UUID
+) -> None:
+    """Set a chemical's is_archived flag to True.
+
+    Parameters
+    ----------
+    session : AsyncSession
+        The database session.
+    chemical_id : UUID
+        The ID of the chemical to archive.
+
+    Raises
+    ------
+    ChemicalNotFound
+        If no chemical with the given ID exists.
+    """
+    chem = await session.get(Chemical, chemical_id)
+    if chem is None:
+        raise ChemicalNotFound(str(chemical_id))
+    chem.is_archived = True
+    chem.archived_at = datetime.datetime.now(datetime.timezone.utc)
+    session.add(chem)
+    await session.commit()
+
+
+async def unarchive_chemical(
+    session: AsyncSession, chemical_id: UUID
+) -> None:
+    """Clear a chemical's is_archived flag.
+
+    Parameters
+    ----------
+    session : AsyncSession
+        The database session.
+    chemical_id : UUID
+        The ID of the chemical to unarchive.
+
+    Raises
+    ------
+    ChemicalNotFound
+        If no chemical with the given ID exists.
+    """
+    chem = await session.get(Chemical, chemical_id)
+    if chem is None:
+        raise ChemicalNotFound(str(chemical_id))
+    chem.is_archived = False
+    chem.archived_at = None
+    session.add(chem)
+    await session.commit()

@@ -164,3 +164,52 @@ async def test_list_includes_secret_for_creator(
     assert resp.status_code == 200
     names = [c["name"] for c in resp.json()["items"]]
     assert "MyMol" in names
+
+
+async def test_archive_chemical_hides_from_default_list(client, group, membership):
+    r = await client.post(
+        f"/api/v1/groups/{group.id}/chemicals",
+        json={"name": "OldStock"},
+    )
+    assert r.status_code in (200, 201)
+    cid = r.json()["id"]
+
+    r = await client.post(
+        f"/api/v1/groups/{group.id}/chemicals/{cid}/archive",
+    )
+    assert r.status_code == 204
+
+    r = await client.get(
+        f"/api/v1/groups/{group.id}/chemicals",
+    )
+    names = [c["name"] for c in r.json()["items"]]
+    assert "OldStock" not in names
+
+    r = await client.get(
+        f"/api/v1/groups/{group.id}/chemicals?include_archived=true",
+    )
+    names = [c["name"] for c in r.json()["items"]]
+    assert "OldStock" in names
+
+
+async def test_unarchive_restores_to_default_list(client, group, membership):
+    r = await client.post(
+        f"/api/v1/groups/{group.id}/chemicals",
+        json={"name": "Rediscovered"},
+    )
+    assert r.status_code in (200, 201)
+    cid = r.json()["id"]
+
+    await client.post(
+        f"/api/v1/groups/{group.id}/chemicals/{cid}/archive",
+    )
+    r = await client.post(
+        f"/api/v1/groups/{group.id}/chemicals/{cid}/unarchive",
+    )
+    assert r.status_code == 204
+
+    r = await client.get(
+        f"/api/v1/groups/{group.id}/chemicals",
+    )
+    names = [c["name"] for c in r.json()["items"]]
+    assert "Rediscovered" in names
