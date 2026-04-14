@@ -33,6 +33,10 @@ class Chemical(SQLModel, table=True):
             DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False
         ),
     )
+    is_archived: bool = Field(default=False, index=True)
+    archived_at: datetime.datetime | None = Field(
+        default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
+    )
 
     group: "Group" = Relationship(back_populates="chemicals")
     creator: "User" = Relationship(

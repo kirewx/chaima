@@ -70,3 +70,33 @@ async def test_same_chemical_in_different_groups(session, user):
 
     assert c1.id != c2.id
     assert c1.group_id != c2.group_id
+
+
+async def test_chemical_defaults_to_not_archived(session, group, user):
+    c = Chemical(
+        name="Acetone2",
+        group_id=group.id,
+        created_by=user.id,
+    )
+    session.add(c)
+    await session.commit()
+    await session.refresh(c)
+    assert c.is_archived is False
+    assert c.archived_at is None
+
+
+async def test_chemical_can_be_archived(session, group, user):
+    import datetime
+
+    c = Chemical(
+        name="Methanol",
+        group_id=group.id,
+        created_by=user.id,
+        is_archived=True,
+        archived_at=datetime.datetime.now(datetime.timezone.utc),
+    )
+    session.add(c)
+    await session.commit()
+    await session.refresh(c)
+    assert c.is_archived is True
+    assert c.archived_at is not None
