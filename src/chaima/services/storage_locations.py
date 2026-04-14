@@ -9,6 +9,28 @@ from chaima.models.storage import StorageKind, StorageLocation, StorageLocationG
 from chaima.schemas.storage import StorageLocationNode
 
 
+class InvalidHierarchy(ValueError):
+    """Raised when a storage location's kind does not match its parent's kind."""
+
+
+_ALLOWED_PARENT: dict[StorageKind, StorageKind | None] = {
+    StorageKind.BUILDING: None,
+    StorageKind.ROOM: StorageKind.BUILDING,
+    StorageKind.CABINET: StorageKind.ROOM,
+    StorageKind.SHELF: StorageKind.CABINET,
+}
+
+
+def validate_kind_hierarchy(child: StorageKind, parent: StorageKind | None) -> None:
+    expected = _ALLOWED_PARENT[child]
+    if expected != parent:
+        raise InvalidHierarchy(
+            f"{child.value} must have parent of kind "
+            f"{expected.value if expected else 'None'}, got "
+            f"{parent.value if parent else 'None'}"
+        )
+
+
 class LocationHasContainersError(Exception):
     """Raised when trying to delete a location that has containers."""
 
