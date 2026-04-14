@@ -8,13 +8,26 @@ import { useCurrentUser } from "../api/hooks/useAuth";
 import { ChemicalList } from "../components/ChemicalList";
 import { FilterBar, type ActiveFilter } from "../components/FilterBar";
 import { useDrawer } from "../components/drawer/DrawerContext";
+import FilterDrawer, { type FilterState } from "../components/FilterDrawer";
 
 export default function ChemicalsPage() {
   const { data: user } = useCurrentUser();
   const groupId = user?.main_group_id ?? undefined;
   const drawer = useDrawer();
   const [search, setSearch] = useState("");
-  const [includeArchived, setIncludeArchived] = useState(false);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [filters, setFilters] = useState<FilterState>({
+    includeArchived: false,
+    hasContainers: undefined,
+    hazardTagId: undefined,
+    ghsCodeId: undefined,
+    sort: "name",
+    order: "asc",
+    selectedGroupIds: groupId ? [groupId] : [],
+  });
+
+  const includeArchived = filters.includeArchived;
+  const setIncludeArchived = (v: boolean) => setFilters((f) => ({ ...f, includeArchived: v }));
 
   const { data, isLoading } = useChemicals(
     groupId as string,
@@ -69,7 +82,6 @@ export default function ChemicalsPage() {
         >
           New chemical
         </Button>
-        {/* TODO: Task 15 — open FilterDrawer */}
         <Badge
           color="primary"
           variant="dot"
@@ -79,7 +91,7 @@ export default function ChemicalsPage() {
           <IconButton
             aria-label="Filters"
             sx={{ border: "1px solid", borderColor: "divider", borderRadius: 1 }}
-            onClick={() => setIncludeArchived((v) => !v)}
+            onClick={() => setFiltersOpen(true)}
           >
             <TuneIcon fontSize="small" />
           </IconButton>
@@ -87,6 +99,16 @@ export default function ChemicalsPage() {
       </Stack>
       <FilterBar filters={activeFilters} />
       <ChemicalList items={items} loading={isLoading} groupId={groupId} />
+      <FilterDrawer
+        open={filtersOpen}
+        onOpen={() => setFiltersOpen(true)}
+        onClose={() => setFiltersOpen(false)}
+        filters={filters}
+        onApply={setFilters}
+        hazardTags={[]}
+        ghsCodes={[]}
+        groups={[]}
+      />
     </Stack>
   );
 }

@@ -5,6 +5,7 @@ import {
 import type { HazardTagRead, GHSCodeRead, GroupRead } from "../types";
 
 export interface FilterState {
+  includeArchived: boolean;
   hasContainers: boolean | undefined;
   hazardTagId: string | undefined;
   ghsCodeId: string | undefined;
@@ -44,6 +45,26 @@ export default function FilterDrawer({ open, onOpen, onClose, filters, onApply, 
     <Box sx={{ px: isDesktop ? 2 : 3, py: 2, width: isDesktop ? 320 : "auto" }}>
       {!isDesktop && <Box sx={{ width: 40, height: 4, bgcolor: "#444", borderRadius: 2, mx: "auto", mb: 2 }} />}
       <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>Filters</Typography>
+
+      <Box sx={{ px: 0, py: 1.5, borderBottom: "1px solid", borderColor: "divider", mb: 2 }}>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={filters.includeArchived}
+              onChange={(_, v) => handleChange({ includeArchived: v })}
+            />
+          }
+          label={
+            <Stack>
+              <Typography variant="body2">Include archived</Typography>
+              <Typography variant="caption" color="text.secondary">
+                Show chemicals that have been archived.
+              </Typography>
+            </Stack>
+          }
+          sx={{ alignItems: "flex-start", m: 0 }}
+        />
+      </Box>
 
       {groups.length > 1 && (
         <>

@@ -34,6 +34,7 @@ export default function SearchPage() {
   const allGroups = groupsQuery.data ?? [];
   const [search, setSearch] = useState("");
   const [filters, setFilters] = useState<FilterState>({
+    includeArchived: false,
     hasContainers: undefined,
     hazardTagId: undefined,
     ghsCodeId: undefined,
