@@ -74,7 +74,7 @@ export default function ChemicalsPage() {
         </Badge>
       </Stack>
       <FilterBar filters={activeFilters} />
-      <ChemicalList items={items} loading={isLoading} />
+      <ChemicalList items={items} loading={isLoading} groupId={groupId} />
     </Stack>
   );
 }

@@ -17,6 +17,12 @@ export function useChemicalContainers(groupId: string, chemicalId: string, param
   });
 }
 
+/** Convenience wrapper — returns the flat items array for a single chemical's containers. */
+export function useContainersForChemical(groupId: string, chemicalId: string) {
+  const result = useChemicalContainers(groupId, chemicalId);
+  return { ...result, data: result.data?.items ?? [] };
+}
+
 export function useCreateContainer(groupId: string, chemicalId: string) {
   const queryClient = useQueryClient();
   return useMutation({

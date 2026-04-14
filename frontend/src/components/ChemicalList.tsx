@@ -1,12 +1,24 @@
 import { Box } from "@mui/material";
+import { useState } from "react";
 import type { ChemicalRead } from "../types";
+import { ChemicalRow } from "./ChemicalRow";
 
 interface Props {
   items: ChemicalRead[];
   loading: boolean;
+  groupId: string;
 }
 
-export function ChemicalList({ items, loading }: Props) {
+export function ChemicalList({ items, loading, groupId }: Props) {
+  const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+  const toggle = (id: string) =>
+    setOpenIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+
   if (loading) {
     return <Box sx={{ p: 2, color: "text.secondary" }}>Loading…</Box>;
   }
@@ -27,12 +39,17 @@ export function ChemicalList({ items, loading }: Props) {
         <Box
           key={c.id}
           sx={{
-            p: 1.5,
             borderBottom: i < items.length - 1 ? "1px solid" : "none",
             borderColor: "divider",
           }}
         >
-          {c.name}
+          <ChemicalRow
+            chemical={c}
+            groupId={groupId}
+            expanded={openIds.has(c.id)}
+            onToggle={() => toggle(c.id)}
+          />
+          {/* Task 9 will render an expanded info box here when expanded */}
         </Box>
       ))}
     </Box>
