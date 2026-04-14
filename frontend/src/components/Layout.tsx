@@ -5,6 +5,8 @@ import {
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
 import { useCurrentUser, useLogout } from "../api/hooks/useAuth";
+import { DrawerProvider } from "./drawer/DrawerContext";
+import { EditDrawer } from "./drawer/EditDrawer";
 
 const navItems = [
   { to: "/", label: "Chemicals" },
@@ -25,6 +27,7 @@ export default function Layout() {
   };
 
   return (
+    <DrawerProvider>
     <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
       <AppBar
         position="sticky"
@@ -106,6 +109,8 @@ export default function Layout() {
       >
         <Outlet />
       </Box>
+      <EditDrawer />
     </Box>
+    </DrawerProvider>
   );
 }
