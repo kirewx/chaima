@@ -56,6 +56,34 @@ async def membership(session, user, group):
 
 
 @pytest_asyncio.fixture
+async def other_user(session):
+    u = User(
+        email="bob@example.com",
+        hashed_password="fakehash",
+        is_active=True,
+        is_superuser=False,
+        is_verified=True,
+    )
+    session.add(u)
+    await session.flush()
+    return u
+
+
+@pytest_asyncio.fixture
+async def superuser(session):
+    u = User(
+        email="admin@example.com",
+        hashed_password="fakehash",
+        is_active=True,
+        is_superuser=True,
+        is_verified=True,
+    )
+    session.add(u)
+    await session.flush()
+    return u
+
+
+@pytest_asyncio.fixture
 async def chemical(session, group, user):
     from chaima.models.chemical import Chemical
 

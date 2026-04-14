@@ -1,7 +1,7 @@
 # src/chaima/services/chemicals.py
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlalchemy.orm import selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -9,6 +9,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from chaima.models.chemical import Chemical, ChemicalSynonym
 from chaima.models.ghs import ChemicalGHS, GHSCode
 from chaima.models.hazard import ChemicalHazardTag, HazardTag
+from chaima.models.user import User
 
 
 class CrossGroupError(Exception):
@@ -17,6 +18,19 @@ class CrossGroupError(Exception):
 
 class DuplicateNameError(Exception):
     """Raised when a chemical name already exists within the same group."""
+
+
+def apply_secret_filter(stmt, viewer: User):
+    """Exclude secret chemicals the viewer is not allowed to see.
+
+    A user sees a secret chemical only if they created it. Superusers see
+    all secrets. Non-secret chemicals are always visible.
+    """
+    if viewer.is_superuser:
+        return stmt
+    return stmt.where(
+        or_(Chemical.is_secret.is_(False), Chemical.created_by == viewer.id)
+    )
 
 
 async def create_chemical(
