@@ -218,6 +218,9 @@ src/chaima/_version.py
 src/chaima/static/
 .superpowers/
 
+# Uploaded files
+uploads/
+
 # Database
 chaima.db
 .playwright-cli/

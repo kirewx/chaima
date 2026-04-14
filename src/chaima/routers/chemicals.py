@@ -1,7 +1,7 @@
 # src/chaima/routers/chemicals.py
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 from sqlalchemy.exc import IntegrityError
 
 from chaima.dependencies import CurrentUserDep, GroupMemberDep, SessionDep
@@ -18,7 +18,9 @@ from chaima.schemas.chemical import (
     SynonymRead,
 )
 from chaima.schemas.pagination import PaginatedResponse
+from chaima.models.chemical import Chemical
 from chaima.services import chemicals as chemical_service
+from chaima.services import files as files_service
 
 router = APIRouter(prefix="/api/v1/groups/{group_id}/chemicals", tags=["chemicals"])
 
@@ -480,3 +482,25 @@ async def replace_hazard_tags(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
     await session.commit()
     return [HazardTagReadNested.model_validate(t, from_attributes=True) for t in tags]
+
+
+@router.post("/{chemical_id}/sds", response_model=ChemicalRead)
+async def upload_sds(
+    group_id: UUID,
+    chemical_id: UUID,
+    session: SessionDep,
+    member: GroupMemberDep,
+    file: UploadFile = File(...),
+) -> ChemicalRead:
+    if file.content_type != "application/pdf":
+        raise HTTPException(status_code=415, detail="SDS must be a PDF")
+    data = await file.read()
+    path = files_service.save_upload(group_id, file.filename or "sds.pdf", data)
+    chem = await session.get(Chemical, chemical_id)
+    if chem is None:
+        raise HTTPException(status_code=404, detail="Chemical not found")
+    chem.sds_path = path
+    session.add(chem)
+    await session.commit()
+    await session.refresh(chem)
+    return ChemicalRead.model_validate(chem)
