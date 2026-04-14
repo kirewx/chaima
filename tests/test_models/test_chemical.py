@@ -100,3 +100,19 @@ async def test_chemical_can_be_archived(session, group, user):
     await session.refresh(c)
     assert c.is_archived is True
     assert c.archived_at is not None
+
+
+async def test_chemical_defaults_to_not_secret(session, group, user):
+    c = Chemical(name="Ethanol", group_id=group.id, created_by=user.id)
+    session.add(c)
+    await session.commit()
+    await session.refresh(c)
+    assert c.is_secret is False
+
+
+async def test_chemical_can_be_marked_secret(session, group, user):
+    c = Chemical(name="AZ Int 3a", group_id=group.id, created_by=user.id, is_secret=True)
+    session.add(c)
+    await session.commit()
+    await session.refresh(c)
+    assert c.is_secret is True

@@ -34,6 +34,7 @@ class Chemical(SQLModel, table=True):
         ),
     )
     is_archived: bool = Field(default=False, index=True)
+    is_secret: bool = Field(default=False, index=True)
     archived_at: datetime.datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)
     )
