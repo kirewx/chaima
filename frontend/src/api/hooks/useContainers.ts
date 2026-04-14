@@ -23,6 +23,14 @@ export function useContainersForChemical(groupId: string, chemicalId: string) {
   return { ...result, data: result.data?.items ?? [] };
 }
 
+export function useContainer(groupId: string, containerId: string) {
+  return useQuery<ContainerRead>({
+    queryKey: ["containers", groupId, containerId],
+    queryFn: () => client.get(`/groups/${groupId}/containers/${containerId}`).then((r) => r.data),
+    enabled: !!groupId && !!containerId,
+  });
+}
+
 export function useCreateContainer(groupId: string, chemicalId: string) {
   const queryClient = useQueryClient();
   return useMutation({

@@ -5,6 +5,7 @@ import { ChemicalRow } from "./ChemicalRow";
 import { ChemicalInfoBox } from "./ChemicalInfoBox";
 import { ContainerGrid } from "./ContainerGrid";
 import { useContainersForChemical } from "../api/hooks/useContainers";
+import { useDrawer } from "./drawer/DrawerContext";
 
 interface ExpandedBodyProps {
   groupId: string;
@@ -14,13 +15,14 @@ interface ExpandedBodyProps {
 function ExpandedBody({ groupId, chemical }: ExpandedBodyProps) {
   const { data: containers = [] } = useContainersForChemical(groupId, chemical.id);
   const active = containers.filter((c) => !c.is_archived);
+  const drawer = useDrawer();
   return (
     <>
       <ChemicalInfoBox chemical={chemical} containers={active} />
       <ContainerGrid
         groupId={groupId}
         containers={active}
-        onAdd={() => alert("Drawer coming in Task 11/13")}
+        onAdd={() => drawer.open({ kind: "container-new", chemicalId: chemical.id })}
       />
     </>
   );

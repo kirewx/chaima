@@ -44,6 +44,11 @@ export function ContainerCard({ container, locationName, supplierName }: Props) 
       <Typography sx={{ fontSize: 15, fontWeight: 600, mt: 1 }}>
         {container.amount} {container.unit}
       </Typography>
+      {container.purity && (
+        <Typography variant="caption" color="text.secondary">
+          Purity {container.purity}
+        </Typography>
+      )}
       <Stack
         spacing={0.25}
         sx={{

@@ -123,6 +123,7 @@ export interface ContainerCreate {
   identifier: string;
   amount: number;
   unit: string;
+  purity?: string | null;
   purchased_at?: string | null;
 }
 
@@ -132,6 +133,7 @@ export interface ContainerUpdate {
   identifier?: string | null;
   amount?: number | null;
   unit?: string | null;
+  purity?: string | null;
   purchased_at?: string | null;
   is_archived?: boolean | null;
 }
@@ -144,6 +146,7 @@ export interface ContainerRead {
   identifier: string;
   amount: number;
   unit: string;
+  purity: string | null;
   image_path: string | null;
   purchased_at: string | null;
   created_by: string;
