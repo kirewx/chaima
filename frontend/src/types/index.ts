@@ -13,6 +13,7 @@ export interface UserRead {
   is_verified: boolean;
   created_at: string;
   main_group_id: string | null;
+  dark_mode: boolean;
 }
 
 export interface GroupRead {
