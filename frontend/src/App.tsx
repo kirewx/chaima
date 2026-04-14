@@ -4,7 +4,7 @@ import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import LoginPage from "./pages/LoginPage";
 import InvitePage from "./pages/InvitePage";
-import SearchPage from "./pages/SearchPage";
+import ChemicalsPage from "./pages/ChemicalsPage";
 import ChemicalForm from "./pages/ChemicalForm";
 import ContainerForm from "./pages/ContainerForm";
 import StoragePage from "./pages/StoragePage";
@@ -25,7 +25,7 @@ export default function App() {
       <Route path="/invite/:token" element={<InvitePage />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
-          <Route path="/" element={<SearchPage />} />
+          <Route path="/" element={<ChemicalsPage />} />
           <Route path="/add" element={<ChemicalForm />} />
           <Route path="/chemicals/:id/edit" element={<ChemicalForm />} />
           <Route path="/containers/new" element={<ContainerForm />} />
