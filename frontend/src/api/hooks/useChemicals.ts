@@ -4,12 +4,12 @@ import type { PaginatedResponse, ChemicalRead, ChemicalDetail, ChemicalCreate, C
 
 const PAGE_SIZE = 20;
 
-export function useChemicals(groupId: string, params: ChemicalSearchParams) {
+export function useChemicals(groupId: string, params: ChemicalSearchParams, includeArchived = false) {
   return useInfiniteQuery<PaginatedResponse<ChemicalRead>>({
-    queryKey: ["chemicals", groupId, params],
+    queryKey: ["chemicals", groupId, params, includeArchived],
     queryFn: ({ pageParam }) =>
       client.get(`/groups/${groupId}/chemicals`, {
-        params: { ...params, offset: pageParam, limit: params.limit ?? PAGE_SIZE },
+        params: { ...params, offset: pageParam, limit: params.limit ?? PAGE_SIZE, ...(includeArchived ? { include_archived: true } : {}) },
       }).then((r) => r.data),
     initialPageParam: 0,
     getNextPageParam: (lastPage) => {
@@ -75,5 +75,42 @@ export function useMultiGroupChemicals(groupIds: string[], params: ChemicalSearc
           params: { ...params, offset: 0, limit: params.limit ?? 100 },
         }).then((r) => r.data as PaginatedResponse<ChemicalRead>),
     })),
+  });
+}
+
+export function useArchiveChemical(groupId: string, chemicalId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      await client.post(`/groups/${groupId}/chemicals/${chemicalId}/archive`);
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["chemicals", groupId] }); },
+  });
+}
+
+export function useUnarchiveChemical(groupId: string, chemicalId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      await client.post(`/groups/${groupId}/chemicals/${chemicalId}/unarchive`);
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["chemicals", groupId] }); },
+  });
+}
+
+export function useUploadSDS(groupId: string, chemicalId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      const { data } = await client.post(
+        `/groups/${groupId}/chemicals/${chemicalId}/sds`,
+        fd,
+        { headers: { "Content-Type": "multipart/form-data" } },
+      );
+      return data;
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["chemicals", groupId] }); },
   });
 }

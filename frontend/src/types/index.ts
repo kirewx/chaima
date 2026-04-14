@@ -50,6 +50,8 @@ export interface MemberUpdate {
   is_admin: boolean;
 }
 
+export type StructureSource = "none" | "pubchem" | "uploaded";
+
 export interface ChemicalCreate {
   name: string;
   cas?: string | null;
@@ -61,6 +63,8 @@ export interface ChemicalCreate {
   melting_point?: number | null;
   boiling_point?: number | null;
   comment?: string | null;
+  is_secret?: boolean;
+  structure_source?: StructureSource;
 }
 
 export interface ChemicalUpdate {
@@ -74,6 +78,7 @@ export interface ChemicalUpdate {
   melting_point?: number | null;
   boiling_point?: number | null;
   comment?: string | null;
+  is_secret?: boolean;
 }
 
 export interface ChemicalRead {
@@ -92,6 +97,11 @@ export interface ChemicalRead {
   created_by: string;
   created_at: string;
   updated_at: string;
+  is_secret: boolean;
+  is_archived: boolean;
+  archived_at: string | null;
+  structure_source: StructureSource;
+  sds_path: string | null;
 }
 
 export interface SynonymRead {
