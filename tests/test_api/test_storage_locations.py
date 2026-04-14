@@ -1,5 +1,5 @@
 # tests/test_api/test_storage_locations.py
-from chaima.models.storage import StorageLocation, StorageLocationGroup
+from chaima.models.storage import StorageKind, StorageLocation, StorageLocationGroup
 from chaima.schemas.storage import StorageLocationNode, StorageLocationRead
 
 
@@ -14,12 +14,12 @@ async def test_create_location(client, session, group, membership):
 
 
 async def test_get_tree(client, session, group, membership):
-    room = StorageLocation(name="Room A")
+    room = StorageLocation(name="Room A", kind=StorageKind.ROOM)
     session.add(room)
     await session.flush()
     session.add(StorageLocationGroup(location_id=room.id, group_id=group.id))
 
-    shelf = StorageLocation(name="Shelf 1", parent_id=room.id)
+    shelf = StorageLocation(name="Shelf 1", kind=StorageKind.SHELF, parent_id=room.id)
     session.add(shelf)
     await session.flush()
     session.add(StorageLocationGroup(location_id=shelf.id, group_id=group.id))
@@ -35,7 +35,7 @@ async def test_get_tree(client, session, group, membership):
 
 
 async def test_delete_location(client, session, group, membership):
-    loc = StorageLocation(name="Room A")
+    loc = StorageLocation(name="Room A", kind=StorageKind.ROOM)
     session.add(loc)
     await session.flush()
     session.add(StorageLocationGroup(location_id=loc.id, group_id=group.id))

@@ -1,7 +1,7 @@
 # tests/test_services/test_containers.py
 import pytest
 
-from chaima.models.storage import StorageLocation, StorageLocationGroup
+from chaima.models.storage import StorageKind, StorageLocation, StorageLocationGroup
 from chaima.models.supplier import Supplier
 from chaima.services import containers as container_service
 
@@ -11,7 +11,7 @@ def _storage_and_supplier(session, group):
     """Helper to create storage location and supplier for tests."""
 
     async def _create():
-        loc = StorageLocation(name="Room A")
+        loc = StorageLocation(name="Room A", kind=StorageKind.ROOM)
         session.add(loc)
         await session.flush()
         session.add(StorageLocationGroup(location_id=loc.id, group_id=group.id))

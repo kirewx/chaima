@@ -5,7 +5,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from chaima.models.container import Container
-from chaima.models.storage import StorageLocation, StorageLocationGroup
+from chaima.models.storage import StorageKind, StorageLocation, StorageLocationGroup
 from chaima.schemas.storage import StorageLocationNode
 
 
@@ -18,6 +18,7 @@ async def create_location(
     *,
     group_id: UUID,
     name: str,
+    kind: StorageKind = StorageKind.SHELF,
     description: str | None = None,
     parent_id: UUID | None = None,
 ) -> StorageLocation:
@@ -31,6 +32,8 @@ async def create_location(
         The group to link the location to.
     name : str
         Name of the location.
+    kind : StorageKind, optional
+        The kind of storage location. Defaults to SHELF.
     description : str or None, optional
         Optional description.
     parent_id : UUID or None, optional
@@ -41,7 +44,7 @@ async def create_location(
     StorageLocation
         The newly created storage location.
     """
-    loc = StorageLocation(name=name, description=description, parent_id=parent_id)
+    loc = StorageLocation(name=name, kind=kind, description=description, parent_id=parent_id)
     session.add(loc)
     await session.flush()
 

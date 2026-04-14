@@ -1,11 +1,25 @@
+import pytest
+
 from sqlmodel import select
 
 from chaima.models.group import Group
-from chaima.models.storage import StorageLocation, StorageLocationGroup
+from chaima.models.storage import StorageKind, StorageLocation, StorageLocationGroup
+
+
+async def test_storage_location_requires_kind(session):
+    loc = StorageLocation(name="Main Building", kind=StorageKind.BUILDING)
+    session.add(loc)
+    await session.commit()
+    await session.refresh(loc)
+    assert loc.kind == StorageKind.BUILDING
+
+
+def test_storage_location_kind_values():
+    assert {k.value for k in StorageKind} == {"building", "room", "cabinet", "shelf"}
 
 
 async def test_create_root_location(session):
-    loc = StorageLocation(name="Room B")
+    loc = StorageLocation(name="Room B", kind=StorageKind.ROOM)
     session.add(loc)
     await session.commit()
 
@@ -15,11 +29,11 @@ async def test_create_root_location(session):
 
 
 async def test_create_nested_location(session, storage_location):
-    shelf = StorageLocation(name="Shelf 1", parent_id=storage_location.id)
+    shelf = StorageLocation(name="Shelf 1", kind=StorageKind.SHELF, parent_id=storage_location.id)
     session.add(shelf)
     await session.flush()
 
-    bottom = StorageLocation(name="Bottom", parent_id=shelf.id)
+    bottom = StorageLocation(name="Bottom", kind=StorageKind.SHELF, parent_id=shelf.id)
     session.add(bottom)
     await session.commit()
 

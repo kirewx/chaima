@@ -61,9 +61,9 @@ async def chemical(session, group, user):
 
 @pytest_asyncio.fixture
 async def storage_location(session):
-    from chaima.models.storage import StorageLocation
+    from chaima.models.storage import StorageKind, StorageLocation
 
-    loc = StorageLocation(name="Room A")
+    loc = StorageLocation(name="Room A", kind=StorageKind.SHELF)
     session.add(loc)
     await session.flush()
     return loc

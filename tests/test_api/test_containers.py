@@ -1,7 +1,7 @@
 # tests/test_api/test_containers.py
 from chaima.models.chemical import Chemical
 from chaima.models.container import Container
-from chaima.models.storage import StorageLocation, StorageLocationGroup
+from chaima.models.storage import StorageKind, StorageLocation, StorageLocationGroup
 from chaima.models.supplier import Supplier
 from chaima.schemas.container import ContainerRead
 from chaima.schemas.pagination import PaginatedResponse
@@ -28,7 +28,7 @@ async def _setup(session, group, user):
     session.add(chem)
     await session.flush()
 
-    loc = StorageLocation(name="Room A")
+    loc = StorageLocation(name="Room A", kind=StorageKind.ROOM)
     session.add(loc)
     await session.flush()
     session.add(StorageLocationGroup(location_id=loc.id, group_id=group.id))

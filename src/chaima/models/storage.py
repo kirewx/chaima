@@ -1,9 +1,17 @@
 import datetime
 import uuid as uuid_pkg
+from enum import Enum
 from typing import Optional
 
 from sqlalchemy import Column, DateTime, UniqueConstraint, func
 from sqlmodel import Field, Relationship, SQLModel
+
+
+class StorageKind(str, Enum):
+    BUILDING = "building"
+    ROOM = "room"
+    CABINET = "cabinet"
+    SHELF = "shelf"
 
 
 class StorageLocation(SQLModel, table=True):
@@ -14,6 +22,7 @@ class StorageLocation(SQLModel, table=True):
         default=None, foreign_key="storage_location.id", index=True
     )
     name: str
+    kind: StorageKind = Field(index=True)
     description: str | None = Field(default=None)
     created_at: datetime.datetime | None = Field(
         default=None,
