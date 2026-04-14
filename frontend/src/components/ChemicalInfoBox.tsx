@@ -2,6 +2,7 @@ import { Box, Stack, Typography, Link as MuiLink } from "@mui/material";
 import LinkIcon from "@mui/icons-material/Link";
 import DescriptionIcon from "@mui/icons-material/Description";
 import type { ChemicalRead, ContainerRead } from "../types";
+import { ChemicalMenu } from "./ChemicalMenu";
 
 interface Props {
   chemical: ChemicalRead;
@@ -46,8 +47,12 @@ export function ChemicalInfoBox({ chemical, containers }: Props) {
         gridTemplateColumns: { xs: "1fr", md: "1fr 240px" },
         bgcolor: "background.paper",
         overflow: "hidden",
+        position: "relative",
       }}
     >
+      <Box sx={{ position: "absolute", top: 10, right: 10, zIndex: 2 }}>
+        <ChemicalMenu chemical={chemical} />
+      </Box>
       {/* Main area */}
       <Box sx={{ p: 2.5, display: "flex", gap: 2 }}>
         <Box sx={{ flexShrink: 0 }}>
