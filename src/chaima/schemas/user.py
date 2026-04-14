@@ -7,6 +7,7 @@ from fastapi_users import schemas
 class UserRead(schemas.BaseUser[uuid.UUID]):
     created_at: datetime.datetime | None = None
     main_group_id: uuid.UUID | None = None
+    dark_mode: bool
 
 
 class UserCreate(schemas.BaseUserCreate):
@@ -14,4 +15,4 @@ class UserCreate(schemas.BaseUserCreate):
 
 
 class UserUpdate(schemas.BaseUserUpdate):
-    pass
+    dark_mode: bool | None = None

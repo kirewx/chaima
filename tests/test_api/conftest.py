@@ -1,3 +1,5 @@
+import inspect
+
 import pytest_asyncio
 from fastapi import HTTPException, status
 from httpx import ASGITransport, AsyncClient
@@ -10,6 +12,20 @@ from chaima.db import get_async_session
 from chaima.auth import current_active_user, current_superuser
 from chaima.models.group import Group, UserGroupLink
 from chaima.models.user import User
+
+
+def _get_fastapi_users_current_user_dep():
+    """Extract the current_user dependency used by fastapi-users' built-in routes."""
+    for route in app.routes:
+        if hasattr(route, "path") and route.path == "/api/v1/users/me" and "GET" in getattr(route, "methods", set()):
+            sig = inspect.signature(route.endpoint)
+            for param in sig.parameters.values():
+                if hasattr(param.default, "dependency"):
+                    return param.default.dependency
+    return None
+
+
+_fu_current_user_dep = _get_fastapi_users_current_user_dep()
 
 
 @pytest_asyncio.fixture
@@ -96,6 +112,8 @@ async def client(engine, session, user):
     app.dependency_overrides[get_async_session] = _override_session
     app.dependency_overrides[current_active_user] = lambda: user
     app.dependency_overrides[current_superuser] = _raise_forbidden
+    if _fu_current_user_dep is not None:
+        app.dependency_overrides[_fu_current_user_dep] = lambda: user
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
