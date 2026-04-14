@@ -1,20 +1,20 @@
-"""initial_schema
+"""initial schema
 
-Revision ID: c100a96867a6
+Revision ID: 49c7178e33a9
 Revises: 
-Create Date: 2026-04-10 16:49:16.138716
+Create Date: 2026-04-14 17:59:06.528644
 
 """
 from typing import Sequence, Union
 
 from alembic import op
-import fastapi_users_db_sqlalchemy.generics
 import sqlalchemy as sa
-import sqlmodel.sql.sqltypes
+import sqlmodel
+import fastapi_users_db_sqlalchemy
 
 
 # revision identifiers, used by Alembic.
-revision: str = 'c100a96867a6'
+revision: str = '49c7178e33a9'
 down_revision: Union[str, Sequence[str], None] = None
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
@@ -44,11 +44,13 @@ def upgrade() -> None:
     sa.Column('id', sa.Uuid(), nullable=False),
     sa.Column('parent_id', sa.Uuid(), nullable=True),
     sa.Column('name', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('kind', sa.Enum('BUILDING', 'ROOM', 'CABINET', 'SHELF', name='storagekind'), nullable=False),
     sa.Column('description', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.ForeignKeyConstraint(['parent_id'], ['storage_location.id'], ),
     sa.PrimaryKeyConstraint('id')
     )
+    op.create_index(op.f('ix_storage_location_kind'), 'storage_location', ['kind'], unique=False)
     op.create_index(op.f('ix_storage_location_parent_id'), 'storage_location', ['parent_id'], unique=False)
     op.create_table('hazard_tag',
     sa.Column('id', sa.Uuid(), nullable=False),
@@ -80,6 +82,7 @@ def upgrade() -> None:
     op.create_index(op.f('ix_supplier_group_id'), 'supplier', ['group_id'], unique=False)
     op.create_table('user',
     sa.Column('main_group_id', sa.Uuid(), nullable=True),
+    sa.Column('dark_mode', sa.Boolean(), server_default='0', nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.Column('id', fastapi_users_db_sqlalchemy.generics.GUID(), nullable=False),
     sa.Column('email', sa.String(length=320), nullable=False),
@@ -117,6 +120,11 @@ def upgrade() -> None:
     sa.Column('created_by', sa.Uuid(), nullable=False),
     sa.Column('created_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
     sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.text('(CURRENT_TIMESTAMP)'), nullable=False),
+    sa.Column('is_archived', sa.Boolean(), nullable=False),
+    sa.Column('is_secret', sa.Boolean(), nullable=False),
+    sa.Column('structure_source', sa.Enum('NONE', 'PUBCHEM', 'UPLOADED', name='structuresource'), nullable=False),
+    sa.Column('sds_path', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
+    sa.Column('archived_at', sa.DateTime(timezone=True), nullable=True),
     sa.ForeignKeyConstraint(['created_by'], ['user.id'], ),
     sa.ForeignKeyConstraint(['group_id'], ['group.id'], ),
     sa.PrimaryKeyConstraint('id'),
@@ -124,6 +132,8 @@ def upgrade() -> None:
     )
     op.create_index(op.f('ix_chemical_cas'), 'chemical', ['cas'], unique=False)
     op.create_index(op.f('ix_chemical_group_id'), 'chemical', ['group_id'], unique=False)
+    op.create_index(op.f('ix_chemical_is_archived'), 'chemical', ['is_archived'], unique=False)
+    op.create_index(op.f('ix_chemical_is_secret'), 'chemical', ['is_secret'], unique=False)
     op.create_index(op.f('ix_chemical_name'), 'chemical', ['name'], unique=False)
     op.create_table('hazard_tag_incompatibility',
     sa.Column('id', sa.Uuid(), nullable=False),
@@ -183,6 +193,7 @@ def upgrade() -> None:
     sa.Column('identifier', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
     sa.Column('amount', sa.Float(), nullable=False),
     sa.Column('unit', sqlmodel.sql.sqltypes.AutoString(), nullable=False),
+    sa.Column('purity', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.Column('image_path', sqlmodel.sql.sqltypes.AutoString(), nullable=True),
     sa.Column('purchased_at', sa.Date(), nullable=True),
     sa.Column('created_by', sa.Uuid(), nullable=False),
@@ -219,6 +230,8 @@ def downgrade() -> None:
     op.drop_table('invite')
     op.drop_table('hazard_tag_incompatibility')
     op.drop_index(op.f('ix_chemical_name'), table_name='chemical')
+    op.drop_index(op.f('ix_chemical_is_secret'), table_name='chemical')
+    op.drop_index(op.f('ix_chemical_is_archived'), table_name='chemical')
     op.drop_index(op.f('ix_chemical_group_id'), table_name='chemical')
     op.drop_index(op.f('ix_chemical_cas'), table_name='chemical')
     op.drop_table('chemical')
@@ -232,6 +245,7 @@ def downgrade() -> None:
     op.drop_index(op.f('ix_hazard_tag_group_id'), table_name='hazard_tag')
     op.drop_table('hazard_tag')
     op.drop_index(op.f('ix_storage_location_parent_id'), table_name='storage_location')
+    op.drop_index(op.f('ix_storage_location_kind'), table_name='storage_location')
     op.drop_table('storage_location')
     op.drop_index(op.f('ix_group_name'), table_name='group')
     op.drop_table('group')
