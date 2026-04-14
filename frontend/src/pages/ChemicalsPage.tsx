@@ -1,15 +1,18 @@
-import { Box, TextField, InputAdornment, IconButton, Stack, Badge } from "@mui/material";
+import { Box, TextField, InputAdornment, IconButton, Stack, Badge, Button } from "@mui/material";
 import SearchIcon from "@mui/icons-material/Search";
 import TuneIcon from "@mui/icons-material/Tune";
+import AddIcon from "@mui/icons-material/Add";
 import { useState } from "react";
 import { useChemicals } from "../api/hooks/useChemicals";
 import { useCurrentUser } from "../api/hooks/useAuth";
 import { ChemicalList } from "../components/ChemicalList";
 import { FilterBar, type ActiveFilter } from "../components/FilterBar";
+import { useDrawer } from "../components/drawer/DrawerContext";
 
 export default function ChemicalsPage() {
   const { data: user } = useCurrentUser();
   const groupId = user?.main_group_id ?? undefined;
+  const drawer = useDrawer();
   const [search, setSearch] = useState("");
   const [includeArchived, setIncludeArchived] = useState(false);
 
@@ -57,6 +60,15 @@ export default function ChemicalsPage() {
             },
           }}
         />
+        <Button
+          variant="contained"
+          size="small"
+          startIcon={<AddIcon />}
+          onClick={() => drawer.open({ kind: "chemical-new" })}
+          sx={{ whiteSpace: "nowrap" }}
+        >
+          New chemical
+        </Button>
         {/* TODO: Task 15 — open FilterDrawer */}
         <Badge
           color="primary"
