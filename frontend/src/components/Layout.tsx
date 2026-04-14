@@ -1,106 +1,111 @@
-import { useState, useEffect } from "react";
-import { Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useState } from "react";
+import { NavLink, Outlet, useNavigate } from "react-router-dom";
 import {
-  Box, BottomNavigation, BottomNavigationAction, Drawer,
-  List, ListItemButton, ListItemIcon, ListItemText,
-  useMediaQuery, useTheme,
+  AppBar, Toolbar, Box, Button, IconButton, Avatar, Menu, MenuItem,
 } from "@mui/material";
-import SearchIcon from "@mui/icons-material/Search";
-import AddIcon from "@mui/icons-material/Add";
-import InventoryIcon from "@mui/icons-material/Inventory2";
-import SettingsIcon from "@mui/icons-material/Settings";
+import MenuIcon from "@mui/icons-material/Menu";
+import { useCurrentUser, useLogout } from "../api/hooks/useAuth";
 
-const NAV_ITEMS = [
-  { label: "Search", icon: <SearchIcon />, path: "/" },
-  { label: "Add", icon: <AddIcon />, path: "/add" },
-  { label: "Storage", icon: <InventoryIcon />, path: "/storage" },
-  { label: "Settings", icon: <SettingsIcon />, path: "/settings" },
+const navItems = [
+  { to: "/", label: "Chemicals" },
+  { to: "/storage", label: "Storage" },
+  { to: "/settings", label: "Settings" },
 ];
 
-const SIDEBAR_WIDTH = 72;
-
-function pathToIndex(pathname: string): number {
-  if (pathname.startsWith("/storage")) return 2;
-  if (pathname.startsWith("/settings")) return 3;
-  if (pathname.startsWith("/add") || pathname.startsWith("/chemicals")) return 1;
-  return 0;
-}
-
 export default function Layout() {
-  const theme = useTheme();
-  const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
-  const location = useLocation();
+  const { data: user } = useCurrentUser();
+  const logout = useLogout();
   const navigate = useNavigate();
-  const [navIndex, setNavIndex] = useState(() => pathToIndex(location.pathname));
+  const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
 
-  useEffect(() => {
-    setNavIndex(pathToIndex(location.pathname));
-  }, [location.pathname]);
-
-  const handleNav = (index: number) => {
-    setNavIndex(index);
-    navigate(NAV_ITEMS[index].path);
+  const handleSignOut = async () => {
+    setMenuAnchor(null);
+    await logout.mutateAsync();
+    navigate("/login");
   };
 
   return (
-    <Box sx={{ display: "flex", minHeight: "100vh" }}>
-      {isDesktop && (
-        <Drawer
-          variant="permanent"
-          sx={{
-            width: SIDEBAR_WIDTH,
-            flexShrink: 0,
-            "& .MuiDrawer-paper": {
-              width: SIDEBAR_WIDTH,
-              bgcolor: "background.paper",
-              borderRight: "1px solid",
-              borderColor: "divider",
-              overflowX: "hidden",
-            },
-          }}
-        >
-          <Box sx={{ py: 2.5, textAlign: "center" }}>
-            <Box sx={{ fontWeight: 600, fontSize: 16, letterSpacing: "-0.02em", color: "text.primary" }}>
-              Ch<Box component="span" sx={{ color: "primary.main" }}>AI</Box>
-            </Box>
+    <Box sx={{ minHeight: "100vh", display: "flex", flexDirection: "column" }}>
+      <AppBar
+        position="sticky"
+        elevation={0}
+        color="default"
+        sx={{ borderBottom: "1px solid", borderColor: "divider", bgcolor: "background.paper" }}
+      >
+        <Toolbar sx={{ minHeight: 52, gap: 2 }}>
+          <Box sx={{ fontWeight: 700, fontSize: 16, letterSpacing: "-0.01em" }}>
+            ChAIMa
           </Box>
-          <List>
-            {NAV_ITEMS.map((item, i) => (
-              <ListItemButton
-                key={item.label}
-                selected={navIndex === i}
-                onClick={() => handleNav(i)}
+          <Box sx={{ display: { xs: "none", sm: "flex" }, gap: 0.5, ml: 2 }}>
+            {navItems.map((n) => (
+              <Button
+                key={n.to}
+                component={NavLink}
+                to={n.to}
+                end={n.to === "/"}
                 sx={{
-                  flexDirection: "column", py: 1.5, px: 0, minHeight: 64,
-                  "&.Mui-selected": { color: "primary.main" },
                   color: "text.secondary",
+                  px: 1.5,
+                  "&.active": { color: "text.primary", fontWeight: 600 },
                 }}
               >
-                <ListItemIcon sx={{ minWidth: 0, justifyContent: "center", color: "inherit" }}>
-                  {item.icon}
-                </ListItemIcon>
-                <ListItemText primary={item.label} slotProps={{ primary: { style: { fontSize: 10, textAlign: "center" } } }} />
-              </ListItemButton>
+                {n.label}
+              </Button>
             ))}
-          </List>
-        </Drawer>
-      )}
-
-      <Box component="main" sx={{ flexGrow: 1, pb: isDesktop ? 0 : "56px", minHeight: "100vh" }}>
+          </Box>
+          <Box sx={{ flex: 1 }} />
+          <IconButton
+            sx={{ display: { xs: "inline-flex", sm: "none" } }}
+            onClick={(e) => setMenuAnchor(e.currentTarget)}
+            aria-label="Open menu"
+          >
+            <MenuIcon />
+          </IconButton>
+          <IconButton
+            sx={{ display: { xs: "none", sm: "inline-flex" } }}
+            onClick={(e) => setMenuAnchor(e.currentTarget)}
+            aria-label="User menu"
+          >
+            <Avatar sx={{ width: 28, height: 28, fontSize: 12 }}>
+              {user?.email?.[0]?.toUpperCase() ?? "?"}
+            </Avatar>
+          </IconButton>
+          <Menu
+            anchorEl={menuAnchor}
+            open={Boolean(menuAnchor)}
+            onClose={() => setMenuAnchor(null)}
+          >
+            {/* Mobile-only nav items */}
+            <Box sx={{ display: { xs: "block", sm: "none" } }}>
+              {navItems.map((n) => (
+                <MenuItem
+                  key={n.to}
+                  onClick={() => { setMenuAnchor(null); navigate(n.to); }}
+                >
+                  {n.label}
+                </MenuItem>
+              ))}
+              <Box sx={{ borderTop: "1px solid", borderColor: "divider", my: 0.5 }} />
+            </Box>
+            <MenuItem onClick={() => { setMenuAnchor(null); navigate("/settings"); }}>
+              Settings
+            </MenuItem>
+            <MenuItem onClick={handleSignOut}>Sign out</MenuItem>
+          </Menu>
+        </Toolbar>
+      </AppBar>
+      <Box
+        component="main"
+        sx={{
+          flex: 1,
+          maxWidth: 1080,
+          width: "100%",
+          mx: "auto",
+          p: { xs: 2, sm: 3 },
+        }}
+      >
         <Outlet />
       </Box>
-
-      {!isDesktop && (
-        <BottomNavigation
-          value={navIndex}
-          onChange={(_, newValue) => handleNav(newValue)}
-          sx={{ position: "fixed", bottom: 0, left: 0, right: 0, zIndex: theme.zIndex.appBar }}
-        >
-          {NAV_ITEMS.map((item) => (
-            <BottomNavigationAction key={item.label} label={item.label} icon={item.icon} />
-          ))}
-        </BottomNavigation>
-      )}
     </Box>
   );
 }
