@@ -78,9 +78,11 @@ export default function ChemicalsPage() {
           size="small"
           startIcon={<AddIcon />}
           onClick={() => drawer.open({ kind: "chemical-new" })}
-          sx={{ whiteSpace: "nowrap" }}
+          sx={{ whiteSpace: "nowrap", minWidth: 0 }}
         >
-          New chemical
+          <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
+            New chemical
+          </Box>
         </Button>
         <Badge
           color="primary"
