@@ -1,5 +1,6 @@
 # src/chaima/services/containers.py
 import datetime
+import uuid as uuid_pkg
 from uuid import UUID
 
 from sqlalchemy import func
@@ -8,6 +9,35 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from chaima.models.chemical import Chemical
 from chaima.models.container import Container
+
+
+class DuplicateIdentifier(ValueError):
+    """Raised when a container identifier already exists in the same group."""
+
+
+async def check_identifier_unique_in_group(
+    session: AsyncSession,
+    group_id: uuid_pkg.UUID,
+    identifier: str,
+    exclude_container_id: uuid_pkg.UUID | None = None,
+) -> None:
+    """Raise DuplicateIdentifier if another (non-archived) container in
+    ``group_id`` already uses ``identifier``. Containers inherit their group
+    through their chemical."""
+    stmt = (
+        select(Container.id)
+        .join(Chemical, Chemical.id == Container.chemical_id)
+        .where(Chemical.group_id == group_id)
+        .where(Container.identifier == identifier)
+        .where(Container.is_archived.is_(False))
+    )
+    if exclude_container_id is not None:
+        stmt = stmt.where(Container.id != exclude_container_id)
+    result = await session.exec(stmt)
+    if result.first() is not None:
+        raise DuplicateIdentifier(
+            f"Container identifier '{identifier}' already in use in this group"
+        )
 
 
 async def create_container(
