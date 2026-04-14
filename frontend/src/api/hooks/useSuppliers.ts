@@ -34,3 +34,9 @@ export function useDeleteSupplier(groupId: string) {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["suppliers", groupId] }); },
   });
 }
+
+export function useSupplier(groupId: string, supplierId: string | null | undefined) {
+  const { data: page } = useSuppliers(groupId);
+  const supplier = supplierId ? (page?.items ?? []).find((s) => s.id === supplierId) : undefined;
+  return { data: supplier };
+}

@@ -3,6 +3,7 @@ import { useState } from "react";
 import type { ChemicalRead } from "../types";
 import { ChemicalRow } from "./ChemicalRow";
 import { ChemicalInfoBox } from "./ChemicalInfoBox";
+import { ContainerGrid } from "./ContainerGrid";
 import { useContainersForChemical } from "../api/hooks/useContainers";
 
 interface ExpandedBodyProps {
@@ -12,7 +13,17 @@ interface ExpandedBodyProps {
 
 function ExpandedBody({ groupId, chemical }: ExpandedBodyProps) {
   const { data: containers = [] } = useContainersForChemical(groupId, chemical.id);
-  return <ChemicalInfoBox chemical={chemical} containers={containers} />;
+  const active = containers.filter((c) => !c.is_archived);
+  return (
+    <>
+      <ChemicalInfoBox chemical={chemical} containers={active} />
+      <ContainerGrid
+        groupId={groupId}
+        containers={active}
+        onAdd={() => alert("Drawer coming in Task 11/13")}
+      />
+    </>
+  );
 }
 
 interface Props {
