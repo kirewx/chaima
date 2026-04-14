@@ -6,11 +6,12 @@ from chaima.schemas.storage import StorageLocationNode, StorageLocationRead
 async def test_create_location(client, session, group, membership):
     resp = await client.post(
         f"/api/v1/groups/{group.id}/storage-locations",
-        json={"name": "Room A"},
+        json={"name": "Building A", "kind": "building"},
     )
     assert resp.status_code == 201
     result = StorageLocationRead.model_validate(resp.json())
-    assert result.name == "Room A"
+    assert result.name == "Building A"
+    assert result.kind == StorageKind.BUILDING
 
 
 async def test_get_tree(client, session, group, membership):
@@ -43,3 +44,33 @@ async def test_delete_location(client, session, group, membership):
 
     resp = await client.delete(f"/api/v1/groups/{group.id}/storage-locations/{loc.id}")
     assert resp.status_code == 204
+
+
+async def test_create_building_room_cabinet_shelf(client, group, membership):
+    r = await client.post(
+        f"/api/v1/groups/{group.id}/storage-locations",
+        json={"name": "Main", "kind": "building"},
+    )
+    assert r.status_code in (200, 201)
+    building_id = r.json()["id"]
+
+    r = await client.post(
+        f"/api/v1/groups/{group.id}/storage-locations",
+        json={"name": "Lab 201", "kind": "room", "parent_id": building_id},
+    )
+    assert r.status_code in (200, 201)
+    room_id = r.json()["id"]
+
+    r = await client.post(
+        f"/api/v1/groups/{group.id}/storage-locations",
+        json={"name": "A1", "kind": "cabinet", "parent_id": room_id},
+    )
+    assert r.status_code in (200, 201)
+
+    # cabinet under building — rejected
+    r = await client.post(
+        f"/api/v1/groups/{group.id}/storage-locations",
+        json={"name": "X", "kind": "cabinet", "parent_id": building_id},
+    )
+    assert r.status_code == 400
+    assert "hierarchy" in r.json()["detail"].lower()

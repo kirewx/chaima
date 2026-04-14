@@ -5,6 +5,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from chaima.models.storage import StorageKind
+
 
 class StorageLocationCreate(BaseModel):
     """Schema for creating a storage location.
@@ -13,6 +15,8 @@ class StorageLocationCreate(BaseModel):
     ----------
     name : str
         Human-readable name for the location.
+    kind : StorageKind
+        The kind of storage location (building, room, cabinet, shelf).
     description : str or None
         Optional description.
     parent_id : UUID or None
@@ -20,6 +24,7 @@ class StorageLocationCreate(BaseModel):
     """
 
     name: str
+    kind: StorageKind
     description: str | None = None
     parent_id: UUID | None = None
 
@@ -51,6 +56,8 @@ class StorageLocationRead(BaseModel):
         Unique identifier.
     name : str
         Human-readable name.
+    kind : StorageKind
+        The kind of storage location.
     description : str or None
         Optional description.
     parent_id : UUID or None
@@ -63,6 +70,7 @@ class StorageLocationRead(BaseModel):
 
     id: UUID
     name: str
+    kind: StorageKind
     description: str | None
     parent_id: UUID | None
     created_at: datetime.datetime

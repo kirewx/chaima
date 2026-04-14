@@ -40,7 +40,7 @@ async def create_location(
     *,
     group_id: UUID,
     name: str,
-    kind: StorageKind = StorageKind.SHELF,
+    kind: StorageKind,
     description: str | None = None,
     parent_id: UUID | None = None,
 ) -> StorageLocation:
@@ -54,8 +54,8 @@ async def create_location(
         The group to link the location to.
     name : str
         Name of the location.
-    kind : StorageKind, optional
-        The kind of storage location. Defaults to SHELF.
+    kind : StorageKind
+        The kind of storage location (building, room, cabinet, shelf).
     description : str or None, optional
         Optional description.
     parent_id : UUID or None, optional
@@ -65,7 +65,20 @@ async def create_location(
     -------
     StorageLocation
         The newly created storage location.
+
+    Raises
+    ------
+    InvalidHierarchy
+        If the kind/parent combination violates the 4-level hierarchy.
     """
+    parent_kind: StorageKind | None = None
+    if parent_id is not None:
+        parent = await session.get(StorageLocation, parent_id)
+        if parent is None:
+            raise InvalidHierarchy(f"Parent {parent_id} does not exist")
+        parent_kind = parent.kind
+    validate_kind_hierarchy(child=kind, parent=parent_kind)
+
     loc = StorageLocation(name=name, kind=kind, description=description, parent_id=parent_id)
     session.add(loc)
     await session.flush()

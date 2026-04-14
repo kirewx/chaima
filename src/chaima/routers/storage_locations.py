@@ -11,6 +11,7 @@ from chaima.schemas.storage import (
     StorageLocationUpdate,
 )
 from chaima.services import storage_locations as storage_service
+from chaima.services.storage_locations import InvalidHierarchy
 
 router = APIRouter(
     prefix="/api/v1/groups/{group_id}/storage-locations", tags=["storage-locations"]
@@ -73,13 +74,20 @@ async def create_location(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Parent location does not belong to this group",
             )
-    loc = await storage_service.create_location(
-        session,
-        group_id=group_id,
-        name=body.name,
-        description=body.description,
-        parent_id=body.parent_id,
-    )
+    try:
+        loc = await storage_service.create_location(
+            session,
+            group_id=group_id,
+            name=body.name,
+            kind=body.kind,
+            description=body.description,
+            parent_id=body.parent_id,
+        )
+    except InvalidHierarchy as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid hierarchy: {e}",
+        )
     await session.commit()
     return StorageLocationRead.model_validate(loc, from_attributes=True)
 
