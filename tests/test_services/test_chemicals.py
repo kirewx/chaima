@@ -21,7 +21,7 @@ async def test_list_chemicals(session, group, user):
     await chemical_service.create_chemical(session, group_id=group.id, created_by=user.id, name="Ethanol")
     await chemical_service.create_chemical(session, group_id=group.id, created_by=user.id, name="Methanol")
     await session.commit()
-    items, total = await chemical_service.list_chemicals(session, group_id=group.id)
+    items, total = await chemical_service.list_chemicals(session, group_id=group.id, viewer=user)
     assert total == 2
 
 
@@ -29,7 +29,7 @@ async def test_list_chemicals_search(session, group, user):
     await chemical_service.create_chemical(session, group_id=group.id, created_by=user.id, name="Ethanol", cas="64-17-5")
     await chemical_service.create_chemical(session, group_id=group.id, created_by=user.id, name="Acetone")
     await session.commit()
-    items, total = await chemical_service.list_chemicals(session, group_id=group.id, search="Ethanol")
+    items, total = await chemical_service.list_chemicals(session, group_id=group.id, viewer=user, search="Ethanol")
     assert total == 1
     assert items[0].name == "Ethanol"
 

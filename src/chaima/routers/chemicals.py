@@ -28,10 +28,12 @@ async def list_chemicals(
     group_id: UUID,
     session: SessionDep,
     member: GroupMemberDep,
+    user: CurrentUserDep,
     search: str | None = Query(None),
     hazard_tag_id: UUID | None = Query(None),
     ghs_code_id: UUID | None = Query(None),
     has_containers: bool | None = Query(None),
+    include_archived: bool = Query(False),
     sort: str = Query("name"),
     order: str = Query("asc"),
     offset: int = Query(0, ge=0),
@@ -72,10 +74,12 @@ async def list_chemicals(
     items, total = await chemical_service.list_chemicals(
         session,
         group_id,
+        viewer=user,
         search=search,
         hazard_tag_id=hazard_tag_id,
         ghs_code_id=ghs_code_id,
         has_containers=has_containers,
+        include_archived=include_archived,
         sort=sort,
         order=order,
         offset=offset,
@@ -132,6 +136,9 @@ async def create_chemical(
             melting_point=body.melting_point,
             boiling_point=body.boiling_point,
             comment=body.comment,
+            is_secret=body.is_secret,
+            structure_source=body.structure_source,
+            sds_path=body.sds_path,
         )
     except chemical_service.DuplicateNameError:
         raise HTTPException(

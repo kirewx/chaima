@@ -134,3 +134,33 @@ async def test_delete_chemical(client, session, group, membership, user):
 
     resp = await client.delete(f"/api/v1/groups/{group.id}/chemicals/{chem.id}")
     assert resp.status_code == 204
+
+
+async def test_list_excludes_secret_from_non_creator(
+    other_client, session, group, other_membership, user
+):
+    # Insert a secret chemical owned by `user` directly in the DB
+    chem = Chemical(group_id=group.id, name="SecretMol", created_by=user.id, is_secret=True)
+    session.add(chem)
+    await session.commit()
+
+    # other_user (authenticated via other_client) must not see it
+    resp = await other_client.get(f"/api/v1/groups/{group.id}/chemicals")
+    assert resp.status_code == 200
+    names = [c["name"] for c in resp.json()["items"]]
+    assert "SecretMol" not in names
+
+
+async def test_list_includes_secret_for_creator(
+    client, session, group, membership, user
+):
+    resp = await client.post(
+        f"/api/v1/groups/{group.id}/chemicals",
+        json={"name": "MyMol", "is_secret": True},
+    )
+    assert resp.status_code in (200, 201)
+
+    resp = await client.get(f"/api/v1/groups/{group.id}/chemicals")
+    assert resp.status_code == 200
+    names = [c["name"] for c in resp.json()["items"]]
+    assert "MyMol" in names

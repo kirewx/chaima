@@ -4,6 +4,8 @@ from uuid import UUID
 
 from pydantic import BaseModel
 
+from chaima.models.chemical import StructureSource
+
 
 class ChemicalCreate(BaseModel):
     """Schema for creating a chemical.
@@ -42,6 +44,9 @@ class ChemicalCreate(BaseModel):
     melting_point: float | None = None
     boiling_point: float | None = None
     comment: str | None = None
+    is_secret: bool = False
+    structure_source: StructureSource = StructureSource.NONE
+    sds_path: str | None = None
 
 
 class ChemicalUpdate(BaseModel):
@@ -60,6 +65,9 @@ class ChemicalUpdate(BaseModel):
     melting_point: float | None = None
     boiling_point: float | None = None
     comment: str | None = None
+    is_secret: bool | None = None
+    structure_source: StructureSource | None = None
+    sds_path: str | None = None
 
 
 class SynonymRead(BaseModel):
@@ -233,6 +241,11 @@ class ChemicalRead(BaseModel):
     created_by: UUID
     created_at: datetime.datetime
     updated_at: datetime.datetime
+    is_secret: bool
+    is_archived: bool
+    archived_at: datetime.datetime | None = None
+    structure_source: StructureSource
+    sds_path: str | None = None
 
 
 class ChemicalDetail(ChemicalRead):

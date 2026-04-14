@@ -106,6 +106,50 @@ async def client(engine, session, user):
 
 
 @pytest_asyncio.fixture
+async def other_user(session, group):
+    u = User(
+        email="bob@example.com",
+        hashed_password="fakehash",
+        is_active=True,
+        is_superuser=False,
+        is_verified=True,
+        main_group_id=group.id,
+    )
+    session.add(u)
+    await session.flush()
+    return u
+
+
+@pytest_asyncio.fixture
+async def other_membership(session, other_user, group):
+    link = UserGroupLink(user_id=other_user.id, group_id=group.id, is_admin=False)
+    session.add(link)
+    await session.flush()
+    return link
+
+
+@pytest_asyncio.fixture
+async def other_client(engine, session, other_user):
+    """AsyncClient authenticated as other_user."""
+    async def _override_session():
+        yield session
+
+    def _raise_forbidden():
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Superuser required")
+
+    app.dependency_overrides[get_async_session] = _override_session
+    app.dependency_overrides[current_active_user] = lambda: other_user
+    app.dependency_overrides[current_superuser] = _raise_forbidden
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as ac:
+        yield ac
+
+    app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
 async def superuser_client(engine, session, superuser):
     """AsyncClient authenticated as a superuser."""
     async def _override_session():

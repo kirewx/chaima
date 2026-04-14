@@ -6,7 +6,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from chaima.models.chemical import Chemical, ChemicalSynonym
+from chaima.models.chemical import Chemical, ChemicalSynonym, StructureSource
 from chaima.models.ghs import ChemicalGHS, GHSCode
 from chaima.models.hazard import ChemicalHazardTag, HazardTag
 from chaima.models.user import User
@@ -48,6 +48,9 @@ async def create_chemical(
     melting_point: float | None = None,
     boiling_point: float | None = None,
     comment: str | None = None,
+    is_secret: bool = False,
+    structure_source: StructureSource = StructureSource.NONE,
+    sds_path: str | None = None,
 ) -> Chemical:
     """Create a new chemical within a group.
 
@@ -110,6 +113,9 @@ async def create_chemical(
         melting_point=melting_point,
         boiling_point=boiling_point,
         comment=comment,
+        is_secret=is_secret,
+        structure_source=structure_source,
+        sds_path=sds_path,
     )
     session.add(chem)
     await session.flush()
@@ -120,10 +126,12 @@ async def list_chemicals(
     session: AsyncSession,
     group_id: UUID,
     *,
+    viewer: User,
     search: str | None = None,
     hazard_tag_id: UUID | None = None,
     ghs_code_id: UUID | None = None,
     has_containers: bool | None = None,
+    include_archived: bool = False,
     sort: str = "name",
     order: str = "asc",
     offset: int = 0,
@@ -188,6 +196,10 @@ async def list_chemicals(
             query = query.where(container_exists)
         else:
             query = query.where(~container_exists)
+
+    if not include_archived:
+        query = query.where(Chemical.is_archived.is_(False))
+    query = apply_secret_filter(query, viewer)
 
     count_query = select(func.count()).select_from(query.subquery())
     total = (await session.exec(count_query)).one()
