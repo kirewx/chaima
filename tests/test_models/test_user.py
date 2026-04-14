@@ -79,3 +79,15 @@ async def test_user_without_main_group(session):
     await session.flush()
 
     assert user.main_group_id is None
+
+
+async def test_user_dark_mode_defaults_to_false(user):
+    assert user.dark_mode is False
+
+
+async def test_user_dark_mode_can_be_enabled(session, user):
+    user.dark_mode = True
+    session.add(user)
+    await session.commit()
+    await session.refresh(user)
+    assert user.dark_mode is True
