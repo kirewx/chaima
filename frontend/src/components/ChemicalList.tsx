@@ -1,7 +1,19 @@
-import { Box } from "@mui/material";
+import { Box, Collapse } from "@mui/material";
 import { useState } from "react";
 import type { ChemicalRead } from "../types";
 import { ChemicalRow } from "./ChemicalRow";
+import { ChemicalInfoBox } from "./ChemicalInfoBox";
+import { useContainersForChemical } from "../api/hooks/useContainers";
+
+interface ExpandedBodyProps {
+  groupId: string;
+  chemical: ChemicalRead;
+}
+
+function ExpandedBody({ groupId, chemical }: ExpandedBodyProps) {
+  const { data: containers = [] } = useContainersForChemical(groupId, chemical.id);
+  return <ChemicalInfoBox chemical={chemical} containers={containers} />;
+}
 
 interface Props {
   items: ChemicalRead[];
@@ -49,7 +61,9 @@ export function ChemicalList({ items, loading, groupId }: Props) {
             expanded={openIds.has(c.id)}
             onToggle={() => toggle(c.id)}
           />
-          {/* Task 9 will render an expanded info box here when expanded */}
+          <Collapse in={openIds.has(c.id)} unmountOnExit>
+            <ExpandedBody groupId={groupId} chemical={c} />
+          </Collapse>
         </Box>
       ))}
     </Box>
