@@ -13,6 +13,7 @@ import {
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
 import { useState, useEffect, type KeyboardEvent } from "react";
+import { AxiosError } from "axios";
 import {
   useCreateChemical,
   useUpdateChemical,
@@ -77,7 +78,7 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
         structure_source: e.structure_source,
       });
     }
-  }, [existing.data]);
+  }, [existing.data?.id]);
 
   if (chemicalId && existing.isLoading) {
     return (
@@ -109,8 +110,8 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
         structure_source: "pubchem",
       });
     } catch (e) {
-      const status =
-        (e as { response?: { status?: number } })?.response?.status ?? 0;
+      setExtras(EMPTY_EXTRAS);
+      const status = (e as AxiosError).response?.status ?? 0;
       if (status === 404) {
         setLookupError("No PubChem match");
       } else {
