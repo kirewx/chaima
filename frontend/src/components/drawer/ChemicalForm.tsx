@@ -172,7 +172,7 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
           p: 1.5,
         }}
       >
-        <Stack direction="row" spacing={1} alignItems="center">
+        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
           <TextField
             label="Lookup from PubChem"
             placeholder="Name or CAS"
@@ -181,18 +181,20 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
             onKeyDown={onQueryKey}
             size="small"
             fullWidth
-            InputProps={{
-              endAdornment: fetched ? (
-                <InputAdornment position="end">
-                  <IconButton
-                    size="small"
-                    onClick={onClearLookup}
-                    aria-label="Clear PubChem lookup"
-                  >
-                    <CloseIcon fontSize="small" />
-                  </IconButton>
-                </InputAdornment>
-              ) : null,
+            slotProps={{
+              input: {
+                endAdornment: fetched ? (
+                  <InputAdornment position="end">
+                    <IconButton
+                      size="small"
+                      onClick={onClearLookup}
+                      aria-label="Clear PubChem lookup"
+                    >
+                      <CloseIcon fontSize="small" />
+                    </IconButton>
+                  </InputAdornment>
+                ) : null,
+              },
             }}
           />
           <Button
@@ -245,9 +247,11 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
         onChange={(e) => setMolarMass(e.target.value)}
         size="small"
         type="number"
-        inputProps={{ step: "0.01", min: "0" }}
-        InputProps={{
-          endAdornment: <InputAdornment position="end">g/mol</InputAdornment>,
+        slotProps={{
+          input: {
+            endAdornment: <InputAdornment position="end">g/mol</InputAdornment>,
+          },
+          htmlInput: { step: "0.01", min: "0" },
         }}
       />
       <TextField

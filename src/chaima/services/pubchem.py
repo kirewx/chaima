@@ -76,6 +76,22 @@ async def lookup(query: str) -> PubChemLookupResult:
     )
 
 
+def _safe_json(resp: httpx.Response) -> Any:
+    """Decode a PubChem JSON response that may contain non-UTF-8 bytes.
+
+    PubChem occasionally returns synonyms or descriptions containing legacy
+    latin-1 bytes (e.g. ``0xae`` for ``®``) inside an ``application/json``
+    body. Fall back to lenient decoding so a single bad byte doesn't 500
+    the whole lookup.
+    """
+    import json as _json
+    try:
+        return resp.json()
+    except (UnicodeDecodeError, _json.JSONDecodeError):
+        text = resp.content.decode("utf-8", errors="replace")
+        return _json.loads(text)
+
+
 async def _resolve_cid(client: httpx.AsyncClient, query: str) -> int:
     path = f"/compound/name/{quote(query, safe='')}/cids/JSON"
     try:
@@ -86,7 +102,7 @@ async def _resolve_cid(client: httpx.AsyncClient, query: str) -> int:
         raise PubChemNotFound(query)
     if resp.status_code >= 400:
         raise PubChemUpstreamError(f"CID lookup {resp.status_code}")
-    data = resp.json()
+    data = _safe_json(resp)
     cids = (data.get("IdentifierList") or {}).get("CID") or []
     if not cids:
         raise PubChemNotFound(query)
@@ -106,7 +122,7 @@ async def _fetch_properties(
         raise PubChemUpstreamError(str(exc)) from exc
     if resp.status_code >= 400:
         raise PubChemUpstreamError(f"properties {resp.status_code}")
-    data = resp.json()
+    data = _safe_json(resp)
     props_list = (data.get("PropertyTable") or {}).get("Properties") or []
     return props_list[0] if props_list else {}
 
@@ -119,7 +135,7 @@ async def _fetch_synonyms(client: httpx.AsyncClient, cid: int) -> list[str]:
         raise PubChemUpstreamError(str(exc)) from exc
     if resp.status_code >= 400:
         raise PubChemUpstreamError(f"synonyms {resp.status_code}")
-    data = resp.json()
+    data = _safe_json(resp)
     info_list = (data.get("InformationList") or {}).get("Information") or []
     if not info_list:
         return []
@@ -139,7 +155,7 @@ async def _fetch_ghs(client: httpx.AsyncClient, cid: int) -> dict[str, Any]:
         return {}
     if resp.status_code >= 400:
         raise PubChemUpstreamError(f"ghs {resp.status_code}")
-    return resp.json()
+    return _safe_json(resp)
 
 
 def _pick_cas(synonyms: list[str]) -> str | None:
