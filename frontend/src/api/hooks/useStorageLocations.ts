@@ -1,5 +1,6 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import client from "../client";
+import { useContainers } from "./useContainers";
 import type { StorageLocationNode, StorageLocationRead, StorageLocationCreate, StorageLocationUpdate } from "../../types";
 
 export function useStorageTree(groupId: string) {
@@ -35,10 +36,37 @@ export function useUpdateStorageLocation(groupId: string, locationId: string) {
   });
 }
 
-export function useDeleteStorageLocation(groupId: string) {
+/**
+ * Archive (soft-delete) a storage location. Note: as of Plan 3 Task 3, the backend
+ * `delete_location` service still hard-deletes the row and raises
+ * `LocationHasContainersError` if containers exist. The soft-delete contract promised
+ * by Plan 1 is NOT yet honored server-side — follow-up required.
+ */
+export function useArchiveStorageLocation(groupId: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: (locationId: string) => client.delete(`/groups/${groupId}/storage-locations/${locationId}`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["storageLocations", groupId] }); },
+    mutationFn: (locationId: string) =>
+      client.delete(`/groups/${groupId}/storage-locations/${locationId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["storageLocations", groupId] });
+      queryClient.invalidateQueries({ queryKey: ["containers", groupId] });
+    },
   });
+}
+
+/** @deprecated Use `useArchiveStorageLocation`. Kept for one release cycle. */
+export const useDeleteStorageLocation = useArchiveStorageLocation;
+
+/**
+ * Thin wrapper over `useContainers` scoped to a shelf (leaf storage location).
+ * Returns non-archived containers for the given location, up to 200.
+ * When `locationId` is null, returns the unfiltered list — callers should ignore
+ * the data in that case (the query still runs because `useContainers` only
+ * gates on `groupId`).
+ */
+export function useShelfContainers(groupId: string, locationId: string | null) {
+  return useContainers(
+    groupId,
+    locationId ? { location_id: locationId, is_archived: false, limit: 200 } : {},
+  );
 }

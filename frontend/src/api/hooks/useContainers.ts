@@ -2,10 +2,11 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import client from "../client";
 import type { PaginatedResponse, ContainerRead, ContainerCreate, ContainerUpdate, ContainerSearchParams } from "../../types";
 
-export function useContainers(groupId: string, params: ContainerSearchParams) {
+export function useContainers(groupId: string, params: ContainerSearchParams = {}) {
   return useQuery<PaginatedResponse<ContainerRead>>({
     queryKey: ["containers", groupId, params],
     queryFn: () => client.get(`/groups/${groupId}/containers`, { params }).then((r) => r.data),
+    enabled: !!groupId,
   });
 }
 
