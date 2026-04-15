@@ -65,7 +65,7 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
   useEffect(() => {
     if (existing.data) {
       const e = existing.data;
-      setName(e.name);
+      setName(e.name ?? "");
       setCas(e.cas ?? "");
       setMolarMass(e.molar_mass != null ? String(e.molar_mass) : "");
       setComment(e.comment ?? "");
@@ -286,7 +286,7 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
         </Button>
         <Button
           variant="contained"
-          disabled={saving || !name.trim()}
+          disabled={saving || !name?.trim()}
           onClick={onSubmit}
         >
           {chemicalId ? "Save" : "Create"}
