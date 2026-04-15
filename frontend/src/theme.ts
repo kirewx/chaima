@@ -43,11 +43,11 @@ export const createAppTheme = (mode: "light" | "dark"): Theme => {
       warning: { main: c.warnBorder },
       background: { default: c.bg, paper: c.surface },
       text: { primary: c.ink, secondary: c.muted },
-      divider: c.border,
+      divider: c.divider,
     },
     shape: { borderRadius: 4 },
     typography: {
-      fontFamily: "'Geist', -apple-system, system-ui, sans-serif",
+      fontFamily: "'Inter', -apple-system, system-ui, sans-serif",
       fontSize: 14,
       h1: { fontWeight: 600, fontSize: 26, letterSpacing: "-0.02em", lineHeight: 1.1 },
       h2: { fontWeight: 600, fontSize: 20, letterSpacing: "-0.015em", lineHeight: 1.15 },
