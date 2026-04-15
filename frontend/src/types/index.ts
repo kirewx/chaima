@@ -65,6 +65,8 @@ export interface ChemicalCreate {
   comment?: string | null;
   is_secret?: boolean;
   structure_source?: StructureSource;
+  synonyms?: string[];
+  ghs_codes?: string[];
 }
 
 export interface ChemicalUpdate {
@@ -79,6 +81,9 @@ export interface ChemicalUpdate {
   boiling_point?: number | null;
   comment?: string | null;
   is_secret?: boolean;
+  structure_source?: StructureSource;
+  synonyms?: string[];
+  ghs_codes?: string[];
 }
 
 export interface ChemicalRead {
@@ -296,4 +301,21 @@ export interface InviteRead {
 export interface InviteAccept {
   email: string;
   password: string;
+}
+
+export interface PubChemGHSHit {
+  code: string;
+  description: string;
+  signal_word: string | null;
+  pictogram: string | null;
+}
+
+export interface PubChemLookupResult {
+  cid: string;
+  name: string;
+  cas: string | null;
+  molar_mass: number | null;
+  smiles: string | null;
+  synonyms: string[];
+  ghs_codes: PubChemGHSHit[];
 }
