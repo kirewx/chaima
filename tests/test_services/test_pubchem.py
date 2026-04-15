@@ -128,6 +128,54 @@ def test_parse_ghs_classification_empty():
     assert parse_ghs_classification({"Hierarchies": {}}) == []
 
 
+async def test_fetch_structure_image_success():
+    fake_png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
+    response = httpx.Response(
+        status_code=200,
+        content=fake_png,
+        request=httpx.Request("GET", "https://pubchem.ncbi.nlm.nih.gov/"),
+    )
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.__aenter__.return_value = client
+    client.__aexit__.return_value = None
+    client.get = AsyncMock(return_value=response)
+
+    with patch("chaima.services.pubchem.httpx.AsyncClient", return_value=client):
+        data = await pubchem_service.fetch_structure_image("180")
+
+    assert data == fake_png
+
+
+async def test_fetch_structure_image_404_returns_none():
+    response = httpx.Response(
+        status_code=404,
+        request=httpx.Request("GET", "https://pubchem.ncbi.nlm.nih.gov/"),
+    )
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.__aenter__.return_value = client
+    client.__aexit__.return_value = None
+    client.get = AsyncMock(return_value=response)
+
+    with patch("chaima.services.pubchem.httpx.AsyncClient", return_value=client):
+        data = await pubchem_service.fetch_structure_image("999999")
+
+    assert data is None
+
+
+async def test_fetch_structure_image_timeout_returns_none():
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.__aenter__.return_value = client
+    client.__aexit__.return_value = None
+    client.get = AsyncMock(
+        side_effect=httpx.TimeoutException("timeout", request=None)
+    )
+
+    with patch("chaima.services.pubchem.httpx.AsyncClient", return_value=client):
+        data = await pubchem_service.fetch_structure_image("180")
+
+    assert data is None
+
+
 async def test_lookup_synonym_cap():
     long_synonyms = {
         "InformationList": {

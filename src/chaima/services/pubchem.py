@@ -215,6 +215,31 @@ def parse_ghs_classification(data: dict[str, Any]) -> list[PubChemGHSHit]:
     return [h for h in hits if h.code]
 
 
+async def fetch_structure_image(cid: str) -> bytes | None:
+    """Download the 2D structure PNG for a CID from PubChem.
+
+    Returns the raw PNG bytes, or ``None`` on any failure (timeout, 404,
+    network error). Image fetch is best-effort — a missing image must
+    never block chemical creation.
+    """
+    timeout = httpx.Timeout(_TOTAL_TIMEOUT, connect=_PER_REQUEST_TIMEOUT)
+    url = f"{_BASE_URL}/compound/cid/{cid}/PNG"
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.get(url)
+    except (httpx.TimeoutException, httpx.TransportError) as exc:
+        logger.warning("PubChem image fetch failed for CID %s: %s", cid, exc)
+        return None
+    if resp.status_code != 200:
+        logger.warning(
+            "PubChem image fetch returned %s for CID %s",
+            resp.status_code,
+            cid,
+        )
+        return None
+    return resp.content
+
+
 def _parse_hazard_statement(text: str) -> PubChemGHSHit:
     """Parse one ``H-code: description [Signal ...]`` line."""
     code = ""

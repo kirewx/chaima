@@ -99,6 +99,12 @@ _static_dir = Path(__file__).parent / "static"
 if _static_dir.is_dir():
     app.mount("/assets", StaticFiles(directory=_static_dir / "assets"))
 
+from chaima.services.files import UPLOADS_ROOT
+
+if UPLOADS_ROOT.is_dir() or UPLOADS_ROOT.parent.is_dir():
+    UPLOADS_ROOT.mkdir(parents=True, exist_ok=True)
+    app.mount("/uploads", StaticFiles(directory=UPLOADS_ROOT))
+
     @app.get("/{path:path}", include_in_schema=False)
     async def _spa_catch_all(path: str) -> FileResponse:  # noqa: ARG001
         return FileResponse(_static_dir / "index.html")

@@ -14,6 +14,8 @@ from chaima.models.chemical import Chemical, ChemicalSynonym, StructureSource
 from chaima.models.ghs import ChemicalGHS, GHSCode
 from chaima.models.hazard import ChemicalHazardTag, HazardTag
 from chaima.models.user import User
+from chaima.services import pubchem as pubchem_service
+from chaima.services.files import save_upload
 
 
 class CrossGroupError(Exception):
@@ -39,6 +41,25 @@ def apply_secret_filter(stmt, viewer: User):
     return stmt.where(
         or_(Chemical.is_secret.is_(False), Chemical.created_by == viewer.id)
     )
+
+
+async def _attach_pubchem_image(
+    chem: Chemical, cid: str | None, structure_source: object
+) -> None:
+    """Best-effort: download the PubChem 2D structure PNG and set image_path.
+
+    Silent on failure — image fetch must never block chemical save.
+    """
+    if not cid:
+        return
+    # structure_source may be the str "pubchem" or the enum member; both work
+    # because StructureSource is a str enum.
+    if str(structure_source) not in ("pubchem", "StructureSource.PUBCHEM"):
+        return
+    data = await pubchem_service.fetch_structure_image(cid)
+    if not data:
+        return
+    chem.image_path = save_upload(chem.group_id, f"pubchem-{cid}.png", data)
 
 
 async def _resolve_ghs_codes_by_code(
@@ -161,6 +182,10 @@ async def create_chemical(
         ghs_ids = await _resolve_ghs_codes_by_code(session, ghs_codes)
         if ghs_ids:
             await replace_ghs_codes(session, chem.id, ghs_ids)
+    await _attach_pubchem_image(chem, cid, structure_source)
+    if chem.image_path:
+        session.add(chem)
+        await session.flush()
     return chem
 
 
@@ -341,6 +366,14 @@ async def update_chemical(
     if ghs_codes is not None:  # explicit None check: [] means "clear all"
         ghs_ids = await _resolve_ghs_codes_by_code(session, ghs_codes)
         await replace_ghs_codes(session, chemical.id, ghs_ids)
+
+    new_cid = kwargs.get("cid", chemical.cid)
+    new_source = kwargs.get("structure_source", chemical.structure_source)
+    if new_cid and chemical.image_path is None:
+        await _attach_pubchem_image(chemical, new_cid, new_source)
+        if chemical.image_path:
+            session.add(chemical)
+            await session.flush()
 
     return chemical
 
