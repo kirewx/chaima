@@ -1,0 +1,42 @@
+{
+  "Hierarchies": {
+    "Hierarchy": [
+      {
+        "SourceName": "European Chemicals Agency (ECHA)",
+        "SourceID": "GHS Classification",
+        "Node": [
+          {
+            "Information": {
+              "Name": "Pictogram",
+              "Description": "GHS02"
+            }
+          },
+          {
+            "Information": {
+              "Name": "Signal",
+              "Description": "Danger"
+            }
+          },
+          {
+            "Information": {
+              "Name": "GHS Hazard Statements",
+              "Description": "H225: Highly flammable liquid and vapour [Danger Flammable liquids - Category 2]"
+            }
+          },
+          {
+            "Information": {
+              "Name": "GHS Hazard Statements",
+              "Description": "H319: Causes serious eye irritation [Warning Serious eye damage/eye irritation - Category 2A]"
+            }
+          },
+          {
+            "Information": {
+              "Name": "GHS Hazard Statements",
+              "Description": "H336: May cause drowsiness or dizziness [Warning Specific target organ toxicity, single exposure; Narcotic effects - Category 3]"
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
