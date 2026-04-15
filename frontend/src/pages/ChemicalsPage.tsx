@@ -81,7 +81,7 @@ export default function ChemicalsPage() {
           sx={{ whiteSpace: "nowrap", minWidth: 0 }}
         >
           <Box component="span" sx={{ display: { xs: "none", sm: "inline" } }}>
-            New chemical
+            New
           </Box>
         </Button>
         <Badge

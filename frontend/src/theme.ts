@@ -7,7 +7,7 @@ const light = {
   muted: "#64748b",
   subtle: "#94a3b8",
   border: "#e2e8f0",
-  divider: "#f1f5f9",
+  divider: "#eef0f3",
   accent: "#4338ca",
   accentSoft: "#eef2ff",
   warn: "#fffbeb",

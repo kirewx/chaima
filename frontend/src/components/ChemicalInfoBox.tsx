@@ -156,9 +156,6 @@ export function ChemicalInfoBox({ chemical, containers }: Props) {
       <Box
         sx={{
           p: 2,
-          borderLeft: { md: "1px solid" },
-          borderTop: { xs: "1px solid", md: "none" },
-          borderColor: "divider",
           bgcolor: "background.default",
         }}
       >
