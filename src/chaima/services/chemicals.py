@@ -153,11 +153,11 @@ async def create_chemical(
     )
     session.add(chem)
     await session.flush()
-    if synonyms:
+    if synonyms:  # truthy check: nothing to clear on a fresh row
         await replace_synonyms(
             session, chem.id, [{"name": s, "category": None} for s in synonyms]
         )
-    if ghs_codes:
+    if ghs_codes:  # truthy check: nothing to clear on a fresh row
         ghs_ids = await _resolve_ghs_codes_by_code(session, ghs_codes)
         if ghs_ids:
             await replace_ghs_codes(session, chem.id, ghs_ids)
@@ -332,13 +332,13 @@ async def update_chemical(
     session.add(chemical)
     await session.flush()
 
-    if synonyms is not None:
+    if synonyms is not None:  # explicit None check: [] means "clear all"
         await replace_synonyms(
             session,
             chemical.id,
             [{"name": s, "category": None} for s in synonyms],
         )
-    if ghs_codes is not None:
+    if ghs_codes is not None:  # explicit None check: [] means "clear all"
         ghs_ids = await _resolve_ghs_codes_by_code(session, ghs_codes)
         await replace_ghs_codes(session, chemical.id, ghs_ids)
 
