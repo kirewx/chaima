@@ -16,7 +16,7 @@ export default function App() {
         <Route element={<Layout />}>
           <Route path="/" element={<ChemicalsPage />} />
           <Route path="/storage" element={<StoragePage />} />
-          <Route path="/storage/:id" element={<StoragePage />} />
+          <Route path="/storage/:locationId" element={<StoragePage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Route>

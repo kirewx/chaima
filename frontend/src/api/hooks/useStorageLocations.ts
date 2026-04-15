@@ -54,9 +54,6 @@ export function useArchiveStorageLocation(groupId: string) {
   });
 }
 
-/** @deprecated Use `useArchiveStorageLocation`. Kept for one release cycle. */
-export const useDeleteStorageLocation = useArchiveStorageLocation;
-
 /**
  * Thin wrapper over `useContainers` scoped to a shelf (leaf storage location).
  * Returns non-archived containers for the given location, up to 200.

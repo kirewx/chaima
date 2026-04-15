@@ -1,5 +1,6 @@
 import { Box, Collapse } from "@mui/material";
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import type { ChemicalRead } from "../types";
 import { ChemicalRow } from "./ChemicalRow";
 import { ChemicalInfoBox } from "./ChemicalInfoBox";
@@ -36,6 +37,25 @@ interface Props {
 
 export function ChemicalList({ items, loading, groupId }: Props) {
   const [openIds, setOpenIds] = useState<Set<string>>(new Set());
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Deep-link support: `?expand=<chemicalId>` (used by ContainerCard on
+  // the Storage page to jump back here and pre-expand that chemical's row).
+  useEffect(() => {
+    const expandId = searchParams.get("expand");
+    if (!expandId) return;
+    if (!items.some((i) => i.id === expandId)) return;
+    setOpenIds((prev) => {
+      if (prev.has(expandId)) return prev;
+      const next = new Set(prev);
+      next.add(expandId);
+      return next;
+    });
+    const next = new URLSearchParams(searchParams);
+    next.delete("expand");
+    setSearchParams(next, { replace: true });
+  }, [items, searchParams, setSearchParams]);
+
   const toggle = (id: string) =>
     setOpenIds((prev) => {
       const next = new Set(prev);

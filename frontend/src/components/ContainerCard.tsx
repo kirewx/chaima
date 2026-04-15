@@ -1,25 +1,29 @@
 import { Box, Chip, Stack, Typography } from "@mui/material";
 import QrCode2Icon from "@mui/icons-material/QrCode2";
+import { Link as RouterLink } from "react-router-dom";
+import type { ReactNode } from "react";
 import type { ContainerRead } from "../types";
 
 interface Props {
   container: ContainerRead;
   locationName?: string;
   supplierName?: string;
+  /**
+   * When true, the card body is wrapped in a router link that navigates to
+   * the Chemicals page with `?expand=<chemicalId>`, causing ChemicalList to
+   * pre-expand that chemical's row on mount.
+   */
+  linkToChemical?: boolean;
 }
 
-export function ContainerCard({ container, locationName, supplierName }: Props) {
-  return (
-    <Box
-      sx={{
-        position: "relative",
-        border: "1px solid",
-        borderColor: "divider",
-        borderRadius: 1,
-        bgcolor: "background.paper",
-        p: 1.5,
-      }}
-    >
+export function ContainerCard({
+  container,
+  locationName,
+  supplierName,
+  linkToChemical,
+}: Props) {
+  const body: ReactNode = (
+    <>
       <QrCode2Icon
         sx={{
           position: "absolute",
@@ -64,8 +68,37 @@ export function ContainerCard({ container, locationName, supplierName }: Props) 
         <MetaRow k="Supplier" v={supplierName ?? "—"} />
         <MetaRow k="Received" v={container.purchased_at ?? "—"} />
       </Stack>
-    </Box>
+    </>
   );
+
+  const baseSx = {
+    position: "relative" as const,
+    border: "1px solid",
+    borderColor: "divider",
+    borderRadius: 1,
+    bgcolor: "background.paper",
+    p: 1.5,
+  };
+
+  if (linkToChemical) {
+    return (
+      <Box
+        component={RouterLink}
+        to={`/?expand=${container.chemical_id}`}
+        sx={{
+          ...baseSx,
+          display: "block",
+          textDecoration: "none",
+          color: "inherit",
+          "&:hover": { borderColor: "primary.main" },
+        }}
+      >
+        {body}
+      </Box>
+    );
+  }
+
+  return <Box sx={baseSx}>{body}</Box>;
 }
 
 function MetaRow({ k, v }: { k: string; v: string }) {

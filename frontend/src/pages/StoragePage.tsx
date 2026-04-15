@@ -1,265 +1,89 @@
-import { useState } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import {
-  Box,
-  Typography,
-  Breadcrumbs,
-  Link,
-  Button,
-  Card,
-  CardActionArea,
-  CardContent,
-  IconButton,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  TextField,
-} from "@mui/material";
-import EditIcon from "@mui/icons-material/Edit";
-import AddIcon from "@mui/icons-material/Add";
-import ChevronRightIcon from "@mui/icons-material/ChevronRight";
+import { Box, Typography, Stack, CircularProgress, Button } from "@mui/material";
+import { useStorageNavigation } from "../hooks/useStorageNavigation";
+import { StorageBreadcrumbs } from "../components/StorageBreadcrumbs";
+import { StorageChildList } from "../components/StorageChildList";
+import { ContainerCard } from "../components/ContainerCard";
+import { useShelfContainers } from "../api/hooks/useStorageLocations";
 import { useGroup } from "../components/GroupContext";
-import {
-  useStorageTree,
-  useCreateStorageLocation,
-  useUpdateStorageLocation,
-  useDeleteStorageLocation,
-} from "../api/hooks/useStorageLocations";
-import type { StorageKind, StorageLocationNode } from "../types";
-
-function findNodePath(
-  nodes: StorageLocationNode[],
-  targetId: string,
-  path: StorageLocationNode[] = [],
-): StorageLocationNode[] | null {
-  for (const node of nodes) {
-    const currentPath = [...path, node];
-    if (node.id === targetId) return currentPath;
-    const found = findNodePath(node.children, targetId, currentPath);
-    if (found) return found;
-  }
-  return null;
-}
+import { RoleGate } from "../components/RoleGate";
+import { useDrawer } from "../components/drawer/DrawerContext";
 
 export default function StoragePage() {
   const { groupId } = useGroup();
-  const { id: locationId } = useParams<{ id: string }>();
-  const navigate = useNavigate();
+  const nav = useStorageNavigation();
+  const { open } = useDrawer();
 
-  const treeQuery = useStorageTree(groupId);
-  const createMutation = useCreateStorageLocation(groupId);
-  const updateMutation = useUpdateStorageLocation(groupId, locationId ?? "");
-  const deleteMutation = useDeleteStorageLocation(groupId);
+  const containers = useShelfContainers(
+    groupId,
+    nav.isLeaf && nav.current ? nav.current.id : null,
+  );
 
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [editMode, setEditMode] = useState(false);
-  const [dialogName, setDialogName] = useState("");
-  const [dialogDescription, setDialogDescription] = useState("");
-
-  const tree = treeQuery.data ?? [];
-  const nodePath = locationId ? findNodePath(tree, locationId) : null;
-  const currentNode = nodePath ? nodePath[nodePath.length - 1] : null;
-  const children = currentNode ? currentNode.children : tree;
-
-  const openCreateDialog = () => {
-    setEditMode(false);
-    setDialogName("");
-    setDialogDescription("");
-    setDialogOpen(true);
-  };
-
-  const openEditDialog = () => {
-    if (!currentNode) return;
-    setEditMode(true);
-    setDialogName(currentNode.name);
-    setDialogDescription(currentNode.description ?? "");
-    setDialogOpen(true);
-  };
-
-  const handleDialogSubmit = () => {
-    if (editMode && locationId) {
-      updateMutation.mutate(
-        { name: dialogName, description: dialogDescription || null },
-        { onSuccess: () => setDialogOpen(false) },
-      );
-    } else {
-      const parentKind = currentNode?.kind ?? null;
-      const childKind: StorageKind =
-        parentKind === "building"
-          ? "room"
-          : parentKind === "room"
-            ? "cabinet"
-            : parentKind === "cabinet"
-              ? "shelf"
-              : "building";
-      createMutation.mutate(
-        {
-          name: dialogName,
-          kind: childKind,
-          description: dialogDescription || undefined,
-          parent_id: locationId ?? undefined,
-        },
-        { onSuccess: () => setDialogOpen(false) },
-      );
-    }
-  };
-
-  const handleDelete = () => {
-    if (!locationId) return;
-    const parentId = nodePath && nodePath.length > 1 ? nodePath[nodePath.length - 2].id : null;
-    deleteMutation.mutate(locationId, {
-      onSuccess: () =>
-        navigate(parentId ? `/storage/${parentId}` : "/storage"),
-    });
-  };
+  if (nav.loading) {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
+        <CircularProgress size={22} />
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ p: 2 }}>
-      <Box
-        sx={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          mb: 2,
-        }}
-      >
-        <Box>
-          <Breadcrumbs>
-            <Link
-              component="button"
-              underline="hover"
-              onClick={() => navigate("/storage")}
-            >
-              All
-            </Link>
-            {nodePath?.map((node, i) => {
-              const isLast = i === nodePath.length - 1;
-              return isLast ? (
-                <Typography key={node.id} color="text.primary">
-                  {node.name}
-                </Typography>
-              ) : (
-                <Link
-                  key={node.id}
-                  component="button"
-                  underline="hover"
-                  onClick={() => navigate(`/storage/${node.id}`)}
-                >
-                  {node.name}
-                </Link>
-              );
-            })}
-          </Breadcrumbs>
-          {currentNode && (
-            <Typography variant="h6" sx={{ fontWeight: 600, mt: 0.5 }}>
-              {currentNode.name}
-            </Typography>
-          )}
-          {!currentNode && (
-            <Typography variant="h6" sx={{ fontWeight: 600, mt: 0.5 }}>
-              Storage Locations
-            </Typography>
-          )}
-        </Box>
-        <Box sx={{ display: "flex", gap: 1 }}>
-          {currentNode && (
-            <IconButton onClick={openEditDialog} size="small">
-              <EditIcon />
-            </IconButton>
-          )}
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<AddIcon />}
-            onClick={openCreateDialog}
-          >
-            Add
-          </Button>
-        </Box>
-      </Box>
+      <StorageBreadcrumbs path={nav.path} />
 
-      {children.length > 0 ? (
-        <Box sx={{ display: "flex", flexDirection: "column", gap: 1 }}>
-          {children.map((child) => (
-            <Card key={child.id}>
-              <CardActionArea
-                onClick={() => navigate(`/storage/${child.id}`)}
-              >
-                <CardContent
-                  sx={{
-                    display: "flex",
-                    justifyContent: "space-between",
-                    alignItems: "center",
-                    py: 1.5,
-                  }}
-                >
-                  <Box>
-                    <Typography variant="body1" sx={{ fontWeight: 500 }}>
-                      {child.name}
-                    </Typography>
-                    <Typography variant="caption" color="text.secondary">
-                      {child.children.length > 0
-                        ? `${child.children.length} sub-locations`
-                        : "No sub-locations"}
-                    </Typography>
-                  </Box>
-                  <ChevronRightIcon sx={{ color: "text.secondary" }} />
-                </CardContent>
-              </CardActionArea>
-            </Card>
-          ))}
-        </Box>
-      ) : (
-        <Typography color="text.secondary" sx={{ textAlign: "center", py: 4 }}>
-          {currentNode ? "No sub-locations" : "No storage locations yet"}
+      <Stack direction="row" sx={{ alignItems: "baseline", justifyContent: "space-between", mb: 2 }}>
+        <Typography variant="h1">{nav.current?.name ?? "Storage"}</Typography>
+        {nav.current && (
+          <RoleGate allow={["admin", "superuser"]}>
+            <Button
+              size="small"
+              onClick={() => open({ kind: "storage-edit", locationId: nav.current!.id })}
+              sx={{ color: "text.secondary" }}
+            >
+              Edit {nav.current.kind}
+            </Button>
+          </RoleGate>
+        )}
+      </Stack>
+
+      {nav.current?.description && (
+        <Typography color="text.secondary" sx={{ mb: 2, fontSize: 13 }}>
+          {nav.current.description}
         </Typography>
       )}
 
-      <Dialog
-        open={dialogOpen}
-        onClose={() => setDialogOpen(false)}
-        fullWidth
-        maxWidth="sm"
-      >
-        <DialogTitle>
-          {editMode ? "Edit Location" : "New Location"}
-        </DialogTitle>
-        <DialogContent>
-          <TextField
-            label="Name"
-            value={dialogName}
-            onChange={(e) => setDialogName(e.target.value)}
-            fullWidth
-            required
-            autoFocus
-            sx={{ mt: 1, mb: 2 }}
-          />
-          <TextField
-            label="Description"
-            value={dialogDescription}
-            onChange={(e) => setDialogDescription(e.target.value)}
-            fullWidth
-            multiline
-            rows={2}
-          />
-        </DialogContent>
-        <DialogActions>
-          {editMode && (
-            <Button color="error" onClick={handleDelete} sx={{ mr: "auto" }}>
-              Delete
-            </Button>
+      {nav.isLeaf ? (
+        <Box>
+          <Stack direction="row" sx={{ alignItems: "center", justifyContent: "space-between", mb: 1 }}>
+            <Typography variant="h5">Containers ({containers.data?.total ?? 0})</Typography>
+          </Stack>
+          {containers.isLoading ? (
+            <CircularProgress size={18} />
+          ) : (containers.data?.items.length ?? 0) === 0 ? (
+            <Typography color="text.secondary" sx={{ py: 3, textAlign: "center", fontSize: 13 }}>
+              No containers on this shelf yet. Create one from the Chemicals page.
+            </Typography>
+          ) : (
+            <Box
+              sx={{
+                display: "grid",
+                gridTemplateColumns: { xs: "1fr", sm: "repeat(auto-fill, minmax(210px, 1fr))" },
+                gap: 1.5,
+              }}
+            >
+              {containers.data!.items.map((c) => (
+                <ContainerCard key={c.id} container={c} linkToChemical />
+              ))}
+            </Box>
           )}
-          <Button onClick={() => setDialogOpen(false)}>Cancel</Button>
-          <Button
-            variant="contained"
-            onClick={handleDialogSubmit}
-            disabled={!dialogName}
-          >
-            {editMode ? "Save" : "Create"}
-          </Button>
-        </DialogActions>
-      </Dialog>
+        </Box>
+      ) : (
+        <StorageChildList
+          children={nav.children}
+          parentId={nav.current?.id ?? null}
+          nextChildKind={nav.nextChildKind}
+          parentHintForNewChild={nav.current?.id ?? null}
+        />
+      )}
     </Box>
   );
 }
