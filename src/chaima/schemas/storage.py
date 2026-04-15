@@ -85,8 +85,15 @@ class StorageLocationNode(BaseModel):
         Unique identifier.
     name : str
         Human-readable name.
+    kind : StorageKind
+        The kind of storage location.
     description : str or None
         Optional description.
+    parent_id : UUID or None
+        Parent location ID, if any.
+    container_count : int
+        Number of non-archived containers pinned directly to this node
+        (not transitive — does not include containers in descendant nodes).
     children : list[StorageLocationNode]
         Child nodes in the tree.
     """
@@ -95,5 +102,8 @@ class StorageLocationNode(BaseModel):
 
     id: UUID
     name: str
+    kind: StorageKind
     description: str | None
+    parent_id: UUID | None
+    container_count: int = 0
     children: list[StorageLocationNode] = []

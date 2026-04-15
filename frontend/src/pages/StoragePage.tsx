@@ -26,7 +26,7 @@ import {
   useUpdateStorageLocation,
   useDeleteStorageLocation,
 } from "../api/hooks/useStorageLocations";
-import type { StorageLocationNode } from "../types";
+import type { StorageKind, StorageLocationNode } from "../types";
 
 function findNodePath(
   nodes: StorageLocationNode[],
@@ -84,9 +84,19 @@ export default function StoragePage() {
         { onSuccess: () => setDialogOpen(false) },
       );
     } else {
+      const parentKind = currentNode?.kind ?? null;
+      const childKind: StorageKind =
+        parentKind === "building"
+          ? "room"
+          : parentKind === "room"
+            ? "cabinet"
+            : parentKind === "cabinet"
+              ? "shelf"
+              : "building";
       createMutation.mutate(
         {
           name: dialogName,
+          kind: childKind,
           description: dialogDescription || undefined,
           parent_id: locationId ?? undefined,
         },

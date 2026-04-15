@@ -222,9 +222,12 @@ export interface SupplierUpdate {
   name?: string | null;
 }
 
+export type StorageKind = "building" | "room" | "cabinet" | "shelf";
+
 export interface StorageLocationRead {
   id: string;
   name: string;
+  kind: StorageKind;
   description: string | null;
   parent_id: string | null;
   created_at: string;
@@ -232,6 +235,7 @@ export interface StorageLocationRead {
 
 export interface StorageLocationCreate {
   name: string;
+  kind: StorageKind;
   description?: string | null;
   parent_id?: string | null;
 }
@@ -245,7 +249,10 @@ export interface StorageLocationUpdate {
 export interface StorageLocationNode {
   id: string;
   name: string;
+  kind: StorageKind;
   description: string | null;
+  parent_id: string | null;
+  container_count: number;
   children: StorageLocationNode[];
 }
 

@@ -1,6 +1,7 @@
 # src/chaima/services/storage_locations.py
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -129,10 +130,31 @@ async def get_tree(session: AsyncSession, group_id: UUID) -> list[StorageLocatio
     )
     all_locations = list(result.all())
 
+    # Direct (non-transitive) container counts per location, scoped to this group
+    # via the StorageLocationGroup link table. Archived containers are excluded.
+    count_result = await session.exec(
+        select(Container.location_id, func.count(Container.id))
+        .join(
+            StorageLocationGroup,
+            StorageLocationGroup.location_id == Container.location_id,
+        )
+        .where(
+            StorageLocationGroup.group_id == group_id,
+            Container.is_archived == False,  # noqa: E712
+        )
+        .group_by(Container.location_id)
+    )
+    counts: dict[UUID, int] = {loc_id: count for loc_id, count in count_result.all()}
+
     by_id: dict[UUID, StorageLocationNode] = {}
     for loc in all_locations:
         by_id[loc.id] = StorageLocationNode(
-            id=loc.id, name=loc.name, description=loc.description
+            id=loc.id,
+            name=loc.name,
+            kind=loc.kind,
+            description=loc.description,
+            parent_id=loc.parent_id,
+            container_count=counts.get(loc.id, 0),
         )
 
     roots: list[StorageLocationNode] = []
