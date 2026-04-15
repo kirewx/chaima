@@ -47,6 +47,8 @@ class ChemicalCreate(BaseModel):
     is_secret: bool = False
     structure_source: StructureSource = StructureSource.NONE
     sds_path: str | None = None
+    synonyms: list[str] | None = None
+    ghs_codes: list[str] | None = None
 
 
 class ChemicalUpdate(BaseModel):
@@ -68,6 +70,8 @@ class ChemicalUpdate(BaseModel):
     is_secret: bool | None = None
     structure_source: StructureSource | None = None
     sds_path: str | None = None
+    synonyms: list[str] | None = None
+    ghs_codes: list[str] | None = None
 
 
 class SynonymRead(BaseModel):

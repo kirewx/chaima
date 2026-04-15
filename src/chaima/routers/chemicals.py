@@ -141,6 +141,8 @@ async def create_chemical(
             is_secret=body.is_secret,
             structure_source=body.structure_source,
             sds_path=body.sds_path,
+            synonyms=body.synonyms,
+            ghs_codes=body.ghs_codes,
         )
     except chemical_service.DuplicateNameError:
         raise HTTPException(

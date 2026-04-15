@@ -1,6 +1,9 @@
 # src/chaima/services/chemicals.py
 import datetime
+import logging
 from uuid import UUID
+
+logger = logging.getLogger(__name__)
 
 from sqlalchemy import func, or_
 from sqlalchemy.orm import selectinload
@@ -38,6 +41,30 @@ def apply_secret_filter(stmt, viewer: User):
     )
 
 
+async def _resolve_ghs_codes_by_code(
+    session: AsyncSession, codes: list[str]
+) -> list[UUID]:
+    """Map GHS code strings to existing GHSCode row IDs.
+
+    Codes that aren't in the catalog are logged at WARNING level and
+    skipped — they never trigger an upsert or an error.
+    """
+    if not codes:
+        return []
+    result = await session.exec(
+        select(GHSCode).where(GHSCode.code.in_(codes))  # type: ignore[union-attr]
+    )
+    found = {row.code: row.id for row in result.all()}
+    resolved: list[UUID] = []
+    for code in codes:
+        ghs_id = found.get(code)
+        if ghs_id is None:
+            logger.warning("unknown GHS code from upstream: %s", code)
+            continue
+        resolved.append(ghs_id)
+    return resolved
+
+
 async def create_chemical(
     session: AsyncSession,
     *,
@@ -56,6 +83,8 @@ async def create_chemical(
     is_secret: bool = False,
     structure_source: StructureSource = StructureSource.NONE,
     sds_path: str | None = None,
+    synonyms: list[str] | None = None,
+    ghs_codes: list[str] | None = None,
 ) -> Chemical:
     """Create a new chemical within a group.
 
@@ -124,6 +153,14 @@ async def create_chemical(
     )
     session.add(chem)
     await session.flush()
+    if synonyms:
+        await replace_synonyms(
+            session, chem.id, [{"name": s, "category": None} for s in synonyms]
+        )
+    if ghs_codes:
+        ghs_ids = await _resolve_ghs_codes_by_code(session, ghs_codes)
+        if ghs_ids:
+            await replace_ghs_codes(session, chem.id, ghs_ids)
     return chem
 
 
@@ -286,11 +323,25 @@ async def update_chemical(
     Chemical
         The updated chemical.
     """
+    synonyms = kwargs.pop("synonyms", None)
+    ghs_codes = kwargs.pop("ghs_codes", None)
+
     for key, value in kwargs.items():
         if value is not None:
             setattr(chemical, key, value)
     session.add(chemical)
     await session.flush()
+
+    if synonyms is not None:
+        await replace_synonyms(
+            session,
+            chemical.id,
+            [{"name": s, "category": None} for s in synonyms],
+        )
+    if ghs_codes is not None:
+        ghs_ids = await _resolve_ghs_codes_by_code(session, ghs_codes)
+        await replace_ghs_codes(session, chemical.id, ghs_ids)
+
     return chemical
 
 

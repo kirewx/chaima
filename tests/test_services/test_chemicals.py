@@ -1,10 +1,13 @@
 # tests/test_services/test_chemicals.py
 import pytest
+from sqlalchemy.orm import selectinload
+from sqlmodel import select
 
 from chaima.models.chemical import Chemical
-from chaima.models.ghs import GHSCode
+from chaima.models.ghs import ChemicalGHS, GHSCode
 from chaima.models.hazard import HazardTag
 from chaima.services import chemicals as chemical_service
+from chaima.services.seed import seed_ghs_catalog
 
 
 async def test_create_chemical(session, group, user):
@@ -132,3 +135,122 @@ async def test_delete_chemical(session, group, user):
     await session.commit()
     result = await chemical_service.get_chemical(session, chem.id)
     assert result is None
+
+
+async def test_create_chemical_with_pubchem_payload(session, group, user):
+    await seed_ghs_catalog(session)
+    await session.commit()
+
+    chem = await chemical_service.create_chemical(
+        session,
+        group_id=group.id,
+        created_by=user.id,
+        name="Acetone",
+        cas="67-64-1",
+        cid="180",
+        smiles="CC(=O)C",
+        molar_mass=58.08,
+        structure_source="PUBCHEM",
+        synonyms=["Propan-2-one", "Dimethyl ketone"],
+        ghs_codes=["H225", "H319"],
+    )
+    await session.commit()
+
+    loaded = (
+        await session.exec(
+            select(Chemical)
+            .where(Chemical.id == chem.id)
+            .options(
+                selectinload(Chemical.synonyms),
+                selectinload(Chemical.ghs_links).selectinload(
+                    ChemicalGHS.ghs_code
+                ),
+            )
+        )
+    ).first()
+    assert loaded is not None
+    assert loaded.cid == "180"
+    assert loaded.molar_mass == 58.08
+    names = {s.name for s in loaded.synonyms}
+    assert "Propan-2-one" in names
+    assert "Dimethyl ketone" in names
+    linked_codes = {link.ghs_code.code for link in loaded.ghs_links}
+    assert linked_codes == {"H225", "H319"}
+
+
+async def test_create_chemical_with_unknown_ghs_code_is_skipped(
+    session, group, user, caplog
+):
+    await seed_ghs_catalog(session)
+    await session.commit()
+
+    with caplog.at_level("WARNING"):
+        chem = await chemical_service.create_chemical(
+            session,
+            group_id=group.id,
+            created_by=user.id,
+            name="Mystery compound",
+            ghs_codes=["H225", "H999"],
+        )
+        await session.commit()
+
+    loaded = (
+        await session.exec(
+            select(Chemical)
+            .where(Chemical.id == chem.id)
+            .options(
+                selectinload(Chemical.ghs_links).selectinload(
+                    ChemicalGHS.ghs_code
+                )
+            )
+        )
+    ).first()
+    assert loaded is not None
+    linked = {link.ghs_code.code for link in loaded.ghs_links}
+    assert linked == {"H225"}
+    assert any("H999" in record.getMessage() for record in caplog.records)
+
+
+async def test_update_chemical_replaces_synonyms_and_ghs(session, group, user):
+    await seed_ghs_catalog(session)
+    await session.commit()
+
+    chem = await chemical_service.create_chemical(
+        session,
+        group_id=group.id,
+        created_by=user.id,
+        name="Acetone",
+        synonyms=["old-synonym"],
+        ghs_codes=["H225"],
+    )
+    await session.commit()
+
+    await chemical_service.update_chemical(
+        session,
+        chem,
+        synonyms=["new-synonym-1", "new-synonym-2"],
+        ghs_codes=["H319", "H336"],
+    )
+    await session.commit()
+
+    loaded = (
+        await session.exec(
+            select(Chemical)
+            .where(Chemical.id == chem.id)
+            .options(
+                selectinload(Chemical.synonyms),
+                selectinload(Chemical.ghs_links).selectinload(
+                    ChemicalGHS.ghs_code
+                ),
+            )
+        )
+    ).first()
+    assert loaded is not None
+    assert {s.name for s in loaded.synonyms} == {
+        "new-synonym-1",
+        "new-synonym-2",
+    }
+    assert {link.ghs_code.code for link in loaded.ghs_links} == {
+        "H319",
+        "H336",
+    }
