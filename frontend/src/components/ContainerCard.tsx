@@ -3,6 +3,7 @@ import QrCode2Icon from "@mui/icons-material/QrCode2";
 import { Link as RouterLink } from "react-router-dom";
 import type { ReactNode } from "react";
 import type { ContainerRead } from "../types";
+import { ContainerMenu } from "./ContainerMenu";
 
 interface Props {
   container: ContainerRead;
@@ -22,17 +23,23 @@ export function ContainerCard({
   supplierName,
   linkToChemical,
 }: Props) {
+  const showMenu = !linkToChemical;
   const body: ReactNode = (
     <>
       <QrCode2Icon
         sx={{
           position: "absolute",
           top: 10,
-          right: 10,
+          right: showMenu ? 36 : 10,
           fontSize: 14,
           color: "text.disabled",
         }}
       />
+      {showMenu && (
+        <Box sx={{ position: "absolute", top: 6, right: 6, zIndex: 2 }}>
+          <ContainerMenu container={container} />
+        </Box>
+      )}
       <Chip
         label={container.identifier}
         size="small"
