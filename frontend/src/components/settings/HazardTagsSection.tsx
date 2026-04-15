@@ -87,11 +87,16 @@ export function HazardTagsSection({ groupId }: Props) {
               }}
             >
               <Box sx={{ flex: 1, minWidth: 0 }}>
-                <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                <Typography variant="body1" sx={{ fontWeight: 500 }} noWrap>
                   {t.name}
                 </Typography>
                 {t.description && (
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography
+                    variant="caption"
+                    color="text.secondary"
+                    sx={{ display: "block" }}
+                    noWrap
+                  >
                     {t.description}
                   </Typography>
                 )}

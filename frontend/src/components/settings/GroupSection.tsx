@@ -30,9 +30,16 @@ export function GroupSection() {
         <Stack spacing={2}>
           <Stack spacing={0.5}>
             <Typography variant="h5">CURRENT</Typography>
-            <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-              <Typography variant="h3">{current.name}</Typography>
-              <Chip label="MAIN" size="small" color="primary" sx={{ fontSize: 10 }} />
+            <Stack direction="row" spacing={1} sx={{ alignItems: "center", minWidth: 0 }}>
+              <Typography variant="h3" noWrap sx={{ minWidth: 0, flexShrink: 1 }}>
+                {current.name}
+              </Typography>
+              <Chip
+                label="MAIN"
+                size="small"
+                color="primary"
+                sx={{ fontSize: 10, flexShrink: 0 }}
+              />
             </Stack>
             {current.description && (
               <Typography variant="body2" color="text.secondary">
