@@ -150,7 +150,7 @@ async def test_create_chemical_with_pubchem_payload(session, group, user):
         cid="180",
         smiles="CC(=O)C",
         molar_mass=58.08,
-        structure_source="PUBCHEM",
+        structure_source="pubchem",
         synonyms=["Propan-2-one", "Dimethyl ketone"],
         ghs_codes=["H225", "H319"],
     )
