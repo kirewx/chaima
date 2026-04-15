@@ -1,10 +1,13 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
+import type { StorageKind } from "../../types";
 
 export type DrawerConfig =
   | { kind: "chemical-new" }
   | { kind: "chemical-edit"; chemicalId: string }
   | { kind: "container-new"; chemicalId: string }
   | { kind: "container-edit"; containerId: string }
+  | { kind: "storage-new"; childKind: StorageKind; parentId: string | null }
+  | { kind: "storage-edit"; locationId: string }
   | null;
 
 interface Ctx {

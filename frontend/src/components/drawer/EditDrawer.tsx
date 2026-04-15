@@ -9,6 +9,8 @@ const titles: Record<string, string> = {
   "chemical-edit": "Edit chemical",
   "container-new": "New container",
   "container-edit": "Edit container",
+  "storage-new": "New storage location",
+  "storage-edit": "Edit storage location",
 };
 
 export function EditDrawer() {
@@ -53,6 +55,10 @@ export function EditDrawer() {
             }
             onDone={close}
           />
+        )}
+        {(config.kind === "storage-new" || config.kind === "storage-edit") && (
+          // TODO(Task 6): render <StorageForm /> here.
+          null
         )}
       </Box>
     </Drawer>
