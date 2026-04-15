@@ -22,6 +22,7 @@ from chaima.routers.invites import router as invites_router
 from chaima.routers.storage_locations import router as storage_locations_router
 from chaima.routers.suppliers import router as suppliers_router
 from chaima.schemas import UserRead, UserUpdate
+from chaima.services.seed import run_seeds
 
 
 async def seed_admin(session: AsyncSession) -> None:
@@ -64,6 +65,7 @@ async def lifespan(app: FastAPI):
     await create_db_and_tables()
     async with async_session_maker() as session:
         await seed_admin(session)
+        await run_seeds(session)
     yield
 
 
