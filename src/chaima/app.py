@@ -13,6 +13,7 @@ from chaima.db import async_session_maker, create_db_and_tables
 from chaima.models.group import Group, UserGroupLink
 from chaima.models.user import User
 from chaima.routers.chemicals import router as chemicals_router
+from chaima.routers.pubchem import router as pubchem_router
 from chaima.routers.containers import router as containers_router
 from chaima.routers.ghs import router as ghs_router
 from chaima.routers.groups import router as groups_router
@@ -90,6 +91,7 @@ app.include_router(hazard_tags_router)
 app.include_router(chemicals_router)
 app.include_router(containers_router)
 app.include_router(invites_router)
+app.include_router(pubchem_router)
 
 # Serve built frontend assets when available (after `uv build` or `vite build`).
 # During development the Vite dev server proxies /api to this backend instead.
