@@ -97,7 +97,7 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
     setLookupError(null);
     try {
       const result = await lookup.mutateAsync(q);
-      setName(result.name);
+      setName(result.name ?? "");
       setCas(result.cas ?? "");
       setMolarMass(
         result.molar_mass != null ? String(result.molar_mass) : "",
