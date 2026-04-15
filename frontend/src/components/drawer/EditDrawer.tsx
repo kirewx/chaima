@@ -3,6 +3,7 @@ import CloseIcon from "@mui/icons-material/Close";
 import { useDrawer } from "./DrawerContext";
 import { ChemicalForm } from "./ChemicalForm";
 import { ContainerForm } from "./ContainerForm";
+import { StorageForm } from "./StorageForm";
 
 const titles: Record<string, string> = {
   "chemical-new": "New chemical",
@@ -56,9 +57,15 @@ export function EditDrawer() {
             onDone={close}
           />
         )}
-        {(config.kind === "storage-new" || config.kind === "storage-edit") && (
-          // TODO(Task 6): render <StorageForm /> here.
-          null
+        {config.kind === "storage-new" && (
+          <StorageForm
+            mode="create"
+            childKind={config.childKind}
+            parentId={config.parentId}
+          />
+        )}
+        {config.kind === "storage-edit" && (
+          <StorageForm mode="edit" locationId={config.locationId} />
         )}
       </Box>
     </Drawer>
