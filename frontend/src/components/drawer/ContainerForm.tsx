@@ -1,11 +1,12 @@
 import {
+  Autocomplete,
   Button,
   Stack,
   TextField,
   Alert,
   CircularProgress,
   Box,
-  MenuItem,
+  createFilterOptions,
 } from "@mui/material";
 import { useState, useEffect } from "react";
 import {
@@ -13,10 +14,15 @@ import {
   useUpdateContainer,
   useContainer,
 } from "../../api/hooks/useContainers";
-import { useSuppliers } from "../../api/hooks/useSuppliers";
+import { useSuppliers, useCreateSupplier } from "../../api/hooks/useSuppliers";
+import type { SupplierRead } from "../../types";
 import { useCurrentUser } from "../../api/hooks/useAuth";
 import { useStorageTree } from "../../api/hooks/useStorageLocations";
 import LocationPicker from "../LocationPicker";
+
+type SupplierOption = SupplierRead | { inputValue: string; name: string; id?: undefined };
+
+const supplierFilter = createFilterOptions<SupplierOption>();
 
 interface Props {
   chemicalId?: string;
@@ -34,6 +40,7 @@ export function ContainerForm({ chemicalId, containerId, onDone }: Props) {
 
   const { data: suppliersPage } = useSuppliers(groupId);
   const suppliers = suppliersPage?.items ?? [];
+  const createSupplier = useCreateSupplier(groupId);
 
   const { data: locationTree = [] } = useStorageTree(groupId);
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
@@ -170,20 +177,82 @@ export function ContainerForm({ chemicalId, containerId, onDone }: Props) {
         />
       </Box>
 
-      <TextField
-        select
-        label="Supplier"
-        value={supplierId ?? ""}
-        onChange={(e) => setSupplierId(e.target.value || null)}
+      <Autocomplete<SupplierOption, false, false, true>
+        freeSolo
+        selectOnFocus
+        clearOnBlur
+        handleHomeEndKeys
         size="small"
-      >
-        <MenuItem value="">— None —</MenuItem>
-        {suppliers.map((s) => (
-          <MenuItem key={s.id} value={s.id}>
-            {s.name}
-          </MenuItem>
-        ))}
-      </TextField>
+        options={suppliers}
+        value={
+          supplierId
+            ? (suppliers.find((s) => s.id === supplierId) ?? null)
+            : null
+        }
+        disabled={createSupplier.isPending}
+        getOptionLabel={(option) => {
+          if (typeof option === "string") return option;
+          return option.name;
+        }}
+        isOptionEqualToValue={(option, value) =>
+          typeof option !== "string" &&
+          typeof value !== "string" &&
+          option.id === (value as SupplierRead).id
+        }
+        filterOptions={(options, params) => {
+          const filtered = supplierFilter(options, params);
+          const { inputValue } = params;
+          const exists = options.some(
+            (o) =>
+              typeof o !== "string" &&
+              o.name.toLowerCase() === inputValue.toLowerCase(),
+          );
+          if (inputValue.trim() && !exists) {
+            filtered.push({
+              inputValue: inputValue.trim(),
+              name: `Create "${inputValue.trim()}"`,
+            });
+          }
+          return filtered;
+        }}
+        onChange={async (_e, value) => {
+          if (value == null) {
+            setSupplierId(null);
+            return;
+          }
+          if (typeof value === "string") {
+            const created = await createSupplier.mutateAsync({ name: value });
+            setSupplierId(created.id);
+            return;
+          }
+          if ("inputValue" in value && value.inputValue) {
+            const created = await createSupplier.mutateAsync({
+              name: value.inputValue,
+            });
+            setSupplierId(created.id);
+            return;
+          }
+          setSupplierId((value as SupplierRead).id);
+        }}
+        renderInput={(params) => {
+          const createErr =
+            createSupplier.error instanceof Error
+              ? ((createSupplier.error as any).response?.data?.detail ??
+                createSupplier.error.message)
+              : undefined;
+          return (
+            <TextField
+              {...params}
+              label="Supplier"
+              error={!!createErr}
+              helperText={
+                createErr ??
+                (createSupplier.isPending ? "Creating supplier…" : undefined)
+              }
+            />
+          );
+        }}
+      />
 
       <TextField
         label="Received"
