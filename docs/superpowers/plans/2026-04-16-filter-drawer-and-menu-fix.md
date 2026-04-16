@@ -357,7 +357,8 @@ Rewrite `frontend/src/components/FilterDrawer.tsx` with the new filter layout. T
 import { useState } from "react";
 import {
   SwipeableDrawer, Drawer, Box, Typography, Switch, FormControlLabel,
-  Chip, Stack, Button, Divider, Checkbox, useMediaQuery, useTheme,
+  Chip, Stack, Button, Divider, Checkbox, TextField, MenuItem,
+  useMediaQuery, useTheme,
 } from "@mui/material";
 import type { GroupRead, StorageLocationNode } from "../types";
 import LocationPicker from "./LocationPicker";
@@ -503,6 +504,29 @@ export default function FilterDrawer({
       )}
 
       <Divider sx={{ my: 2 }} />
+
+      {/* Sort & Order */}
+      <Stack direction="row" spacing={2} sx={{ mb: 2 }}>
+        <TextField
+          select label="Sort by" value={filters.sort}
+          onChange={(e) => handleChange({ sort: e.target.value })}
+          size="small" sx={{ flex: 1 }}
+        >
+          <MenuItem value="name">Name</MenuItem>
+          <MenuItem value="cas">CAS</MenuItem>
+          <MenuItem value="created_at">Created</MenuItem>
+          <MenuItem value="updated_at">Updated</MenuItem>
+        </TextField>
+        <TextField
+          select label="Order" value={filters.order}
+          onChange={(e) => handleChange({ order: e.target.value as "asc" | "desc" })}
+          size="small" sx={{ flex: 1 }}
+        >
+          <MenuItem value="asc">Ascending</MenuItem>
+          <MenuItem value="desc">Descending</MenuItem>
+        </TextField>
+      </Stack>
+
       <Button variant="contained" fullWidth onClick={onClose}>Apply</Button>
     </Box>
   );
@@ -601,6 +625,8 @@ export default function ChemicalsPage() {
     my_secrets: filters.mySecrets || undefined,
     location_id: filters.locationId,
     no_location: filters.noLocation || undefined,
+    sort: filters.sort as ChemicalSearchParams["sort"],
+    order: filters.order,
   };
 
   const isMultiGroup =
