@@ -45,7 +45,9 @@ export function ContainerForm({ chemicalId, containerId, onDone }: Props) {
   const [locationId, setLocationId] = useState<string | null>(null);
   const [locationPath, setLocationPath] = useState<string>("");
   const [supplierId, setSupplierId] = useState<string | null>(null);
-  const [receivedDate, setReceivedDate] = useState<string | null>(null);
+  const [receivedDate, setReceivedDate] = useState<string | null>(
+    containerId ? null : new Date().toLocaleDateString("en-CA"),
+  );
 
   useEffect(() => {
     if (existing.data) {
