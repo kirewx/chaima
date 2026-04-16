@@ -2,13 +2,16 @@ import { Box, TextField, InputAdornment, IconButton, Stack, Badge, Button } from
 import SearchIcon from "@mui/icons-material/Search";
 import TuneIcon from "@mui/icons-material/Tune";
 import AddIcon from "@mui/icons-material/Add";
-import { useState } from "react";
-import { useChemicals } from "../api/hooks/useChemicals";
+import { useState, useEffect } from "react";
+import { useChemicals, useMultiGroupChemicals } from "../api/hooks/useChemicals";
 import { useCurrentUser } from "../api/hooks/useAuth";
+import { useGroups } from "../api/hooks/useGroups";
+import { useStorageTree } from "../api/hooks/useStorageLocations";
 import { ChemicalList } from "../components/ChemicalList";
 import { FilterBar, type ActiveFilter } from "../components/FilterBar";
 import { useDrawer } from "../components/drawer/DrawerContext";
 import FilterDrawer, { type FilterState } from "../components/FilterDrawer";
+import type { ChemicalSearchParams } from "../types";
 
 export default function ChemicalsPage() {
   const { data: user } = useCurrentUser();
@@ -19,30 +22,95 @@ export default function ChemicalsPage() {
   const [filters, setFilters] = useState<FilterState>({
     includeArchived: false,
     hasContainers: undefined,
-    hazardTagId: undefined,
-    ghsCodeId: undefined,
+    mySecrets: false,
+    locationId: undefined,
+    locationName: undefined,
+    noLocation: false,
+    selectedGroupIds: groupId ? [groupId] : [],
     sort: "name",
     order: "asc",
-    selectedGroupIds: groupId ? [groupId] : [],
   });
 
-  const includeArchived = filters.includeArchived;
-  const setIncludeArchived = (v: boolean) => setFilters((f) => ({ ...f, includeArchived: v }));
+  // Task 6: Sync selectedGroupIds when groupId first resolves
+  useEffect(() => {
+    if (groupId && filters.selectedGroupIds.length === 0) {
+      setFilters((f) => ({ ...f, selectedGroupIds: [groupId] }));
+    }
+  }, [groupId]);
 
-  const { data, isLoading } = useChemicals(
-    groupId as string,
-    { search: search || undefined },
-    includeArchived
+  const groups = useGroups();
+  const storageTree = useStorageTree(groupId ?? "");
+
+  const searchParams: ChemicalSearchParams = {
+    search: search || undefined,
+    has_containers: filters.hasContainers,
+    my_secrets: filters.mySecrets || undefined,
+    location_id: filters.locationId,
+    no_location: filters.noLocation || undefined,
+    sort: filters.sort as ChemicalSearchParams["sort"],
+    order: filters.order,
+  };
+
+  const isMultiGroup =
+    filters.selectedGroupIds.length > 1 ||
+    (filters.selectedGroupIds.length === 1 && filters.selectedGroupIds[0] !== groupId);
+
+  // Single-group fetch (with infinite scroll)
+  const singleGroup = useChemicals(
+    filters.selectedGroupIds[0] ?? groupId ?? "",
+    searchParams,
+    filters.includeArchived,
   );
 
-  const items = data?.pages.flatMap((p) => p.items) ?? [];
+  // Multi-group fetch (parallel, no infinite scroll)
+  const multiGroup = useMultiGroupChemicals(
+    isMultiGroup ? filters.selectedGroupIds : [],
+    searchParams,
+  );
 
+  const singleItems = singleGroup.data?.pages.flatMap((p) => p.items) ?? [];
+  const multiItems = multiGroup
+    .flatMap((q) => q.data?.items ?? []);
+  const items = isMultiGroup ? multiItems : singleItems;
+  const isLoading = isMultiGroup
+    ? multiGroup.some((q) => q.isLoading)
+    : singleGroup.isLoading;
+
+  // Build active filter chips
   const activeFilters: ActiveFilter[] = [];
-  if (includeArchived) {
+  if (filters.includeArchived) {
     activeFilters.push({
       key: "archived",
       label: "Including archived",
-      onRemove: () => setIncludeArchived(false),
+      onRemove: () => setFilters((f) => ({ ...f, includeArchived: false })),
+    });
+  }
+  if (filters.hasContainers === true) {
+    activeFilters.push({
+      key: "stock",
+      label: "In stock",
+      onRemove: () => setFilters((f) => ({ ...f, hasContainers: undefined })),
+    });
+  }
+  if (filters.mySecrets) {
+    activeFilters.push({
+      key: "secrets",
+      label: "My secrets",
+      onRemove: () => setFilters((f) => ({ ...f, mySecrets: false })),
+    });
+  }
+  if (filters.locationId) {
+    activeFilters.push({
+      key: "location",
+      label: `Location: ${filters.locationName ?? "selected"}`,
+      onRemove: () => setFilters((f) => ({ ...f, locationId: undefined, locationName: undefined })),
+    });
+  }
+  if (filters.noLocation) {
+    activeFilters.push({
+      key: "noLocation",
+      label: "No location",
+      onRemove: () => setFilters((f) => ({ ...f, noLocation: false })),
     });
   }
 
@@ -107,9 +175,8 @@ export default function ChemicalsPage() {
         onClose={() => setFiltersOpen(false)}
         filters={filters}
         onApply={setFilters}
-        hazardTags={[]}
-        ghsCodes={[]}
-        groups={[]}
+        groups={groups.data ?? []}
+        storageTree={storageTree.data ?? []}
       />
     </Stack>
   );
