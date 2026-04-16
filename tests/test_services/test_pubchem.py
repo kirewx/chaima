@@ -36,12 +36,19 @@ def _build_client_mock(responses: list[httpx.Response]) -> AsyncMock:
     return client
 
 
+@pytest.fixture(autouse=True)
+def _clear_pubchem_cache():
+    """Clear the in-memory PubChem cache between tests."""
+    pubchem_service._cache.clear()
+    yield
+    pubchem_service._cache.clear()
+
+
 async def test_lookup_by_name_happy_path():
     responses = [
         _mock_response(_load("pubchem_acetone_cid.json")),
         _mock_response(_load("pubchem_acetone_properties.json")),
         _mock_response(_load("pubchem_acetone_synonyms.json")),
-        _mock_response(_load("pubchem_acetone_ghs.json")),
     ]
     client = _build_client_mock(responses)
 
@@ -49,29 +56,21 @@ async def test_lookup_by_name_happy_path():
         result = await pubchem_service.lookup("acetone")
 
     assert result.cid == "180"
-    assert result.name == "propan-2-one"
+    assert result.name == "Acetone"
     assert result.cas == "67-64-1"
     assert result.molar_mass == pytest.approx(58.08)
     assert result.smiles == "CC(=O)C"
-    assert "Acetone" in result.synonyms
+    assert "acetone" in result.synonyms
     assert len(result.synonyms) <= 20
-    codes = [g.code for g in result.ghs_codes]
-    assert "H225" in codes
-    assert "H319" in codes
-    assert "H336" in codes
-    h225 = next(g for g in result.ghs_codes if g.code == "H225")
-    assert h225.description.startswith("Highly flammable")
-    assert h225.signal_word == "Danger"
-    assert h225.pictogram == "GHS02"
+    # GHS codes are fetched separately now
+    assert result.ghs_codes == []
 
 
 async def test_lookup_by_cas_happy_path():
-    # CAS is passed to the same name namespace — PUG REST resolves it.
     responses = [
         _mock_response(_load("pubchem_acetone_cid.json")),
         _mock_response(_load("pubchem_acetone_properties.json")),
         _mock_response(_load("pubchem_acetone_synonyms.json")),
-        _mock_response(_load("pubchem_acetone_ghs.json")),
     ]
     client = _build_client_mock(responses)
 
@@ -111,6 +110,54 @@ async def test_lookup_upstream_error_timeout():
     with patch("chaima.services.pubchem.httpx.AsyncClient", return_value=client):
         with pytest.raises(PubChemUpstreamError):
             await pubchem_service.lookup("acetone")
+
+
+async def test_lookup_ghs_happy_path():
+    responses = [_mock_response(_load("pubchem_acetone_ghs.json"))]
+    client = _build_client_mock(responses)
+
+    with patch("chaima.services.pubchem.httpx.AsyncClient", return_value=client):
+        codes = await pubchem_service.lookup_ghs("180")
+
+    code_strs = [c.code for c in codes]
+    assert "H225" in code_strs
+    assert "H319" in code_strs
+    assert "H336" in code_strs
+    h225 = next(c for c in codes if c.code == "H225")
+    assert h225.description.startswith("Highly flammable")
+    assert h225.signal_word == "Danger"
+    assert h225.pictogram == "GHS02"
+
+
+async def test_lookup_ghs_failure_returns_empty():
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.__aenter__.return_value = client
+    client.__aexit__.return_value = None
+    client.get = AsyncMock(
+        side_effect=httpx.TimeoutException("timeout", request=None)
+    )
+
+    with patch("chaima.services.pubchem.httpx.AsyncClient", return_value=client):
+        codes = await pubchem_service.lookup_ghs("180")
+
+    assert codes == []
+
+
+async def test_lookup_caches_result():
+    responses = [
+        _mock_response(_load("pubchem_acetone_cid.json")),
+        _mock_response(_load("pubchem_acetone_properties.json")),
+        _mock_response(_load("pubchem_acetone_synonyms.json")),
+    ]
+    client = _build_client_mock(responses)
+
+    with patch("chaima.services.pubchem.httpx.AsyncClient", return_value=client):
+        r1 = await pubchem_service.lookup("acetone")
+        # Second call should return cached — no more mock responses needed
+        r2 = await pubchem_service.lookup("acetone")
+
+    assert r1.cid == r2.cid
+    assert client.get.call_count == 3  # only the first lookup hit the API
 
 
 def test_parse_ghs_classification_extracts_codes():
@@ -191,7 +238,6 @@ async def test_lookup_synonym_cap():
         _mock_response(_load("pubchem_acetone_cid.json")),
         _mock_response(_load("pubchem_acetone_properties.json")),
         _mock_response(long_synonyms),
-        _mock_response(_load("pubchem_acetone_ghs.json")),
     ]
     client = _build_client_mock(responses)
 

@@ -25,6 +25,29 @@ from chaima.services import files as files_service
 router = APIRouter(prefix="/api/v1/groups/{group_id}/chemicals", tags=["chemicals"])
 
 
+@router.get("/check-exists")
+async def check_chemical_exists(
+    group_id: UUID,
+    session: SessionDep,
+    member: GroupMemberDep,
+    name: str | None = Query(None),
+    cas: str | None = Query(None),
+) -> dict:
+    """Check if a chemical with the given name or CAS already exists.
+
+    Returns the existing chemical's id and archived status, or null.
+    """
+    chem = await chemical_service.find_existing(session, group_id, name=name, cas=cas)
+    if chem is None:
+        return {"exists": False}
+    return {
+        "exists": True,
+        "chemical_id": str(chem.id),
+        "chemical_name": chem.name,
+        "is_archived": chem.is_archived,
+    }
+
+
 @router.get("", response_model=PaginatedResponse[ChemicalRead])
 async def list_chemicals(
     group_id: UUID,
@@ -144,10 +167,14 @@ async def create_chemical(
             synonyms=body.synonyms,
             ghs_codes=body.ghs_codes,
         )
-    except chemical_service.DuplicateNameError:
+    except chemical_service.DuplicateNameError as exc:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail="A chemical with this name already exists in the group",
+            detail={
+                "message": "A chemical with this name already exists in the group",
+                "existing_chemical_id": str(exc.chemical_id),
+                "is_archived": exc.is_archived,
+            },
         )
     try:
         await session.commit()
@@ -157,6 +184,7 @@ async def create_chemical(
             status_code=status.HTTP_409_CONFLICT,
             detail="A chemical with this name already exists in the group",
         )
+    await session.refresh(chem)
     return ChemicalRead.model_validate(chem, from_attributes=True)
 
 

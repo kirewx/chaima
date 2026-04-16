@@ -11,6 +11,7 @@ from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from chaima.models.chemical import Chemical, ChemicalSynonym, StructureSource
+from chaima.models.container import Container
 from chaima.models.ghs import ChemicalGHS, GHSCode
 from chaima.models.hazard import ChemicalHazardTag, HazardTag
 from chaima.models.user import User
@@ -25,9 +26,35 @@ class CrossGroupError(Exception):
 class DuplicateNameError(Exception):
     """Raised when a chemical name already exists within the same group."""
 
+    def __init__(self, message: str, *, chemical_id: UUID | None = None, is_archived: bool = False):
+        super().__init__(message)
+        self.chemical_id = chemical_id
+        self.is_archived = is_archived
+
 
 class ChemicalNotFound(LookupError):
     """Raised when a chemical id does not exist."""
+
+
+async def find_existing(
+    session: AsyncSession,
+    group_id: UUID,
+    *,
+    name: str | None = None,
+    cas: str | None = None,
+) -> Chemical | None:
+    """Find a chemical in a group by exact name or CAS (including archived)."""
+    conditions = []
+    if name:
+        conditions.append(func.lower(Chemical.name) == name.lower())
+    if cas:
+        conditions.append(Chemical.cas == cas)
+    if not conditions:
+        return None
+    result = await session.exec(
+        select(Chemical).where(Chemical.group_id == group_id, or_(*conditions))
+    )
+    return result.first()
 
 
 def apply_secret_filter(stmt, viewer: User):
@@ -152,7 +179,9 @@ async def create_chemical(
     ).first()
     if existing is not None:
         raise DuplicateNameError(
-            f"Chemical '{name}' already exists in this group"
+            f"Chemical '{name}' already exists in this group",
+            chemical_id=existing.id,
+            is_archived=existing.is_archived,
         )
 
     chem = Chemical(
@@ -237,9 +266,19 @@ async def list_chemicals(
     query = select(Chemical).where(Chemical.group_id == group_id)
 
     if search:
+        container_match = (
+            select(Container.id)
+            .where(
+                Container.chemical_id == Chemical.id,
+                Container.identifier.ilike(f"%{search}%"),  # type: ignore[union-attr]
+            )
+            .correlate(Chemical)
+            .exists()
+        )
         query = query.where(
             Chemical.name.ilike(f"%{search}%")  # type: ignore[union-attr]
             | Chemical.cas.ilike(f"%{search}%")  # type: ignore[union-attr]
+            | container_match
         )
 
     if hazard_tag_id:
@@ -251,8 +290,6 @@ async def list_chemicals(
         query = query.join(ChemicalGHS).where(ChemicalGHS.ghs_id == ghs_code_id)
 
     if has_containers is not None:
-        from chaima.models.container import Container
-
         container_exists = (
             select(Container.id)
             .where(Container.chemical_id == Chemical.id, Container.is_archived == False)  # noqa: E712
@@ -274,6 +311,7 @@ async def list_chemicals(
     sort_col = getattr(Chemical, sort, Chemical.name)
     query = query.order_by(sort_col.desc() if order == "desc" else sort_col.asc())
     query = query.offset(offset).limit(limit)
+    query = query.options(selectinload(Chemical.synonyms))  # type: ignore[arg-type]
 
     result = await session.exec(query)
     return list(result.all()), total

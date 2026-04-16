@@ -12,20 +12,22 @@ from chaima.services.pubchem import PubChemNotFound, PubChemUpstreamError
 
 _FAKE_RESULT = PubChemLookupResult(
     cid="180",
-    name="propan-2-one",
+    name="Acetone",
     cas="67-64-1",
     molar_mass=58.08,
     smiles="CC(=O)C",
-    synonyms=["Acetone", "67-64-1", "Dimethyl ketone"],
-    ghs_codes=[
-        PubChemGHSHit(
-            code="H225",
-            description="Highly flammable liquid and vapour",
-            signal_word="Danger",
-            pictogram="GHS02",
-        )
-    ],
+    synonyms=["acetone", "67-64-1", "Dimethyl ketone"],
+    ghs_codes=[],
 )
+
+_FAKE_GHS = [
+    PubChemGHSHit(
+        code="H225",
+        description="Highly flammable liquid and vapour",
+        signal_word="Danger",
+        pictogram="GHS02",
+    )
+]
 
 
 @pytest_asyncio.fixture
@@ -61,7 +63,20 @@ async def test_lookup_endpoint_success(client):
     body = resp.json()
     assert body["cid"] == "180"
     assert body["cas"] == "67-64-1"
-    assert body["ghs_codes"][0]["code"] == "H225"
+    assert body["ghs_codes"] == []
+
+
+async def test_ghs_endpoint_success(client):
+    with patch(
+        "chaima.routers.pubchem.pubchem_service.lookup_ghs",
+        new=AsyncMock(return_value=_FAKE_GHS),
+    ):
+        resp = await client.get(
+            "/api/v1/pubchem/ghs", params={"cid": "180"}
+        )
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body[0]["code"] == "H225"
 
 
 async def test_lookup_endpoint_not_found(client):

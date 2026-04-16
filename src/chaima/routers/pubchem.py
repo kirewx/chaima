@@ -8,7 +8,7 @@ keep the endpoint from being used as an open proxy to PubChem.
 from fastapi import APIRouter, HTTPException, Query
 
 from chaima.dependencies import CurrentUserDep
-from chaima.schemas.pubchem import PubChemLookupResult
+from chaima.schemas.pubchem import PubChemGHSHit, PubChemLookupResult
 from chaima.services import pubchem as pubchem_service
 from chaima.services.pubchem import PubChemNotFound, PubChemUpstreamError
 
@@ -20,7 +20,11 @@ async def lookup_pubchem(
     user: CurrentUserDep,
     q: str = Query(..., min_length=1, max_length=200),
 ) -> PubChemLookupResult:
-    """Resolve a chemical name or CAS number via PubChem PUG REST."""
+    """Resolve a chemical name or CAS number via PubChem PUG REST.
+
+    Returns name, CAS, molar mass, SMILES, and synonyms quickly.
+    GHS codes are excluded — use ``/ghs`` to fetch them separately.
+    """
     try:
         return await pubchem_service.lookup(q)
     except PubChemNotFound as exc:
@@ -29,3 +33,16 @@ async def lookup_pubchem(
         raise HTTPException(
             status_code=502, detail="PubChem unavailable"
         ) from exc
+
+
+@router.get("/ghs", response_model=list[PubChemGHSHit])
+async def lookup_ghs(
+    user: CurrentUserDep,
+    cid: str = Query(..., min_length=1, max_length=20),
+) -> list[PubChemGHSHit]:
+    """Fetch GHS hazard codes for a PubChem CID.
+
+    This endpoint is intentionally separate because the PubChem
+    classification API can take 10-15 seconds to respond.
+    """
+    return await pubchem_service.lookup_ghs(cid)

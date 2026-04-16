@@ -8,6 +8,7 @@ exceptions — ``PubChemNotFound`` for 404 CID lookups and
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from typing import Any
@@ -22,9 +23,31 @@ logger = logging.getLogger(__name__)
 _BASE_URL = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
 _PER_REQUEST_TIMEOUT = 8.0
 _TOTAL_TIMEOUT = 15.0
+_GHS_TIMEOUT = 30.0
 _SYNONYM_CAP = 20
 _CAS_RE = re.compile(r"^\d{2,7}-\d{2}-\d$")
 _HAZARD_CODE_RE = re.compile(r"^(H\d{3}|EUH\d{3})\b")
+
+# Simple TTL cache: {key: (result, expiry_timestamp)}
+_CACHE_TTL = 86400  # 24 hours — PubChem data barely changes
+_cache: dict[str, tuple[object, float]] = {}
+
+
+def _cache_get(key: str) -> object | None:
+    import time as _time
+    entry = _cache.get(key)
+    if entry is None:
+        return None
+    value, expiry = entry
+    if _time.time() > expiry:
+        del _cache[key]
+        return None
+    return value
+
+
+def _cache_set(key: str, value: object) -> None:
+    import time as _time
+    _cache[key] = (value, _time.time() + _CACHE_TTL)
 
 
 class PubChemNotFound(Exception):
@@ -36,17 +59,10 @@ class PubChemUpstreamError(Exception):
 
 
 async def lookup(query: str) -> PubChemLookupResult:
-    """Resolve a name or CAS to a normalized PubChem result.
+    """Resolve a name or CAS to a normalized PubChem result (fast, no GHS).
 
-    Parameters
-    ----------
-    query : str
-        Chemical name, synonym, or CAS number.
-
-    Returns
-    -------
-    PubChemLookupResult
-        Normalized result payload.
+    GHS classification is intentionally excluded — it takes 10-15 seconds
+    on PubChem's side.  Use ``lookup_ghs`` separately.
 
     Raises
     ------
@@ -55,25 +71,59 @@ async def lookup(query: str) -> PubChemLookupResult:
     PubChemUpstreamError
         For any other upstream failure (5xx, timeout, network).
     """
-    q = query.strip()
+    q = query.strip().lower()
+    cached = _cache_get(f"lookup:{q}")
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+
     timeout = httpx.Timeout(_TOTAL_TIMEOUT, connect=_PER_REQUEST_TIMEOUT)
 
     async with httpx.AsyncClient(base_url=_BASE_URL, timeout=timeout) as client:
         cid = await _resolve_cid(client, q)
-        props = await _fetch_properties(client, cid)
-        synonyms = await _fetch_synonyms(client, cid)
-        ghs_raw = await _fetch_ghs(client, cid)
+        props, synonyms = await asyncio.gather(
+            _fetch_properties(client, cid),
+            _fetch_synonyms(client, cid),
+        )
 
     cas = _pick_cas(synonyms)
-    return PubChemLookupResult(
+    common_name = _pick_common_name(synonyms)
+    iupac = props.get("IUPACName")
+    name = common_name or iupac or query.strip()
+    result = PubChemLookupResult(
         cid=str(cid),
-        name=props.get("IUPACName") or q,
+        name=name,
         cas=cas,
         molar_mass=_to_float(props.get("MolecularWeight")),
         smiles=props.get("CanonicalSMILES"),
         synonyms=synonyms[:_SYNONYM_CAP],
-        ghs_codes=parse_ghs_classification(ghs_raw),
+        ghs_codes=[],
     )
+    _cache_set(f"lookup:{q}", result)
+    return result
+
+
+async def lookup_ghs(cid: str) -> list[PubChemGHSHit]:
+    """Fetch GHS hazard codes for a CID (the slow part).
+
+    Returns cached results when available. Returns an empty list on
+    failure so callers don't need to handle errors.
+    """
+    cache_key = f"ghs:{cid}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+
+    timeout = httpx.Timeout(_GHS_TIMEOUT, connect=_PER_REQUEST_TIMEOUT)
+    try:
+        async with httpx.AsyncClient(base_url=_BASE_URL, timeout=timeout) as client:
+            ghs_raw = await _fetch_ghs(client, int(cid))
+    except (PubChemUpstreamError, Exception) as exc:
+        logger.warning("GHS fetch failed for CID %s: %s", cid, exc)
+        return []
+
+    result = parse_ghs_classification(ghs_raw)
+    _cache_set(cache_key, result)
+    return result
 
 
 def _safe_json(resp: httpx.Response) -> Any:
@@ -162,6 +212,29 @@ def _pick_cas(synonyms: list[str]) -> str | None:
     for syn in synonyms:
         if _CAS_RE.match(syn.strip()):
             return syn.strip()
+    return None
+
+
+def _pick_common_name(synonyms: list[str]) -> str | None:
+    """Return the first synonym that looks like a common name.
+
+    Skips CAS numbers and strings that are obviously IUPAC-style
+    (contain commas or start with a digit). The first remaining
+    synonym from PubChem is almost always the common/trivial name.
+    Result is title-cased so "acetone" becomes "Acetone".
+    """
+    for syn in synonyms:
+        s = syn.strip()
+        if not s:
+            continue
+        if _CAS_RE.match(s):
+            continue
+        # Skip entries that start with a digit (usually numbered systematic names)
+        if s[0].isdigit():
+            continue
+        # Capitalize first letter, leave the rest as-is so e.g.
+        # "tert-Butanol" or "NaCl" aren't mangled.
+        return s[0].upper() + s[1:]
     return None
 
 

@@ -2,7 +2,7 @@
 import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 from chaima.models.chemical import StructureSource
 
@@ -250,6 +250,22 @@ class ChemicalRead(BaseModel):
     archived_at: datetime.datetime | None = None
     structure_source: StructureSource
     sds_path: str | None = None
+    synonym_names: list[str] = []
+
+    @model_validator(mode="before")
+    @classmethod
+    def _extract_synonym_names(cls, data: object) -> object:
+        """Populate synonym_names from the ORM synonyms relationship."""
+        from sqlalchemy.orm import attributes
+
+        if hasattr(data, "__dict__") and "synonyms" in getattr(
+            attributes.instance_state(data), "dict", {}
+        ):
+            # Synonyms already loaded — safe to read without triggering lazy load
+            syns = data.synonyms  # type: ignore[union-attr]
+            if syns and hasattr(syns[0], "name"):
+                data.__dict__["synonym_names"] = [s.name for s in syns]
+        return data
 
 
 class ChemicalDetail(ChemicalRead):
