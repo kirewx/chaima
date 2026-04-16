@@ -13,6 +13,14 @@ import {
   useUpdateContainer,
   useContainer,
 } from "../../api/hooks/useContainers";
+
+function todayIsoDate(): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
 import { useSuppliers } from "../../api/hooks/useSuppliers";
 import { useCurrentUser } from "../../api/hooks/useAuth";
 import { useStorageTree } from "../../api/hooks/useStorageLocations";
@@ -46,7 +54,7 @@ export function ContainerForm({ chemicalId, containerId, onDone }: Props) {
   const [locationPath, setLocationPath] = useState<string>("");
   const [supplierId, setSupplierId] = useState<string | null>(null);
   const [receivedDate, setReceivedDate] = useState<string | null>(
-    containerId ? null : new Date().toLocaleDateString("en-CA"),
+    containerId ? null : todayIsoDate(),
   );
 
   useEffect(() => {

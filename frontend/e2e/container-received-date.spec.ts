@@ -17,7 +17,8 @@ test.describe("Container received_date", () => {
     page,
   }) => {
     const chemName = `RecvDate Mol ${Date.now()}`;
-    const today = new Date().toLocaleDateString("en-CA");
+    const now = new Date();
+    const today = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
 
     // Create a chemical so the container action is available.
     await page.getByRole("button", { name: /new chemical/i }).click();
