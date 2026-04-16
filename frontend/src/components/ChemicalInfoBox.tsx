@@ -1,12 +1,21 @@
 import { Box, Stack, Typography, Link as MuiLink } from "@mui/material";
 import LinkIcon from "@mui/icons-material/Link";
 import DescriptionIcon from "@mui/icons-material/Description";
-import type { ChemicalRead, ContainerRead } from "../types";
+import type {
+  ChemicalRead,
+  ContainerRead,
+  GHSCodeRead,
+  HazardTagRead,
+} from "../types";
 import { ChemicalMenu } from "./ChemicalMenu";
+import { GHSPictogramRow } from "./GHSPictogramRow";
+import { HazardTagChips } from "./HazardTagChips";
 
 interface Props {
   chemical: ChemicalRead;
   containers: ContainerRead[];
+  ghsCodes?: GHSCodeRead[];
+  hazardTags?: HazardTagRead[];
 }
 
 function propertyBullets(c: ChemicalRead): { k: string; v: string }[] {
@@ -18,7 +27,12 @@ function propertyBullets(c: ChemicalRead): { k: string; v: string }[] {
   return out;
 }
 
-export function ChemicalInfoBox({ chemical, containers }: Props) {
+export function ChemicalInfoBox({
+  chemical,
+  containers,
+  ghsCodes = [],
+  hazardTags = [],
+}: Props) {
   // Total stock grouped by unit so we don't mix L + mL
   const totals = containers.reduce<Record<string, number>>((acc, cont) => {
     acc[cont.unit] = (acc[cont.unit] ?? 0) + cont.amount;
@@ -189,6 +203,20 @@ export function ChemicalInfoBox({ chemical, containers }: Props) {
             <b>{containers.length} containers</b>
           </Typography>
         </Box>
+
+        {(ghsCodes.length > 0 || hazardTags.length > 0) && (
+          <Box sx={{ mb: 1.5 }}>
+            <Typography variant="h5" sx={{ mb: 0.75 }}>
+              Hazards
+            </Typography>
+            {ghsCodes.length > 0 && (
+              <Box sx={{ mb: hazardTags.length > 0 ? 1 : 0 }}>
+                <GHSPictogramRow codes={ghsCodes} size={40} />
+              </Box>
+            )}
+            {hazardTags.length > 0 && <HazardTagChips tags={hazardTags} />}
+          </Box>
+        )}
 
         <Typography variant="h5" sx={{ mb: 0.5 }}>
           Links

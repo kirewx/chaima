@@ -6,6 +6,7 @@ import { ChemicalRow } from "./ChemicalRow";
 import { ChemicalInfoBox } from "./ChemicalInfoBox";
 import { ContainerGrid } from "./ContainerGrid";
 import { useContainersForChemical } from "../api/hooks/useContainers";
+import { useChemicalDetail } from "../api/hooks/useChemicals";
 import { useDrawer } from "./drawer/DrawerContext";
 
 interface ExpandedBodyProps {
@@ -15,11 +16,17 @@ interface ExpandedBodyProps {
 
 function ExpandedBody({ groupId, chemical }: ExpandedBodyProps) {
   const { data: containers = [] } = useContainersForChemical(groupId, chemical.id);
+  const { data: detail } = useChemicalDetail(groupId, chemical.id);
   const active = containers.filter((c) => !c.is_archived);
   const drawer = useDrawer();
   return (
     <>
-      <ChemicalInfoBox chemical={chemical} containers={active} />
+      <ChemicalInfoBox
+        chemical={chemical}
+        containers={active}
+        ghsCodes={detail?.ghs_codes ?? []}
+        hazardTags={detail?.hazard_tags ?? []}
+      />
       <ContainerGrid
         groupId={groupId}
         containers={active}
