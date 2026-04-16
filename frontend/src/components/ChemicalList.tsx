@@ -19,7 +19,7 @@ function ExpandedBody({ groupId, chemical }: ExpandedBodyProps) {
   const drawer = useDrawer();
   return (
     <>
-      <ChemicalInfoBox chemical={chemical} containers={active} />
+      <ChemicalInfoBox chemical={chemical} containers={active} groupId={groupId} />
       <ContainerGrid
         groupId={groupId}
         containers={active}

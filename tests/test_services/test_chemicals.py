@@ -338,25 +338,15 @@ async def test_list_chemicals_no_location(session, group, user, membership):
     assert items[0].name == "Acetone"
 
 
-async def test_create_chemical_with_pubchem_attaches_image(
-    session, group, user, monkeypatch, tmp_path
+async def test_create_chemical_with_pubchem_does_not_attach_image(
+    session, group, user
 ):
-    """If cid + structure_source=pubchem are present, the structure PNG is
-    fetched and saved via the files service, populating image_path."""
+    """Chemical creation no longer fetches/stores a PubChem structure image.
+
+    Structure images are now rendered on demand from SMILES via RDKit
+    at ``GET /api/v1/groups/{id}/chemicals/{id}/structure.svg``.
+    """
     from chaima.services import chemicals as chemical_service
-    from chaima.services import pubchem as pubchem_service
-    from chaima.services import files as files_service
-
-    fake_png = b"\x89PNG\r\n\x1a\nfake-content"
-
-    async def fake_fetch(cid: str):
-        return fake_png
-
-    monkeypatch.setattr(pubchem_service, "fetch_structure_image", fake_fetch)
-    monkeypatch.setattr(files_service, "UPLOADS_ROOT", tmp_path)
-    # Also patch the binding chemicals.py imported at module load time.
-    import chaima.services.chemicals as chemicals_module
-    monkeypatch.setattr(chemicals_module, "save_upload", files_service.save_upload)
 
     chem = await chemical_service.create_chemical(
         session,
@@ -368,7 +358,4 @@ async def test_create_chemical_with_pubchem_attaches_image(
     )
     await session.commit()
 
-    assert chem.image_path is not None
-    assert chem.image_path.endswith(".png")
-    saved_file = tmp_path / chem.image_path
-    assert saved_file.read_bytes() == fake_png
+    assert chem.image_path is None
