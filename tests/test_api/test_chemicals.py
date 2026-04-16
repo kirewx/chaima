@@ -192,6 +192,17 @@ async def test_archive_chemical_hides_from_default_list(client, group, membershi
     assert "OldStock" in names
 
 
+async def test_list_chemicals_my_secrets_filter(client, session, group, membership, user):
+    session.add(Chemical(group_id=group.id, name="My Secret", created_by=user.id, is_secret=True))
+    session.add(Chemical(group_id=group.id, name="Public", created_by=user.id))
+    await session.commit()
+    resp = await client.get(f"/api/v1/groups/{group.id}/chemicals?my_secrets=true")
+    assert resp.status_code == 200
+    page = PaginatedResponse[ChemicalRead].model_validate(resp.json())
+    assert page.total == 1
+    assert page.items[0].name == "My Secret"
+
+
 async def test_unarchive_restores_to_default_list(client, group, membership):
     r = await client.post(
         f"/api/v1/groups/{group.id}/chemicals",

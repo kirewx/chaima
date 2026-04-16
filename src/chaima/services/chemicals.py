@@ -227,6 +227,9 @@ async def list_chemicals(
     hazard_tag_id: UUID | None = None,
     ghs_code_id: UUID | None = None,
     has_containers: bool | None = None,
+    my_secrets: bool = False,
+    location_id: UUID | None = None,
+    no_location: bool = False,
     include_archived: bool = False,
     sort: str = "name",
     order: str = "asc",
@@ -300,6 +303,35 @@ async def list_chemicals(
             query = query.where(container_exists)
         else:
             query = query.where(~container_exists)
+
+    if my_secrets:
+        query = query.where(
+            Chemical.is_secret.is_(True), Chemical.created_by == viewer.id
+        )
+
+    if location_id is not None:
+        at_location = (
+            select(Container.id)
+            .where(
+                Container.chemical_id == Chemical.id,
+                Container.location_id == location_id,
+            )
+            .correlate(Chemical)
+            .exists()
+        )
+        query = query.where(at_location)
+
+    if no_location:
+        unlocated = (
+            select(Container.id)
+            .where(
+                Container.chemical_id == Chemical.id,
+                Container.location_id.is_(None),  # type: ignore[union-attr]
+            )
+            .correlate(Chemical)
+            .exists()
+        )
+        query = query.where(unlocated)
 
     if not include_archived:
         query = query.where(Chemical.is_archived.is_(False))
