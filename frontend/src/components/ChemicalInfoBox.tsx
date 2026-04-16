@@ -149,6 +149,26 @@ export function ChemicalInfoBox({ chemical, containers }: Props) {
               </Box>
             )}
           </Stack>
+          {chemical.synonym_names?.length > 0 && (
+            <Box sx={{ mt: 1.5 }}>
+              <Typography
+                variant="caption"
+                sx={{
+                  textTransform: "uppercase",
+                  letterSpacing: "0.04em",
+                  color: "text.secondary",
+                  fontWeight: 600,
+                  mb: 0.5,
+                  display: "block",
+                }}
+              >
+                Also known as
+              </Typography>
+              <Typography variant="caption" sx={{ color: "text.disabled", fontSize: 11 }}>
+                {chemical.synonym_names.slice(0, 5).join(" · ")}
+              </Typography>
+            </Box>
+          )}
         </Box>
       </Box>
 

@@ -78,6 +78,21 @@ export function useMultiGroupChemicals(groupIds: string[], params: ChemicalSearc
   });
 }
 
+export interface ChemicalExistsResult {
+  exists: boolean;
+  chemical_id?: string;
+  chemical_name?: string;
+  is_archived?: boolean;
+}
+
+export async function checkChemicalExists(
+  groupId: string,
+  params: { name?: string; cas?: string },
+): Promise<ChemicalExistsResult> {
+  const { data } = await client.get(`/groups/${groupId}/chemicals/check-exists`, { params });
+  return data;
+}
+
 export function useArchiveChemical(groupId: string, chemicalId: string) {
   const queryClient = useQueryClient();
   return useMutation({

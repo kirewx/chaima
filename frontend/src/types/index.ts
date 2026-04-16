@@ -107,6 +107,7 @@ export interface ChemicalRead {
   archived_at: string | null;
   structure_source: StructureSource;
   sds_path: string | null;
+  synonym_names: string[];
 }
 
 export interface SynonymRead {

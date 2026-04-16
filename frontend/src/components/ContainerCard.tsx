@@ -105,7 +105,21 @@ export function ContainerCard({
     );
   }
 
-  return <Box sx={baseSx}>{body}</Box>;
+  return (
+    <Box
+      sx={{
+        ...baseSx,
+        cursor: "pointer",
+        transition: "border-color 0.15s, box-shadow 0.15s",
+        "&:hover": {
+          borderColor: "primary.main",
+          boxShadow: 1,
+        },
+      }}
+    >
+      {body}
+    </Box>
+  );
 }
 
 function MetaRow({ k, v }: { k: string; v: string }) {

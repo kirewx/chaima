@@ -95,7 +95,16 @@ export function ChemicalList({ items, loading, groupId }: Props) {
             onToggle={() => toggle(c.id)}
           />
           <Collapse in={openIds.has(c.id)} unmountOnExit>
-            <ExpandedBody groupId={groupId} chemical={c} />
+            <Box
+              sx={{
+                borderTop: "1px solid",
+                borderColor: "divider",
+                bgcolor: "action.hover",
+                pb: 0.5,
+              }}
+            >
+              <ExpandedBody groupId={groupId} chemical={c} />
+            </Box>
           </Collapse>
         </Box>
       ))}
