@@ -50,7 +50,7 @@ export function ChemicalInfoBox({ chemical, containers }: Props) {
         position: "relative",
       }}
     >
-      <Box sx={{ position: "absolute", top: 10, right: 10, zIndex: 2 }}>
+      <Box sx={{ position: "absolute", bottom: 10, right: 10, zIndex: 2 }}>
         <ChemicalMenu chemical={chemical} />
       </Box>
       {/* Main area */}
