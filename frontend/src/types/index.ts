@@ -267,6 +267,9 @@ export interface ChemicalSearchParams {
   hazard_tag_id?: string;
   ghs_code_id?: string;
   has_containers?: boolean;
+  my_secrets?: boolean;
+  location_id?: string;
+  no_location?: boolean;
   sort?: "name" | "created_at" | "updated_at" | "cas";
   order?: "asc" | "desc";
   limit?: number;
