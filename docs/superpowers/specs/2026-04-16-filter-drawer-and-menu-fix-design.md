@@ -33,7 +33,7 @@ Move to `bottom: 10; right: 10`. Same absolute positioning, just anchored to the
 2. **Storage location** — tree picker dropdown + "No location assigned" checkbox
 3. **Groups** — chip multi-select (only shown when user belongs to multiple groups)
 
-Existing sections (hazard tags, GHS codes, sort/order) are removed from the drawer for now. Sort/order stays at defaults (name, ascending). The "Include archived" toggle is removed from the drawer since it's already in FilterBar as a chip — or it can stay; user preference.
+Existing sections (hazard tags, GHS codes, sort/order) are removed from the drawer for now. Sort/order stays at defaults (name, ascending). The "Include archived" toggle is removed from the drawer — it's already accessible as a FilterBar chip.
 
 ### FilterState Changes
 

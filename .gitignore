@@ -224,3 +224,7 @@ uploads/
 # Database
 chaima.db
 .playwright-cli/
+
+# Local tooling
+.claude/
+*.stackdump
