@@ -106,5 +106,22 @@ if UPLOADS_ROOT.is_dir() or UPLOADS_ROOT.parent.is_dir():
     app.mount("/uploads", StaticFiles(directory=UPLOADS_ROOT))
 
     @app.get("/{path:path}", include_in_schema=False)
-    async def _spa_catch_all(path: str) -> FileResponse:  # noqa: ARG001
+    async def _spa_catch_all(path: str) -> FileResponse:
+        """Serve real static files when they exist, else fall back to the SPA.
+
+        Parameters
+        ----------
+        path : str
+            The requested path, relative to the static directory.
+
+        Returns
+        -------
+        FileResponse
+            The matching file under ``_static_dir`` when it exists (e.g.
+            ``/favicon.svg``, ``/icons.svg``), otherwise ``index.html`` so
+            the SPA router can handle client-side routes.
+        """
+        static_file = _static_dir / path
+        if static_file.is_file():
+            return FileResponse(static_file)
         return FileResponse(_static_dir / "index.html")
