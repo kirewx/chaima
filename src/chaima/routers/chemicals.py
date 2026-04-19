@@ -1,7 +1,8 @@
 # src/chaima/routers/chemicals.py
+import hashlib
 from uuid import UUID
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, File, HTTPException, Query, Response, UploadFile, status
 from sqlalchemy.exc import IntegrityError
 
 from chaima.dependencies import CurrentUserDep, GroupMemberDep, SessionDep
@@ -21,6 +22,7 @@ from chaima.schemas.pagination import PaginatedResponse
 from chaima.models.chemical import Chemical
 from chaima.services import chemicals as chemical_service
 from chaima.services import files as files_service
+from chaima.services.structure import InvalidSmilesError, render_structure_svg
 
 router = APIRouter(prefix="/api/v1/groups/{group_id}/chemicals", tags=["chemicals"])
 
@@ -238,6 +240,70 @@ async def get_chemical(
             HazardTagReadNested.model_validate(link.hazard_tag, from_attributes=True)
             for link in chem.hazard_tag_links
         ],
+    )
+
+
+@router.get("/{chemical_id}/structure.svg", include_in_schema=False)
+async def get_chemical_structure_svg(
+    group_id: UUID,
+    chemical_id: UUID,
+    session: SessionDep,
+    member: GroupMemberDep,
+) -> Response:
+    """Render the chemical's structure as an SVG from its SMILES via RDKit.
+
+    The SVG uses ``currentColor`` for strokes and has a transparent
+    background, so it adapts to light and dark mode via CSS without
+    any theme-specific render.
+
+    Parameters
+    ----------
+    group_id : UUID
+        Group the chemical belongs to.
+    chemical_id : UUID
+        Chemical ID.
+    session : SessionDep
+        Database session.
+    member : GroupMemberDep
+        Verified group membership.
+
+    Returns
+    -------
+    Response
+        An ``image/svg+xml`` response with long cache headers.
+
+    Raises
+    ------
+    HTTPException
+        404 if the chemical does not exist, belongs to a different
+        group, or has no SMILES. 422 if RDKit cannot parse the SMILES.
+    """
+    chem = await session.get(Chemical, chemical_id)
+    if chem is None or chem.group_id != group_id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Chemical not found"
+        )
+    if not chem.smiles:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Chemical has no SMILES"
+        )
+    try:
+        svg = render_structure_svg(chem.smiles)
+    except InvalidSmilesError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(exc)
+        )
+
+    updated_at = getattr(chem, "updated_at", None) or getattr(chem, "created_at", None)
+    etag_seed = f"{chem.id}:{updated_at.isoformat() if updated_at else ''}"
+    etag = hashlib.sha256(etag_seed.encode("utf-8")).hexdigest()[:16]
+    return Response(
+        content=svg,
+        media_type="image/svg+xml",
+        headers={
+            "Cache-Control": "public, max-age=3600",
+            "ETag": f'W/"{etag}"',
+        },
     )
 
 

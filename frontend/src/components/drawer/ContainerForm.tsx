@@ -20,6 +20,14 @@ import { useCurrentUser } from "../../api/hooks/useAuth";
 import { useStorageTree } from "../../api/hooks/useStorageLocations";
 import LocationPicker from "../LocationPicker";
 
+function todayIsoDate(): string {
+  const d = new Date();
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${yyyy}-${mm}-${dd}`;
+}
+
 type SupplierOption = SupplierRead | { inputValue: string; name: string; id?: undefined };
 
 const supplierFilter = createFilterOptions<SupplierOption>();
@@ -52,7 +60,9 @@ export function ContainerForm({ chemicalId, containerId, onDone }: Props) {
   const [locationId, setLocationId] = useState<string | null>(null);
   const [locationPath, setLocationPath] = useState<string>("");
   const [supplierId, setSupplierId] = useState<string | null>(null);
-  const [receivedDate, setReceivedDate] = useState<string | null>(null);
+  const [receivedDate, setReceivedDate] = useState<string | null>(
+    containerId ? null : todayIsoDate(),
+  );
 
   useEffect(() => {
     if (existing.data) {
