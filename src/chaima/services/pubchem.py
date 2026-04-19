@@ -94,7 +94,7 @@ async def lookup(query: str) -> PubChemLookupResult:
         name=name,
         cas=cas,
         molar_mass=_to_float(props.get("MolecularWeight")),
-        smiles=props.get("CanonicalSMILES"),
+        smiles=props.get("SMILES"),
         synonyms=synonyms[:_SYNONYM_CAP],
         ghs_codes=[],
     )
@@ -164,7 +164,7 @@ async def _fetch_properties(
 ) -> dict[str, Any]:
     path = (
         f"/compound/cid/{cid}/property/"
-        f"MolecularWeight,CanonicalSMILES,IUPACName/JSON"
+        f"MolecularWeight,SMILES,IUPACName/JSON"
     )
     try:
         resp = await client.get(path)
