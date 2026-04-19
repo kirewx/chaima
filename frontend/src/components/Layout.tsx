@@ -4,7 +4,10 @@ import {
   AppBar, Toolbar, Box, Button, IconButton, Avatar, Menu, MenuItem,
 } from "@mui/material";
 import MenuIcon from "@mui/icons-material/Menu";
+import LightModeIcon from "@mui/icons-material/LightMode";
+import DarkModeIcon from "@mui/icons-material/DarkMode";
 import { useCurrentUser, useLogout } from "../api/hooks/useAuth";
+import { useUpdateMe } from "../api/hooks/useUpdateMe";
 import { DrawerProvider } from "./drawer/DrawerContext";
 import { EditDrawer } from "./drawer/EditDrawer";
 
@@ -17,6 +20,7 @@ const navItems = [
 export default function Layout() {
   const { data: user } = useCurrentUser();
   const logout = useLogout();
+  const updateMe = useUpdateMe();
   const navigate = useNavigate();
   const [menuAnchor, setMenuAnchor] = useState<HTMLElement | null>(null);
 
@@ -24,6 +28,12 @@ export default function Layout() {
     setMenuAnchor(null);
     await logout.mutateAsync();
     navigate("/login");
+  };
+
+  const isDark = !!user?.dark_mode;
+  const toggleDarkMode = () => {
+    if (!user) return;
+    updateMe.mutate({ dark_mode: !user.dark_mode });
   };
 
   return (
@@ -57,6 +67,16 @@ export default function Layout() {
             ))}
           </Box>
           <Box sx={{ flex: 1 }} />
+          {user && (
+            <IconButton
+              onClick={toggleDarkMode}
+              disabled={updateMe.isPending}
+              aria-label="Toggle dark mode"
+              title={isDark ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {isDark ? <LightModeIcon fontSize="small" /> : <DarkModeIcon fontSize="small" />}
+            </IconButton>
+          )}
           <IconButton
             sx={{ display: { xs: "inline-flex", sm: "none" } }}
             onClick={(e) => setMenuAnchor(e.currentTarget)}

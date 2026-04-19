@@ -10,12 +10,14 @@ import type {
 import { ChemicalMenu } from "./ChemicalMenu";
 import { GHSPictogramRow } from "./GHSPictogramRow";
 import { HazardTagChips } from "./HazardTagChips";
+import { useChemicalStructureSvg } from "../api/hooks/useChemicalStructureSvg";
 
 interface Props {
   chemical: ChemicalRead;
   containers: ContainerRead[];
   ghsCodes?: GHSCodeRead[];
   hazardTags?: HazardTagRead[];
+  groupId: string;
 }
 
 function propertyBullets(c: ChemicalRead): { k: string; v: string }[] {
@@ -32,6 +34,7 @@ export function ChemicalInfoBox({
   containers,
   ghsCodes = [],
   hazardTags = [],
+  groupId,
 }: Props) {
   // Total stock grouped by unit so we don't mix L + mL
   const totals = containers.reduce<Record<string, number>>((acc, cont) => {
@@ -43,12 +46,8 @@ export function ChemicalInfoBox({
       .map(([u, v]) => `${Number(v.toFixed(3))} ${u}`)
       .join(" · ") || "—";
   const props = propertyBullets(chemical);
-  const structureSrcLabel =
-    chemical.structure_source === "pubchem"
-      ? "PubChem"
-      : chemical.structure_source === "uploaded"
-      ? "Uploaded"
-      : "—";
+  const { data: structureSvg, isLoading: svgLoading } =
+    useChemicalStructureSvg(groupId, chemical.id);
 
   return (
     <Box
@@ -85,32 +84,31 @@ export function ChemicalInfoBox({
               overflow: "hidden",
             }}
           >
-            {chemical.image_path ? (
+            {structureSvg ? (
               <Box
-                component="img"
-                src={`/uploads/${chemical.image_path}`}
-                alt={`${chemical.name} structure`}
-                sx={{ maxWidth: "100%", maxHeight: "100%" }}
+                aria-label={`${chemical.name} structure`}
+                sx={{
+                  maxWidth: "100%",
+                  maxHeight: "100%",
+                  color: "text.primary",
+                  "& svg": {
+                    width: "100%",
+                    height: "100%",
+                    display: "block",
+                  },
+                }}
+                dangerouslySetInnerHTML={{ __html: structureSvg }}
               />
+            ) : svgLoading ? (
+              <Typography variant="caption" color="text.disabled">
+                …
+              </Typography>
             ) : (
               <Typography variant="caption" color="text.disabled">
                 no structure
               </Typography>
             )}
           </Box>
-          <Typography
-            variant="caption"
-            sx={{
-              display: "block",
-              textAlign: "center",
-              mt: 0.5,
-              textTransform: "uppercase",
-              letterSpacing: "0.04em",
-              color: "text.secondary",
-            }}
-          >
-            {structureSrcLabel}
-          </Typography>
         </Box>
 
         <Box sx={{ flex: 1, minWidth: 0 }}>

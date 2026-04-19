@@ -11,6 +11,7 @@ dependencies = [
     "fastapi-users[sqlalchemy]>=15.0.5",
     "httpx>=0.28.1",
     "pydantic-settings>=2.13.1",
+    "rdkit>=2026.3.1",
     "sqlmodel>=0.0.38",
     "typer>=0.21.1",
     "uvicorn>=0.40.0",

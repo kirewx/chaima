@@ -24,6 +24,7 @@ function ExpandedBody({ groupId, chemical }: ExpandedBodyProps) {
       <ChemicalInfoBox
         chemical={chemical}
         containers={active}
+        groupId={groupId}
         ghsCodes={detail?.ghs_codes ?? []}
         hazardTags={detail?.hazard_tags ?? []}
       />
