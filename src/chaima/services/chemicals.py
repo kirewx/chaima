@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from chaima.models.chemical import Chemical, ChemicalSynonym, StructureSource
+from chaima.models.chemical import Chemical, ChemicalSynonym
 from chaima.models.container import Container
 from chaima.models.ghs import ChemicalGHS, GHSCode
 from chaima.models.hazard import ChemicalHazardTag, HazardTag
@@ -108,7 +108,6 @@ async def create_chemical(
     boiling_point: float | None = None,
     comment: str | None = None,
     is_secret: bool = False,
-    structure_source: StructureSource = StructureSource.NONE,
     sds_path: str | None = None,
     synonyms: list[str] | None = None,
     ghs_codes: list[str] | None = None,
@@ -177,7 +176,6 @@ async def create_chemical(
         boiling_point=boiling_point,
         comment=comment,
         is_secret=is_secret,
-        structure_source=structure_source,
         sds_path=sds_path,
     )
     session.add(chem)
@@ -204,7 +202,6 @@ async def list_chemicals(
     has_containers: bool | None = None,
     my_secrets: bool = False,
     location_id: UUID | None = None,
-    no_location: bool = False,
     include_archived: bool = False,
     sort: str = "name",
     order: str = "asc",
@@ -295,18 +292,6 @@ async def list_chemicals(
             .exists()
         )
         query = query.where(at_location)
-
-    if no_location:
-        unlocated = (
-            select(Container.id)
-            .where(
-                Container.chemical_id == Chemical.id,
-                Container.location_id.is_(None),  # type: ignore[union-attr]
-            )
-            .correlate(Chemical)
-            .exists()
-        )
-        query = query.where(unlocated)
 
     if not include_archived:
         query = query.where(Chemical.is_archived.is_(False))

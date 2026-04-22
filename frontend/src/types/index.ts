@@ -50,8 +50,6 @@ export interface MemberUpdate {
   is_admin: boolean;
 }
 
-export type StructureSource = "none" | "pubchem" | "uploaded";
-
 export interface ChemicalCreate {
   name: string;
   cas?: string | null;
@@ -64,7 +62,6 @@ export interface ChemicalCreate {
   boiling_point?: number | null;
   comment?: string | null;
   is_secret?: boolean;
-  structure_source?: StructureSource;
   synonyms?: string[];
   ghs_codes?: string[];
 }
@@ -81,7 +78,6 @@ export interface ChemicalUpdate {
   boiling_point?: number | null;
   comment?: string | null;
   is_secret?: boolean;
-  structure_source?: StructureSource;
   synonyms?: string[];
   ghs_codes?: string[];
 }
@@ -97,7 +93,6 @@ export interface ChemicalRead {
   density: number | null;
   melting_point: number | null;
   boiling_point: number | null;
-  image_path: string | null;
   comment: string | null;
   created_by: string;
   created_at: string;
@@ -105,7 +100,6 @@ export interface ChemicalRead {
   is_secret: boolean;
   is_archived: boolean;
   archived_at: string | null;
-  structure_source: StructureSource;
   sds_path: string | null;
   synonym_names: string[];
 }
@@ -269,7 +263,6 @@ export interface ChemicalSearchParams {
   has_containers?: boolean;
   my_secrets?: boolean;
   location_id?: string;
-  no_location?: boolean;
   sort?: "name" | "created_at" | "updated_at" | "cas";
   order?: "asc" | "desc";
   limit?: number;

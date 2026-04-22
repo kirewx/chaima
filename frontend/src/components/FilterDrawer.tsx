@@ -1,7 +1,7 @@
 import { useState } from "react";
 import {
   SwipeableDrawer, Drawer, Box, Typography, Switch, FormControlLabel,
-  Chip, Stack, Button, Divider, Checkbox, TextField, MenuItem,
+  Chip, Stack, Button, Divider, TextField, MenuItem,
   useMediaQuery, useTheme,
 } from "@mui/material";
 import type { GroupRead, StorageLocationNode } from "../types";
@@ -13,7 +13,6 @@ export interface FilterState {
   mySecrets: boolean;
   locationId: string | undefined;
   locationName: string | undefined;
-  noLocation: boolean;
   selectedGroupIds: string[];
   sort: string;
   order: "asc" | "desc";
@@ -107,22 +106,11 @@ export default function FilterDrawer({
           Clear location
         </Button>
       )}
-      <FormControlLabel
-        control={
-          <Checkbox
-            checked={filters.noLocation}
-            onChange={(_, checked) => handleChange({ noLocation: checked })}
-            size="small"
-          />
-        }
-        label={<Typography variant="body2">No location assigned</Typography>}
-        sx={{ m: 0 }}
-      />
 
       <LocationPicker
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
-        onSelect={(id, path) => handleChange({ locationId: id, locationName: path, noLocation: false })}
+        onSelect={(id, path) => handleChange({ locationId: id, locationName: path })}
         tree={storageTree}
       />
 
