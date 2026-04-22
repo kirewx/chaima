@@ -307,37 +307,6 @@ async def test_list_chemicals_location_filter(session, group, user, membership):
     assert names == {"Ethanol", "Acetone"}
 
 
-async def test_list_chemicals_no_location(session, group, user, membership):
-    """no_location=True returns chemicals with at least one unlocated container."""
-    from chaima.models.container import Container
-    from chaima.models.storage import StorageLocation
-
-    loc = StorageLocation(name="Shelf B", kind="shelf")
-    session.add(loc)
-    await session.flush()
-
-    chem_a = await chemical_service.create_chemical(
-        session, group_id=group.id, created_by=user.id, name="Ethanol",
-    )
-    chem_b = await chemical_service.create_chemical(
-        session, group_id=group.id, created_by=user.id, name="Acetone",
-    )
-    session.add(Container(
-        chemical_id=chem_a.id, group_id=group.id, created_by=user.id,
-        location_id=loc.id, identifier="E-001", amount=1.0, unit="L",
-    ))
-    session.add(Container(
-        chemical_id=chem_b.id, group_id=group.id, created_by=user.id,
-        location_id=None, identifier="A-001", amount=0.5, unit="L",
-    ))
-    await session.commit()
-    items, total = await chemical_service.list_chemicals(
-        session, group_id=group.id, viewer=user, no_location=True,
-    )
-    assert total == 1
-    assert items[0].name == "Acetone"
-
-
 async def test_create_chemical_with_pubchem_does_not_attach_image(
     session, group, user
 ):

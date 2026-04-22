@@ -204,7 +204,6 @@ async def list_chemicals(
     has_containers: bool | None = None,
     my_secrets: bool = False,
     location_id: UUID | None = None,
-    no_location: bool = False,
     include_archived: bool = False,
     sort: str = "name",
     order: str = "asc",
@@ -295,18 +294,6 @@ async def list_chemicals(
             .exists()
         )
         query = query.where(at_location)
-
-    if no_location:
-        unlocated = (
-            select(Container.id)
-            .where(
-                Container.chemical_id == Chemical.id,
-                Container.location_id.is_(None),  # type: ignore[union-attr]
-            )
-            .correlate(Chemical)
-            .exists()
-        )
-        query = query.where(unlocated)
 
     if not include_archived:
         query = query.where(Chemical.is_archived.is_(False))
