@@ -21,6 +21,7 @@ from chaima.routers.users import router as users_custom_router
 from chaima.routers.hazard_tags import router as hazard_tags_router
 from chaima.routers.invites import router as invites_router
 from chaima.routers.storage_locations import router as storage_locations_router
+from chaima.routers.import_ import router as import_router
 from chaima.routers.suppliers import router as suppliers_router
 from chaima.schemas import UserRead, UserUpdate
 from chaima.services.seed import run_seeds
@@ -92,6 +93,7 @@ app.include_router(chemicals_router)
 app.include_router(containers_router)
 app.include_router(invites_router)
 app.include_router(pubchem_router)
+app.include_router(import_router)
 
 # Serve built frontend assets when available (after `uv build` or `vite build`).
 # During development the Vite dev server proxies /api to this backend instead.
