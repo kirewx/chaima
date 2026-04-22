@@ -10,6 +10,7 @@ import { SuppliersSection } from "../components/settings/SuppliersSection";
 import { BuildingsSection } from "../components/settings/BuildingsSection";
 import { SystemSection } from "../components/settings/SystemSection";
 import { ImportSection } from "../components/settings/ImportSection";
+import { ChemicalsAdminSection } from "../components/settings/ChemicalsAdminSection";
 
 export default function SettingsPage() {
   const { data: user } = useCurrentUser();
@@ -25,6 +26,7 @@ export default function SettingsPage() {
     { key: "hazard-tags", label: "Hazard tags", group: "GROUP ADMIN", visible: isMember },
     { key: "suppliers", label: "Suppliers", group: "GROUP ADMIN", visible: isMember },
     { key: "import", label: "Import data", group: "GROUP ADMIN", visible: isMember },
+    { key: "chemicals-admin", label: "Chemicals", group: "GROUP ADMIN", visible: isMember },
     { key: "buildings", label: "Buildings", group: "SYSTEM", visible: isSuperuser },
     { key: "system", label: "System", group: "SYSTEM", visible: isSuperuser },
   ];
@@ -46,6 +48,9 @@ export default function SettingsPage() {
         )}
         {active === "import" && isMember && user?.main_group_id && (
           <ImportSection groupId={user.main_group_id} />
+        )}
+        {active === "chemicals-admin" && isMember && user?.main_group_id && (
+          <ChemicalsAdminSection groupId={user.main_group_id} />
         )}
         {active === "buildings" && isSuperuser && <BuildingsSection />}
         {active === "system" && isSuperuser && <SystemSection />}

@@ -8,6 +8,7 @@ export type SettingsSectionKey =
   | "hazard-tags"
   | "suppliers"
   | "import"
+  | "chemicals-admin"
   | "buildings"
   | "system";
 
