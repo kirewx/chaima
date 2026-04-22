@@ -22,6 +22,8 @@ class ContainerCreate(BaseModel):
         Unit of measurement (e.g. mL, g).
     purchased_at : datetime.date or None, optional
         Purchase date.
+    ordered_by_name : str or None, optional
+        Name of the person who ordered this container.
     """
 
     location_id: UUID
@@ -30,6 +32,7 @@ class ContainerCreate(BaseModel):
     amount: float
     unit: str
     purchased_at: datetime.date | None = None
+    ordered_by_name: str | None = None
 
 
 class ContainerUpdate(BaseModel):
@@ -51,6 +54,8 @@ class ContainerUpdate(BaseModel):
         New unit.
     purchased_at : datetime.date or None, optional
         New purchase date.
+    ordered_by_name : str or None, optional
+        New name of the person who ordered this container.
     is_archived : bool or None, optional
         Set to False to unarchive, True to archive.
     """
@@ -61,6 +66,7 @@ class ContainerUpdate(BaseModel):
     amount: float | None = None
     unit: str | None = None
     purchased_at: datetime.date | None = None
+    ordered_by_name: str | None = None
     is_archived: bool | None = None
 
 
@@ -87,6 +93,8 @@ class ContainerRead(BaseModel):
         Path to container image.
     purchased_at : datetime.date or None
         Purchase date.
+    ordered_by_name : str or None
+        Name of the person who ordered this container.
     created_by : UUID
         ID of the user who created this container.
     created_at : datetime.datetime
@@ -108,6 +116,7 @@ class ContainerRead(BaseModel):
     unit: str
     image_path: str | None
     purchased_at: datetime.date | None
+    ordered_by_name: str | None
     created_by: UUID
     created_at: datetime.datetime
     updated_at: datetime.datetime

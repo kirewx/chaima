@@ -106,3 +106,33 @@ async def test_container_purity_stores_string(session, chemical, storage_locatio
     await session.commit()
     await session.refresh(c)
     assert c.purity == "99.8%"
+
+
+async def test_container_ordered_by_name_nullable(session, storage_location, chemical, user):
+    from chaima.models.container import Container
+    c = Container(
+        chemical_id=chemical.id,
+        location_id=storage_location.id,
+        identifier="TEST-001",
+        amount=1.0,
+        unit="L",
+        created_by=user.id,
+        ordered_by_name="M. Schmidt",
+    )
+    session.add(c)
+    await session.commit()
+    await session.refresh(c)
+    assert c.ordered_by_name == "M. Schmidt"
+
+    c2 = Container(
+        chemical_id=chemical.id,
+        location_id=storage_location.id,
+        identifier="TEST-002",
+        amount=1.0,
+        unit="L",
+        created_by=user.id,
+    )
+    session.add(c2)
+    await session.commit()
+    await session.refresh(c2)
+    assert c2.ordered_by_name is None
