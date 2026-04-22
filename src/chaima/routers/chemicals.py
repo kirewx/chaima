@@ -1,5 +1,7 @@
 # src/chaima/routers/chemicals.py
 import hashlib
+from datetime import date
+from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, File, HTTPException, Query, Response, UploadFile, status
@@ -21,6 +23,7 @@ from chaima.schemas.chemical import (
 from chaima.schemas.pagination import PaginatedResponse
 from chaima.models.chemical import Chemical
 from chaima.services import chemicals as chemical_service
+from chaima.services import export as export_service
 from chaima.services import files as files_service
 from chaima.services.structure import InvalidSmilesError, render_structure_svg
 
@@ -191,6 +194,57 @@ async def create_chemical(
         )
     await session.refresh(chem)
     return ChemicalRead.model_validate(chem, from_attributes=True)
+
+
+@router.get("/export")
+async def export_chemicals_endpoint(
+    group_id: UUID,
+    session: SessionDep,
+    member: GroupMemberDep,
+    user: CurrentUserDep,
+    format: Literal["csv", "xlsx"] = Query("csv"),
+    search: str | None = Query(None),
+    hazard_tag_id: UUID | None = Query(None),
+    ghs_code_id: UUID | None = Query(None),
+    has_containers: bool | None = Query(None),
+    my_secrets: bool = Query(False),
+    location_id: UUID | None = Query(None),
+    include_archived: bool = Query(False),
+) -> Response:
+    _group, _link = member
+    try:
+        data = await export_service.export_chemicals(
+            session,
+            group_id,
+            viewer_id=user.id,
+            filters={
+                "search": search,
+                "hazard_tag_id": hazard_tag_id,
+                "ghs_code_id": ghs_code_id,
+                "has_containers": has_containers,
+                "my_secrets": my_secrets,
+                "location_id": location_id,
+                "include_archived": include_archived,
+            },
+            fmt=format,
+        )
+    except export_service.ExportTooLargeError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE, detail=str(exc)
+        )
+
+    media_type = (
+        "text/csv"
+        if format == "csv"
+        else "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    )
+    group_slug = _group.name.lower().replace(" ", "-") or "group"
+    filename = f"chaima-{group_slug}-{date.today().isoformat()}.{format}"
+    return Response(
+        content=data,
+        media_type=media_type,
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @router.get("/{chemical_id}", response_model=ChemicalDetail)
