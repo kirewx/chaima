@@ -168,7 +168,6 @@ async def create_chemical(
             boiling_point=body.boiling_point,
             comment=body.comment,
             is_secret=body.is_secret,
-            structure_source=body.structure_source,
             sds_path=body.sds_path,
             synonyms=body.synonyms,
             ghs_codes=body.ghs_codes,

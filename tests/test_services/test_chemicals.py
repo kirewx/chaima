@@ -150,7 +150,6 @@ async def test_create_chemical_with_pubchem_payload(session, group, user):
         cid="180",
         smiles="CC(=O)C",
         molar_mass=58.08,
-        structure_source="pubchem",
         synonyms=["Propan-2-one", "Dimethyl ketone"],
         ghs_codes=["H225", "H319"],
     )
@@ -307,24 +306,3 @@ async def test_list_chemicals_location_filter(session, group, user, membership):
     assert names == {"Ethanol", "Acetone"}
 
 
-async def test_create_chemical_with_pubchem_does_not_attach_image(
-    session, group, user
-):
-    """Chemical creation no longer fetches/stores a PubChem structure image.
-
-    Structure images are now rendered on demand from SMILES via RDKit
-    at ``GET /api/v1/groups/{id}/chemicals/{id}/structure.svg``.
-    """
-    from chaima.services import chemicals as chemical_service
-
-    chem = await chemical_service.create_chemical(
-        session,
-        group_id=group.id,
-        created_by=user.id,
-        name="Acetone (image test)",
-        cid="180",
-        structure_source="pubchem",
-    )
-    await session.commit()
-
-    assert chem.image_path is None

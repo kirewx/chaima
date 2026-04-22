@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from chaima.models.chemical import Chemical, ChemicalSynonym, StructureSource
+from chaima.models.chemical import Chemical, ChemicalSynonym
 from chaima.models.container import Container
 from chaima.models.ghs import ChemicalGHS, GHSCode
 from chaima.models.hazard import ChemicalHazardTag, HazardTag
@@ -108,7 +108,6 @@ async def create_chemical(
     boiling_point: float | None = None,
     comment: str | None = None,
     is_secret: bool = False,
-    structure_source: StructureSource = StructureSource.NONE,
     sds_path: str | None = None,
     synonyms: list[str] | None = None,
     ghs_codes: list[str] | None = None,
@@ -177,7 +176,6 @@ async def create_chemical(
         boiling_point=boiling_point,
         comment=comment,
         is_secret=is_secret,
-        structure_source=structure_source,
         sds_path=sds_path,
     )
     session.add(chem)
