@@ -1,5 +1,8 @@
-from typing import Literal
+import asyncio
+from typing import AsyncGenerator, Literal
+from uuid import UUID
 
+from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
 from chaima.models.chemical import Chemical
@@ -33,3 +36,27 @@ async def enrich_one(session: AsyncSession, chemical: Chemical) -> EnrichStatus:
     session.add(chemical)
     await session.flush()
     return "enriched"
+
+
+async def enrich_group_chemicals(
+    session: AsyncSession,
+    group_id: UUID,
+    chemical_ids: list[UUID] | None,
+) -> AsyncGenerator[dict, None]:
+    stmt = select(Chemical).where(Chemical.group_id == group_id)
+    if chemical_ids is not None:
+        stmt = stmt.where(Chemical.id.in_(chemical_ids))
+    else:
+        stmt = stmt.where(Chemical.cid.is_(None))
+    result = await session.exec(stmt)
+    chemicals = list(result.all())
+
+    counts: dict[str, int] = {"enriched": 0, "skipped": 0, "not_found": 0, "error": 0}
+    for chem in chemicals:
+        status = await enrich_one(session, chem)
+        counts[status] += 1
+        yield {"id": str(chem.id), "name": chem.name, "status": status}
+        await session.commit()
+        await asyncio.sleep(0.25)
+
+    yield {"summary": counts}

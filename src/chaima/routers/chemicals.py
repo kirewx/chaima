@@ -1,13 +1,17 @@
 # src/chaima/routers/chemicals.py
 import hashlib
+import json
 from datetime import date
 from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, File, HTTPException, Query, Response, UploadFile, status
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 
-from chaima.dependencies import CurrentUserDep, GroupMemberDep, SessionDep
+from chaima.dependencies import CurrentUserDep, GroupAdminDep, GroupMemberDep, SessionDep
+from chaima.services import enrich as enrich_service
 from chaima.schemas.chemical import (
     ChemicalCreate,
     ChemicalDetail,
@@ -657,3 +661,23 @@ async def upload_sds(
     await session.commit()
     await session.refresh(chem)
     return ChemicalRead.model_validate(chem)
+
+
+class EnrichBody(BaseModel):
+    chemical_ids: list[UUID] | None = None
+
+
+@router.post("/enrich-pubchem")
+async def enrich_pubchem(
+    group_id: UUID,
+    body: EnrichBody,
+    session: SessionDep,
+    admin: GroupAdminDep,
+) -> StreamingResponse:
+    async def generate():
+        async for event in enrich_service.enrich_group_chemicals(
+            session, group_id, body.chemical_ids,
+        ):
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
