@@ -5,8 +5,11 @@ import {
 } from "@mui/material";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import { SectionHeader } from "./SectionHeader";
-import { useImportPreview } from "../../api/hooks/useImport";
-import type { ImportPreviewResponse, ImportTarget, ImportLocationMapping } from "../../types";
+import { useImportPreview, useImportCommit } from "../../api/hooks/useImport";
+import type {
+  ImportPreviewResponse, ImportTarget, ImportLocationMapping,
+  ImportChemicalGroup, ImportCommitBody, ImportCommitResponse,
+} from "../../types";
 import { IMPORT_TARGETS } from "../../types";
 import { useStorageTree } from "../../api/hooks/useStorageLocations";
 import LocationPicker from "../LocationPicker";
@@ -14,9 +17,12 @@ import LocationPicker from "../LocationPicker";
 type WizardState =
   | { step: "upload" }
   | { step: "columns"; preview: ImportPreviewResponse; file: File }
-  | { step: "locations"; preview: ImportPreviewResponse; columnMapping: Record<string, string>; quCombined: string | null }
-  | { step: "review" }
-  | { step: "done"; summary: unknown };
+  | { step: "locations"; preview: ImportPreviewResponse; file: File;
+      columnMapping: Record<string, string>; quCombined: string | null }
+  | { step: "review"; preview: ImportPreviewResponse; file: File;
+      columnMapping: Record<string, string>; quCombined: string | null;
+      locations: ImportLocationMapping[] }
+  | { step: "done"; summary: ImportCommitResponse };
 
 interface Props {
   groupId: string;
@@ -59,6 +65,7 @@ export function ImportSection({ groupId }: Props) {
             setState({
               step: "locations",
               preview: state.preview,
+              file: state.file,
               columnMapping: mapping,
               quCombined: qu,
             });
@@ -70,12 +77,44 @@ export function ImportSection({ groupId }: Props) {
           groupId={groupId}
           distinct={distinctLocations(state.preview.rows, state.preview.columns, state.columnMapping)}
           onBack={() =>
-            setState({ step: "columns", preview: state.preview, file: (state as any).file })
+            setState({ step: "columns", preview: state.preview, file: state.file })
           }
-          onNext={() => {
-            setState({ step: "review" });
+          onNext={(mappings) => {
+            setState({
+              step: "review",
+              preview: state.preview,
+              file: state.file,
+              columnMapping: state.columnMapping,
+              quCombined: state.quCombined,
+              locations: mappings,
+            });
           }}
         />
+      )}
+      {state.step === "review" && (
+        <ChemicalReviewStep
+          groupId={groupId}
+          preview={state.preview}
+          columnMapping={state.columnMapping}
+          quCombined={state.quCombined}
+          locations={state.locations}
+          onBack={() =>
+            setState({
+              step: "locations",
+              preview: state.preview,
+              file: state.file,
+              columnMapping: state.columnMapping,
+              quCombined: state.quCombined,
+            })}
+          onDone={(summary) => setState({ step: "done", summary })}
+        />
+      )}
+      {state.step === "done" && (
+        <Alert severity="success">
+          Created {state.summary.created_chemicals} chemicals, {state.summary.created_containers} containers,{" "}
+          {state.summary.created_locations} new locations.
+          <Button sx={{ ml: 2 }} onClick={() => setState({ step: "upload" })}>Import another</Button>
+        </Alert>
       )}
     </Box>
   );
@@ -322,4 +361,101 @@ function LocationMappingStep({
       </Stack>
     </Stack>
   );
+}
+
+function ChemicalReviewStep({
+  groupId, preview, columnMapping, quCombined, locations, onBack, onDone,
+}: {
+  groupId: string;
+  preview: ImportPreviewResponse;
+  columnMapping: Record<string, string>;
+  quCombined: string | null;
+  locations: ImportLocationMapping[];
+  onBack: () => void;
+  onDone: (r: ImportCommitResponse) => void;
+}) {
+  const commit = useImportCommit(groupId);
+
+  const groups = groupOnClient(preview, columnMapping);
+
+  const submit = async () => {
+    const body: ImportCommitBody = {
+      column_mapping: columnMapping,
+      quantity_unit_combined_column: quCombined,
+      columns: preview.columns,
+      rows: preview.rows,
+      location_mapping: locations,
+      chemical_groups: groups,
+    };
+    const r = await commit.mutateAsync(body);
+    onDone(r);
+  };
+
+  return (
+    <Stack spacing={2}>
+      <Typography variant="body2" color="text.secondary">
+        {groups.length} chemicals will be created, {preview.row_count} containers total.
+        Review before committing.
+      </Typography>
+
+      <Paper variant="outlined" sx={{ overflow: "hidden" }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Chemical</TableCell>
+              <TableCell>CAS</TableCell>
+              <TableCell>Container count</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {groups.map((g, i) => (
+              <TableRow key={i}>
+                <TableCell>{g.canonical_name}</TableCell>
+                <TableCell>{g.canonical_cas ?? "\u2014"}</TableCell>
+                <TableCell>{g.row_indices.length}</TableCell>
+              </TableRow>
+            ))}
+          </TableBody>
+        </Table>
+      </Paper>
+
+      {commit.error instanceof Error && (
+        <Alert severity="error">
+          {commit.error.message}
+        </Alert>
+      )}
+
+      <Stack direction="row" spacing={1} sx={{ justifyContent: "flex-end" }}>
+        <Button onClick={onBack} disabled={commit.isPending}>Back</Button>
+        <Button variant="contained" onClick={submit} disabled={commit.isPending}>
+          {commit.isPending ? "Importing\u2026" : "Commit import"}
+        </Button>
+      </Stack>
+    </Stack>
+  );
+}
+
+function groupOnClient(
+  preview: ImportPreviewResponse,
+  mapping: Record<string, string>,
+): ImportChemicalGroup[] {
+  const nameIdx = preview.columns.findIndex((c) => mapping[c] === "name");
+  const casIdx = preview.columns.findIndex((c) => mapping[c] === "cas");
+  const buckets = new Map<string, ImportChemicalGroup>();
+  for (let i = 0; i < preview.rows.length; i++) {
+    const name = (preview.rows[i][nameIdx] ?? "").trim();
+    const cas = casIdx >= 0 ? (preview.rows[i][casIdx] ?? "").trim() : "";
+    const key = cas ? `cas:${cas}` : `name:${name.toLowerCase()}`;
+    const existing = buckets.get(key);
+    if (existing) {
+      existing.row_indices.push(i);
+    } else {
+      buckets.set(key, {
+        canonical_name: name,
+        canonical_cas: cas || null,
+        row_indices: [i],
+      });
+    }
+  }
+  return Array.from(buckets.values());
 }
