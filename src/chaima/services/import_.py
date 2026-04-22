@@ -124,3 +124,128 @@ def _parse_csv(data: bytes) -> Grid:
     while rows and all(cell == "" for cell in rows[-1]):
         rows.pop()
     return Grid(columns=columns, rows=rows, row_count=len(rows), sheets=None)
+
+
+@dataclass
+class ParsedRow:
+    index: int
+    name: str | None
+    cas: str | None
+    location_text: str | None
+    quantity: float | None
+    unit: str | None
+    purity: str | None
+    purchased_at: str | None
+    ordered_by: str | None
+    identifier: str | None
+    created_by_name: str | None
+    comment: str | None
+    errors: list[str]
+
+
+class MappingValidationError(ValueError):
+    pass
+
+
+_REQUIRED_TARGETS = {"name"}
+
+
+def apply_column_mapping(
+    grid: Grid,
+    mapping: dict[str, str],
+    qu_combined_column: str | None,
+) -> list[ParsedRow]:
+    targets_in_use = set(mapping.values())
+    missing = _REQUIRED_TARGETS - targets_in_use
+    if missing:
+        raise MappingValidationError(f"Missing required columns: {sorted(missing)}")
+    has_qty = "quantity" in targets_in_use
+    has_qu = qu_combined_column is not None
+    if not (has_qty or has_qu):
+        raise MappingValidationError(
+            "Need either a 'quantity' column or a 'quantity_unit_combined' column"
+        )
+
+    col_index = {col: i for i, col in enumerate(grid.columns)}
+    parsed: list[ParsedRow] = []
+    for i, row in enumerate(grid.rows):
+        errors: list[str] = []
+        values: dict[str, str | None] = {t: None for t in [
+            "name", "cas", "location_text", "quantity", "unit", "purity",
+            "purchased_at", "ordered_by", "identifier", "created_by_name", "comment",
+        ]}
+        qty: float | None = None
+        unit: str | None = None
+        for source_col, target in mapping.items():
+            if target == "ignore":
+                continue
+            cell = row[col_index[source_col]] if col_index[source_col] < len(row) else ""
+            cell = cell.strip() if cell else ""
+            if target == "quantity_unit_combined":
+                q, u = split_quantity_unit(cell)
+                if cell and q is None:
+                    errors.append(f"Unparseable quantity+unit cell: {cell!r}")
+                qty = q if q is not None else qty
+                unit = u if u is not None else unit
+            elif target == "quantity":
+                if cell:
+                    try:
+                        qty = float(cell.replace(",", "."))
+                    except ValueError:
+                        errors.append(f"Unparseable quantity: {cell!r}")
+            elif target == "unit":
+                unit = cell or None
+            else:
+                values[target] = cell or None
+
+        if not values.get("name"):
+            errors.append("Missing chemical name")
+
+        parsed.append(ParsedRow(
+            index=i,
+            name=values["name"],
+            cas=values["cas"],
+            location_text=values["location_text"],
+            quantity=qty,
+            unit=unit,
+            purity=values["purity"],
+            purchased_at=values["purchased_at"],
+            ordered_by=values["ordered_by"],
+            identifier=values["identifier"],
+            created_by_name=values["created_by_name"],
+            comment=values["comment"],
+            errors=errors,
+        ))
+    return parsed
+
+
+@dataclass
+class ChemicalGroup:
+    canonical_name: str
+    canonical_cas: str | None
+    row_indices: list[int]
+
+
+def _normalize_name(s: str | None) -> str:
+    return (s or "").strip().lower()
+
+
+def group_chemicals_by_identity(rows: list[ParsedRow]) -> list[ChemicalGroup]:
+    buckets: dict[str, list[ParsedRow]] = {}
+    for r in rows:
+        if r.cas:
+            key = f"cas:{r.cas}"
+        else:
+            key = f"name:{_normalize_name(r.name)}"
+        buckets.setdefault(key, []).append(r)
+
+    groups: list[ChemicalGroup] = []
+    for key, rs in buckets.items():
+        canonical = next((r.name for r in rs if r.name), rs[0].name or "")
+        canonical_cas = next((r.cas for r in rs if r.cas), None)
+        groups.append(ChemicalGroup(
+            canonical_name=canonical,
+            canonical_cas=canonical_cas,
+            row_indices=[r.index for r in rs],
+        ))
+    return groups
