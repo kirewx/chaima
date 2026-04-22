@@ -12,6 +12,7 @@ from chaima.models.chemical import Chemical
 from chaima.models.ghs import ChemicalGHS
 from chaima.models.hazard import ChemicalHazardTag
 from chaima.models.container import Container
+from chaima.services.chemicals import list_chemicals as list_chemicals_service
 
 
 EXPORT_COLUMNS = [
@@ -28,11 +29,34 @@ class ExportTooLargeError(Exception):
 
 
 async def _load_chemicals_with_containers(
-    session: AsyncSession, group_id: UUID, filters: dict[str, Any]
+    session: AsyncSession, group_id: UUID, filters: dict[str, Any], viewer_id: UUID
 ) -> list[Chemical]:
+    # Delegate filtering to the canonical list endpoint with limit high enough
+    # to hit the row cap before anything else. Then eager-load relationships.
+    from chaima.models.user import User
+    viewer = await session.get(User, viewer_id)
+    items, _ = await list_chemicals_service(
+        session,
+        group_id,
+        viewer=viewer,
+        search=filters.get("search"),
+        hazard_tag_id=filters.get("hazard_tag_id"),
+        ghs_code_id=filters.get("ghs_code_id"),
+        has_containers=filters.get("has_containers"),
+        my_secrets=filters.get("my_secrets", False),
+        location_id=filters.get("location_id"),
+        include_archived=filters.get("include_archived", False),
+        sort="name",
+        order="asc",
+        offset=0,
+        limit=EXPORT_ROW_CAP + 1,
+    )
+    ids = [c.id for c in items]
+    if not ids:
+        return []
     stmt = (
         select(Chemical)
-        .where(Chemical.group_id == group_id)
+        .where(Chemical.id.in_(ids))
         .options(
             selectinload(Chemical.containers).selectinload(Container.location),
             selectinload(Chemical.containers).selectinload(Container.supplier),
@@ -41,7 +65,6 @@ async def _load_chemicals_with_containers(
         )
         .order_by(Chemical.name)
     )
-    # TODO: apply filters (has_containers, location_id, my_secrets, ...) in a later task
     result = await session.exec(stmt)
     return list(result.all())
 
@@ -85,10 +108,11 @@ async def export_chemicals(
     session: AsyncSession,
     group_id: UUID,
     *,
+    viewer_id: UUID,
     filters: dict[str, Any],
     fmt: Literal["csv", "xlsx"],
 ) -> bytes:
-    chemicals = await _load_chemicals_with_containers(session, group_id, filters)
+    chemicals = await _load_chemicals_with_containers(session, group_id, filters, viewer_id)
     rows = _build_rows(chemicals)
     if len(rows) > EXPORT_ROW_CAP:
         raise ExportTooLargeError(
@@ -109,5 +133,14 @@ async def export_chemicals(
 
 
 def _to_xlsx(rows: list[list[str]]) -> bytes:
-    # Implemented in Task 1.5
-    raise NotImplementedError
+    from openpyxl import Workbook
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Chemicals"
+    ws.append(EXPORT_COLUMNS)
+    for row in rows:
+        ws.append(row)
+    buf = BytesIO()
+    wb.save(buf)
+    return buf.getvalue()
