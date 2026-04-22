@@ -1,6 +1,6 @@
 from sqlmodel import select
 
-from chaima.models.chemical import Chemical, ChemicalSynonym, StructureSource
+from chaima.models.chemical import Chemical, ChemicalSynonym
 from chaima.models.group import Group
 from chaima.models.user import User
 
@@ -118,25 +118,14 @@ async def test_chemical_can_be_marked_secret(session, group, user):
     assert c.is_secret is True
 
 
-async def test_chemical_structure_source_defaults_to_none(session, group, user):
-    c = Chemical(name="Toluene", group_id=group.id, created_by=user.id)
-    session.add(c)
-    await session.commit()
-    await session.refresh(c)
-    assert c.structure_source == StructureSource.NONE
-    assert c.sds_path is None
-
-
-async def test_chemical_structure_source_set_to_pubchem(session, group, user):
+async def test_chemical_sds_path_set(session, group, user):
     c = Chemical(
         name="Benzene",
         group_id=group.id,
         created_by=user.id,
-        structure_source=StructureSource.PUBCHEM,
         sds_path="uploads/g1/benz-sds.pdf",
     )
     session.add(c)
     await session.commit()
     await session.refresh(c)
-    assert c.structure_source == StructureSource.PUBCHEM
     assert c.sds_path == "uploads/g1/benz-sds.pdf"

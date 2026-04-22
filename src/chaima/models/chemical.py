@@ -1,15 +1,8 @@
 import datetime
 import uuid as uuid_pkg
-from enum import Enum
 
 from sqlalchemy import Column, DateTime, UniqueConstraint, func
 from sqlmodel import Field, Relationship, SQLModel
-
-
-class StructureSource(str, Enum):
-    NONE = "none"
-    PUBCHEM = "pubchem"
-    UPLOADED = "uploaded"
 
 
 class Chemical(SQLModel, table=True):
@@ -27,7 +20,6 @@ class Chemical(SQLModel, table=True):
     density: float | None = Field(default=None)
     melting_point: float | None = Field(default=None)
     boiling_point: float | None = Field(default=None)
-    image_path: str | None = Field(default=None)
     comment: str | None = Field(default=None)
     created_by: uuid_pkg.UUID = Field(foreign_key="user.id")
     created_at: datetime.datetime | None = Field(
@@ -42,7 +34,6 @@ class Chemical(SQLModel, table=True):
     )
     is_archived: bool = Field(default=False, index=True)
     is_secret: bool = Field(default=False, index=True)
-    structure_source: StructureSource = Field(default=StructureSource.NONE)
     sds_path: str | None = Field(default=None)
     archived_at: datetime.datetime | None = Field(
         default=None, sa_column=Column(DateTime(timezone=True), nullable=True)

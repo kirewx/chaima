@@ -6,6 +6,7 @@ import { AccountSection } from "../components/settings/AccountSection";
 import { GroupSection } from "../components/settings/GroupSection";
 import { MembersInvitesSection } from "../components/settings/MembersInvitesSection";
 import { HazardTagsSection } from "../components/settings/HazardTagsSection";
+import { SuppliersSection } from "../components/settings/SuppliersSection";
 import { BuildingsSection } from "../components/settings/BuildingsSection";
 import { SystemSection } from "../components/settings/SystemSection";
 
@@ -21,6 +22,7 @@ export default function SettingsPage() {
     { key: "group", label: "Group", group: "PERSONAL", visible: true },
     { key: "members", label: "Members & Invites", group: "GROUP ADMIN", visible: isMember },
     { key: "hazard-tags", label: "Hazard tags", group: "GROUP ADMIN", visible: isMember },
+    { key: "suppliers", label: "Suppliers", group: "GROUP ADMIN", visible: isMember },
     { key: "buildings", label: "Buildings", group: "SYSTEM", visible: isSuperuser },
     { key: "system", label: "System", group: "SYSTEM", visible: isSuperuser },
   ];
@@ -36,6 +38,9 @@ export default function SettingsPage() {
         )}
         {active === "hazard-tags" && isMember && user?.main_group_id && (
           <HazardTagsSection groupId={user.main_group_id} />
+        )}
+        {active === "suppliers" && isMember && user?.main_group_id && (
+          <SuppliersSection groupId={user.main_group_id} />
         )}
         {active === "buildings" && isSuperuser && <BuildingsSection />}
         {active === "system" && isSuperuser && <SystemSection />}

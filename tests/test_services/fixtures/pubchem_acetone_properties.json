@@ -4,7 +4,7 @@
       {
         "CID": 180,
         "MolecularWeight": "58.08",
-        "CanonicalSMILES": "CC(=O)C",
+        "SMILES": "CC(=O)C",
         "IUPACName": "propan-2-one"
       }
     ]

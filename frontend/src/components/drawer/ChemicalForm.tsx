@@ -25,7 +25,6 @@ import { useCurrentUser } from "../../api/hooks/useAuth";
 import { usePubChemLookup, fetchPubChemGHS } from "../../api/hooks/usePubChem";
 import { useDrawer } from "./DrawerContext";
 import client from "../../api/client";
-import type { StructureSource } from "../../types";
 
 interface Props {
   chemicalId?: string;
@@ -37,7 +36,6 @@ interface FetchedExtras {
   smiles: string | null;
   synonyms: string[];
   ghs_codes: string[];
-  structure_source: StructureSource;
 }
 
 const EMPTY_EXTRAS: FetchedExtras = {
@@ -45,7 +43,6 @@ const EMPTY_EXTRAS: FetchedExtras = {
   smiles: null,
   synonyms: [],
   ghs_codes: [],
-  structure_source: "none",
 };
 
 export function ChemicalForm({ chemicalId, onDone }: Props) {
@@ -84,7 +81,6 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
         smiles: e.smiles ?? null,
         synonyms: (e.synonyms ?? []).map((s) => s.name),
         ghs_codes: (e.ghs_codes ?? []).map((g) => g.code),
-        structure_source: e.structure_source,
       });
     }
   }, [existing.data?.id]);
@@ -157,7 +153,6 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
       smiles: result.smiles,
       synonyms: result.synonyms,
       ghs_codes: [],
-      structure_source: "pubchem",
     });
 
     // Check resolved name/CAS for duplicates (non-blocking)
@@ -213,7 +208,6 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
         : null,
       cid: extras.cid,
       smiles: extras.smiles,
-      structure_source: extras.structure_source,
       synonyms: extras.synonyms,
       ghs_codes: ghsReady ? extras.ghs_codes : [],
     };

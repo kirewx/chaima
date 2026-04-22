@@ -9,6 +9,30 @@ async def test_create_supplier(session, group):
     assert supplier.group_id == group.id
 
 
+async def test_create_supplier_dedupes_case_insensitive(session, group):
+    first = await supplier_service.create_supplier(
+        session, group_id=group.id, name="Sigma Aldrich"
+    )
+    await session.commit()
+    again = await supplier_service.create_supplier(
+        session, group_id=group.id, name="sIgma alDrich"
+    )
+    await session.commit()
+    assert again.id == first.id
+    assert again.name == "Sigma Aldrich"  # original casing preserved
+
+    items, total = await supplier_service.list_suppliers(session, group_id=group.id)
+    assert total == 1
+
+
+async def test_create_supplier_trims_whitespace(session, group):
+    supplier = await supplier_service.create_supplier(
+        session, group_id=group.id, name="  Merck  "
+    )
+    await session.commit()
+    assert supplier.name == "Merck"
+
+
 async def test_list_suppliers(session, group):
     await supplier_service.create_supplier(session, group_id=group.id, name="Sigma")
     await supplier_service.create_supplier(session, group_id=group.id, name="Merck")

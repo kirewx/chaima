@@ -4,8 +4,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, model_validator
 
-from chaima.models.chemical import StructureSource
-
 
 class ChemicalCreate(BaseModel):
     """Schema for creating a chemical.
@@ -45,7 +43,6 @@ class ChemicalCreate(BaseModel):
     boiling_point: float | None = None
     comment: str | None = None
     is_secret: bool = False
-    structure_source: StructureSource = StructureSource.NONE
     sds_path: str | None = None
     synonyms: list[str] | None = None
     ghs_codes: list[str] | None = None
@@ -68,7 +65,6 @@ class ChemicalUpdate(BaseModel):
     boiling_point: float | None = None
     comment: str | None = None
     is_secret: bool | None = None
-    structure_source: StructureSource | None = None
     sds_path: str | None = None
     synonyms: list[str] | None = None
     ghs_codes: list[str] | None = None
@@ -216,8 +212,6 @@ class ChemicalRead(BaseModel):
         Melting point in °C.
     boiling_point : float or None
         Boiling point in °C.
-    image_path : str or None
-        Path to structure image.
     comment : str or None
         Free-text comment.
     created_by : UUID
@@ -240,7 +234,6 @@ class ChemicalRead(BaseModel):
     density: float | None
     melting_point: float | None
     boiling_point: float | None
-    image_path: str | None
     comment: str | None
     created_by: UUID
     created_at: datetime.datetime
@@ -248,7 +241,6 @@ class ChemicalRead(BaseModel):
     is_secret: bool
     is_archived: bool
     archived_at: datetime.datetime | None = None
-    structure_source: StructureSource
     sds_path: str | None = None
     synonym_names: list[str] = []
 
