@@ -1,6 +1,10 @@
+from pathlib import Path
+
 import pytest
 
 from chaima.services import import_ as import_service
+
+FIXTURE_DIR = Path(__file__).parent.parent / "fixtures"
 
 
 @pytest.mark.parametrize("input_str,expected", [
@@ -51,3 +55,33 @@ def test_detect_header_mapping_combined_qu():
     cols = ["Name", "Menge (mit Einheit)"]
     m = import_service.detect_header_mapping(cols)
     assert m["Menge (mit Einheit)"] == "quantity_unit_combined"
+
+
+def test_parse_xlsx():
+    with (FIXTURE_DIR / "import_sample.xlsx").open("rb") as f:
+        grid = import_service.parse_upload(f.read(), "xlsx")
+    assert grid.columns[:3] == ["Name", "CAS-Nr.", "Standort"]
+    assert grid.row_count == 4
+    assert grid.rows[0][0] == "Ethanol"
+    assert grid.sheets == ["Inventory"]
+
+
+def test_parse_csv():
+    with (FIXTURE_DIR / "import_sample.csv").open("rb") as f:
+        grid = import_service.parse_upload(f.read(), "csv")
+    assert grid.columns == ["Name", "CAS", "Location", "Quantity", "Unit"]
+    assert grid.row_count == 2
+    assert grid.rows[0][0] == "Ethanol"
+    assert grid.sheets is None
+
+
+def test_parse_xlsx_pick_sheet():
+    with (FIXTURE_DIR / "import_sample.xlsx").open("rb") as f:
+        grid = import_service.parse_upload(f.read(), "xlsx", sheet_name="Inventory")
+    assert grid.row_count == 4
+
+
+def test_parse_xlsx_missing_sheet_raises():
+    with (FIXTURE_DIR / "import_sample.xlsx").open("rb") as f:
+        with pytest.raises(ValueError, match="Sheet 'NoSuchSheet' not found"):
+            import_service.parse_upload(f.read(), "xlsx", sheet_name="NoSuchSheet")
