@@ -16,3 +16,38 @@ from chaima.services import import_ as import_service
 ])
 def test_split_quantity_unit(input_str, expected):
     assert import_service.split_quantity_unit(input_str) == expected
+
+
+def test_detect_header_mapping_english():
+    cols = ["Name", "CAS", "Location", "Quantity", "Unit", "Purity"]
+    m = import_service.detect_header_mapping(cols)
+    assert m == {
+        "Name": "name",
+        "CAS": "cas",
+        "Location": "location_text",
+        "Quantity": "quantity",
+        "Unit": "unit",
+        "Purity": "purity",
+    }
+
+
+def test_detect_header_mapping_german():
+    cols = ["Name", "CAS-Nr.", "Standort", "Menge", "Einheit", "Lieferant", "Bestellt von"]
+    m = import_service.detect_header_mapping(cols)
+    assert m["Name"] == "name"
+    assert m["CAS-Nr."] == "cas"
+    assert m["Standort"] == "location_text"
+    assert m["Menge"] == "quantity"
+    assert m["Einheit"] == "unit"
+    assert m["Bestellt von"] == "ordered_by"
+
+
+def test_detect_header_mapping_unknown_column():
+    cols = ["Flibbertigibbet"]
+    assert import_service.detect_header_mapping(cols) == {"Flibbertigibbet": "ignore"}
+
+
+def test_detect_header_mapping_combined_qu():
+    cols = ["Name", "Menge (mit Einheit)"]
+    m = import_service.detect_header_mapping(cols)
+    assert m["Menge (mit Einheit)"] == "quantity_unit_combined"
