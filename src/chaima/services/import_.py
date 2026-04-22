@@ -1,5 +1,6 @@
 import csv as csv_module
 import re
+import uuid as uuid_pkg
 from dataclasses import dataclass
 from io import BytesIO, StringIO
 from typing import Literal
@@ -249,3 +250,150 @@ def group_chemicals_by_identity(rows: list[ParsedRow]) -> list[ChemicalGroup]:
             row_indices=[r.index for r in rs],
         ))
     return groups
+
+
+@dataclass
+class LocationMapping:
+    source_text: str
+    location_id: uuid_pkg.UUID | None
+    new_location: dict | None
+
+
+@dataclass
+class ChemicalGroupPayload:
+    canonical_name: str
+    canonical_cas: str | None
+    row_indices: list[int]
+
+
+@dataclass
+class CommitPayload:
+    column_mapping: dict[str, str]
+    quantity_unit_combined_column: str | None
+    columns: list[str]
+    rows: list[list[str]]
+    location_mapping: list[LocationMapping]
+    chemical_groups: list[ChemicalGroupPayload]
+
+
+@dataclass
+class ImportSummary:
+    created_chemicals: int
+    created_containers: int
+    created_locations: int
+    skipped_rows: list[dict]
+
+
+class ImportValidationError(ValueError):
+    def __init__(self, errors: list[dict]):
+        self.errors = errors
+        super().__init__(f"Import validation failed: {len(errors)} error(s)")
+
+
+async def commit_import(
+    session,
+    *,
+    group_id: uuid_pkg.UUID,
+    viewer_id: uuid_pkg.UUID,
+    payload: CommitPayload,
+) -> ImportSummary:
+    from chaima.models.chemical import Chemical
+    from chaima.models.storage import StorageKind, StorageLocation
+    from chaima.services import containers as container_service
+
+    parsed = apply_column_mapping(
+        Grid(columns=payload.columns, rows=payload.rows, row_count=len(payload.rows), sheets=None),
+        payload.column_mapping,
+        payload.quantity_unit_combined_column,
+    )
+    errors = [{"index": r.index, "reason": "; ".join(r.errors)} for r in parsed if r.errors]
+    if errors:
+        raise ImportValidationError(errors)
+
+    location_text_to_id: dict[str, uuid_pkg.UUID] = {}
+    created_locations = 0
+    for lm in payload.location_mapping:
+        if lm.location_id is not None:
+            location_text_to_id[lm.source_text] = lm.location_id
+        elif lm.new_location is not None:
+            new_loc = StorageLocation(
+                name=lm.new_location["name"],
+                kind=StorageKind.CABINET,
+                parent_id=lm.new_location.get("parent_id"),
+            )
+            session.add(new_loc)
+            await session.flush()
+            location_text_to_id[lm.source_text] = new_loc.id
+            created_locations += 1
+        else:
+            raise ImportValidationError(
+                [{"index": -1, "reason": f"Location '{lm.source_text}' has no mapping"}]
+            )
+
+    row_to_chemical: dict[int, uuid_pkg.UUID] = {}
+    created_chemicals = 0
+    for cg in payload.chemical_groups:
+        chem = Chemical(
+            name=cg.canonical_name,
+            cas=cg.canonical_cas,
+            group_id=group_id,
+            created_by=viewer_id,
+        )
+        session.add(chem)
+        await session.flush()
+        created_chemicals += 1
+        for idx in cg.row_indices:
+            row_to_chemical[idx] = chem.id
+
+    created_containers = 0
+    for row in parsed:
+        chem_id = row_to_chemical.get(row.index)
+        if chem_id is None:
+            raise ImportValidationError(
+                [{"index": row.index, "reason": "Row not assigned to any chemical group"}]
+            )
+        loc_id = location_text_to_id.get(row.location_text or "")
+        identifier = row.identifier or _next_identifier(row.name or "X")
+        try:
+            container = await container_service.create_container(
+                session,
+                chemical_id=chem_id,
+                location_id=loc_id,
+                identifier=identifier,
+                amount=row.quantity if row.quantity is not None else 0.0,
+                unit=row.unit or "",
+                created_by=viewer_id,
+            )
+        except container_service.DuplicateIdentifier:
+            identifier = f"{identifier}-{row.index}"
+            container = await container_service.create_container(
+                session,
+                chemical_id=chem_id,
+                location_id=loc_id,
+                identifier=identifier,
+                amount=row.quantity if row.quantity is not None else 0.0,
+                unit=row.unit or "",
+                created_by=viewer_id,
+            )
+        if row.ordered_by:
+            container.ordered_by_name = row.ordered_by
+        if row.purity:
+            container.purity = row.purity
+        created_containers += 1
+
+    await session.flush()
+    return ImportSummary(
+        created_chemicals=created_chemicals,
+        created_containers=created_containers,
+        created_locations=created_locations,
+        skipped_rows=[],
+    )
+
+
+_identifier_counters: dict[str, int] = {}
+
+
+def _next_identifier(chem_name: str) -> str:
+    key = chem_name[:1].upper() if chem_name else "X"
+    _identifier_counters[key] = _identifier_counters.get(key, 0) + 1
+    return f"{key}-IMP-{_identifier_counters[key]:04d}"

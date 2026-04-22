@@ -179,3 +179,94 @@ def _parsed(index, **kw):
         comment=kw.get("comment"),
         errors=[],
     )
+
+
+async def test_commit_import_happy_path(session, group, user):
+    payload = import_service.CommitPayload(
+        column_mapping={
+            "Name": "name", "CAS": "cas", "Location": "location_text",
+            "Qty": "quantity", "Unit": "unit", "Id": "identifier",
+        },
+        quantity_unit_combined_column=None,
+        rows=[
+            ["Ethanol", "64-17-5", "Shelf A", "1", "L", "E-001"],
+            ["Ethanol", "64-17-5", "Shelf A", "0.5", "L", "E-002"],
+            ["Acetone", "67-64-1", "Shelf B", "250", "mL", "A-001"],
+        ],
+        columns=["Name", "CAS", "Location", "Qty", "Unit", "Id"],
+        location_mapping=[
+            import_service.LocationMapping(source_text="Shelf A", location_id=None,
+                                           new_location={"name": "Shelf A", "parent_id": None}),
+            import_service.LocationMapping(source_text="Shelf B", location_id=None,
+                                           new_location={"name": "Shelf B", "parent_id": None}),
+        ],
+        chemical_groups=[
+            import_service.ChemicalGroupPayload(
+                canonical_name="Ethanol", canonical_cas="64-17-5", row_indices=[0, 1]
+            ),
+            import_service.ChemicalGroupPayload(
+                canonical_name="Acetone", canonical_cas="67-64-1", row_indices=[2]
+            ),
+        ],
+    )
+
+    summary = await import_service.commit_import(
+        session, group_id=group.id, viewer_id=user.id, payload=payload,
+    )
+    await session.commit()
+
+    assert summary.created_chemicals == 2
+    assert summary.created_containers == 3
+    assert summary.created_locations == 2
+    assert summary.skipped_rows == []
+
+    from sqlmodel import select
+    from chaima.models.chemical import Chemical
+    chems = (await session.exec(select(Chemical).where(Chemical.group_id == group.id))).all()
+    assert {c.name for c in chems} == {"Ethanol", "Acetone"}
+
+
+async def test_commit_import_validation_error(session, group, user):
+    payload = import_service.CommitPayload(
+        column_mapping={"Name": "name", "Qty": "quantity", "Unit": "unit"},
+        quantity_unit_combined_column=None,
+        rows=[
+            ["Ethanol", "1", "L"],
+            ["", "1", "L"],
+        ],
+        columns=["Name", "Qty", "Unit"],
+        location_mapping=[],
+        chemical_groups=[
+            import_service.ChemicalGroupPayload(canonical_name="Ethanol", canonical_cas=None, row_indices=[0, 1]),
+        ],
+    )
+    with pytest.raises(import_service.ImportValidationError):
+        await import_service.commit_import(
+            session, group_id=group.id, viewer_id=user.id, payload=payload,
+        )
+
+
+async def test_commit_import_uses_existing_location(session, group, user):
+    from chaima.models.storage import StorageKind, StorageLocation
+    existing = StorageLocation(name="Existing Shelf", kind=StorageKind.SHELF)
+    session.add(existing)
+    await session.flush()
+
+    payload = import_service.CommitPayload(
+        column_mapping={"Name": "name", "Loc": "location_text", "Q": "quantity", "U": "unit"},
+        quantity_unit_combined_column=None,
+        rows=[["Ethanol", "Existing", "1", "L"]],
+        columns=["Name", "Loc", "Q", "U"],
+        location_mapping=[
+            import_service.LocationMapping(source_text="Existing", location_id=existing.id, new_location=None),
+        ],
+        chemical_groups=[
+            import_service.ChemicalGroupPayload(canonical_name="Ethanol", canonical_cas=None, row_indices=[0]),
+        ],
+    )
+    summary = await import_service.commit_import(
+        session, group_id=group.id, viewer_id=user.id, payload=payload,
+    )
+    await session.commit()
+    assert summary.created_locations == 0
+    assert summary.created_containers == 1
