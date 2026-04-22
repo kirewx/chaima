@@ -5,13 +5,27 @@ from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
+from chaima.models.chemical import Chemical
+from chaima.models.container import Container
 from chaima.models.supplier import Supplier
+
+
+class SupplierInUseError(Exception):
+    """Raised when attempting to delete a supplier referenced by containers."""
+
+    def __init__(self, container_count: int) -> None:
+        self.container_count = container_count
+        super().__init__(f"Supplier has {container_count} container(s) and cannot be deleted")
 
 
 async def create_supplier(
     session: AsyncSession, *, group_id: UUID, name: str
 ) -> Supplier:
-    """Create a supplier within a group.
+    """Create a supplier within a group, or return existing match.
+
+    Supplier names are deduplicated case-insensitively within a group: if a
+    supplier with the same name (regardless of case) already exists, it is
+    returned unchanged instead of inserting a duplicate.
 
     Parameters
     ----------
@@ -25,12 +39,51 @@ async def create_supplier(
     Returns
     -------
     Supplier
-        The newly created supplier.
+        The existing or newly created supplier.
     """
-    supplier = Supplier(name=name, group_id=group_id)
+    trimmed = name.strip()
+    existing = (
+        await session.exec(
+            select(Supplier).where(
+                Supplier.group_id == group_id,
+                func.lower(Supplier.name) == trimmed.lower(),
+            )
+        )
+    ).first()
+    if existing is not None:
+        return existing
+
+    supplier = Supplier(name=trimmed, group_id=group_id)
     session.add(supplier)
     await session.flush()
     return supplier
+
+
+async def count_supplier_containers(
+    session: AsyncSession, supplier_ids: list[UUID]
+) -> dict[UUID, int]:
+    """Return container counts keyed by supplier id for the given suppliers."""
+    if not supplier_ids:
+        return {}
+    result = await session.exec(
+        select(Container.supplier_id, func.count(Container.id))
+        .where(Container.supplier_id.in_(supplier_ids))  # type: ignore[union-attr]
+        .group_by(Container.supplier_id)
+    )
+    return {sid: cnt for sid, cnt in result.all() if sid is not None}
+
+
+async def list_supplier_containers(
+    session: AsyncSession, supplier_id: UUID
+) -> list[tuple[Container, str]]:
+    """List containers attached to a supplier with their chemical name."""
+    result = await session.exec(
+        select(Container, Chemical.name)
+        .join(Chemical, Chemical.id == Container.chemical_id)
+        .where(Container.supplier_id == supplier_id)
+        .order_by(Chemical.name, Container.identifier)
+    )
+    return list(result.all())
 
 
 async def list_suppliers(
@@ -128,14 +181,16 @@ async def update_supplier(
 
 
 async def delete_supplier(session: AsyncSession, supplier: Supplier) -> None:
-    """Delete a supplier.
+    """Delete a supplier. Fails if any container still references it.
 
-    Parameters
-    ----------
-    session : AsyncSession
-        The database session.
-    supplier : Supplier
-        The supplier instance to delete.
+    Raises
+    ------
+    SupplierInUseError
+        If one or more containers reference this supplier.
     """
+    counts = await count_supplier_containers(session, [supplier.id])
+    count = counts.get(supplier.id, 0)
+    if count > 0:
+        raise SupplierInUseError(count)
     await session.delete(supplier)
     await session.flush()

@@ -1,6 +1,12 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import client from "../client";
-import type { PaginatedResponse, SupplierRead, SupplierCreate, SupplierUpdate } from "../../types";
+import type {
+  PaginatedResponse,
+  SupplierRead,
+  SupplierCreate,
+  SupplierUpdate,
+  SupplierContainerRow,
+} from "../../types";
 
 export function useSuppliers(groupId: string, search?: string) {
   return useQuery<PaginatedResponse<SupplierRead>>({
@@ -32,6 +38,17 @@ export function useDeleteSupplier(groupId: string) {
   return useMutation({
     mutationFn: (supplierId: string) => client.delete(`/groups/${groupId}/suppliers/${supplierId}`),
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["suppliers", groupId] }); },
+  });
+}
+
+export function useSupplierContainers(groupId: string, supplierId: string | null) {
+  return useQuery<SupplierContainerRow[]>({
+    queryKey: ["suppliers", groupId, supplierId, "containers"],
+    queryFn: () =>
+      client
+        .get(`/groups/${groupId}/suppliers/${supplierId}/containers`)
+        .then((r) => r.data),
+    enabled: !!groupId && !!supplierId,
   });
 }
 

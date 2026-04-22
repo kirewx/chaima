@@ -3,12 +3,22 @@ from uuid import UUID
 
 from fastapi import APIRouter, HTTPException, Query, status
 
-from chaima.dependencies import GroupMemberDep, SessionDep
+from chaima.dependencies import GroupAdminDep, GroupMemberDep, SessionDep
 from chaima.schemas.pagination import PaginatedResponse
-from chaima.schemas.supplier import SupplierCreate, SupplierRead, SupplierUpdate
+from chaima.schemas.supplier import (
+    SupplierContainerRow,
+    SupplierCreate,
+    SupplierRead,
+    SupplierUpdate,
+)
 from chaima.services import suppliers as supplier_service
 
 router = APIRouter(prefix="/api/v1/groups/{group_id}/suppliers", tags=["suppliers"])
+
+
+def _supplier_read_with_count(supplier, container_count: int) -> SupplierRead:
+    data = SupplierRead.model_validate(supplier, from_attributes=True)
+    return data.model_copy(update={"container_count": container_count})
 
 
 @router.get("", response_model=PaginatedResponse[SupplierRead])
@@ -51,8 +61,11 @@ async def list_suppliers(
     items, total = await supplier_service.list_suppliers(
         session, group_id, search=search, sort=sort, order=order, offset=offset, limit=limit
     )
+    counts = await supplier_service.count_supplier_containers(
+        session, [s.id for s in items]
+    )
     return PaginatedResponse(
-        items=[SupplierRead.model_validate(i, from_attributes=True) for i in items],
+        items=[_supplier_read_with_count(s, counts.get(s.id, 0)) for s in items],
         total=total,
         offset=offset,
         limit=limit,
@@ -66,6 +79,7 @@ async def create_supplier(
     session: SessionDep,
     member: GroupMemberDep,
 ) -> SupplierRead:
+    # Any group member can create suppliers inline while adding a container.
     """Create a supplier.
 
     Parameters
@@ -86,7 +100,8 @@ async def create_supplier(
     """
     supplier = await supplier_service.create_supplier(session, group_id=group_id, name=body.name)
     await session.commit()
-    return SupplierRead.model_validate(supplier, from_attributes=True)
+    counts = await supplier_service.count_supplier_containers(session, [supplier.id])
+    return _supplier_read_with_count(supplier, counts.get(supplier.id, 0))
 
 
 @router.get("/{supplier_id}", response_model=SupplierRead)
@@ -122,7 +137,37 @@ async def get_supplier(
     supplier = await supplier_service.get_supplier(session, supplier_id)
     if supplier is None or supplier.group_id != group_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found")
-    return SupplierRead.model_validate(supplier, from_attributes=True)
+    counts = await supplier_service.count_supplier_containers(session, [supplier.id])
+    return _supplier_read_with_count(supplier, counts.get(supplier.id, 0))
+
+
+@router.get(
+    "/{supplier_id}/containers",
+    response_model=list[SupplierContainerRow],
+)
+async def list_supplier_containers(
+    group_id: UUID,
+    supplier_id: UUID,
+    session: SessionDep,
+    member: GroupMemberDep,
+) -> list[SupplierContainerRow]:
+    """List containers attached to a supplier (with chemical name)."""
+    supplier = await supplier_service.get_supplier(session, supplier_id)
+    if supplier is None or supplier.group_id != group_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found")
+    rows = await supplier_service.list_supplier_containers(session, supplier_id)
+    return [
+        SupplierContainerRow(
+            id=container.id,
+            identifier=container.identifier,
+            amount=container.amount,
+            unit=container.unit,
+            is_archived=container.is_archived,
+            chemical_id=container.chemical_id,
+            chemical_name=chemical_name,
+        )
+        for container, chemical_name in rows
+    ]
 
 
 @router.patch("/{supplier_id}", response_model=SupplierRead)
@@ -131,7 +176,7 @@ async def update_supplier(
     supplier_id: UUID,
     body: SupplierUpdate,
     session: SessionDep,
-    member: GroupMemberDep,
+    admin: GroupAdminDep,
 ) -> SupplierRead:
     """Update a supplier.
 
@@ -163,7 +208,8 @@ async def update_supplier(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found")
     updated = await supplier_service.update_supplier(session, supplier, name=body.name)
     await session.commit()
-    return SupplierRead.model_validate(updated, from_attributes=True)
+    counts = await supplier_service.count_supplier_containers(session, [updated.id])
+    return _supplier_read_with_count(updated, counts.get(updated.id, 0))
 
 
 @router.delete("/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -171,7 +217,7 @@ async def delete_supplier(
     group_id: UUID,
     supplier_id: UUID,
     session: SessionDep,
-    member: GroupMemberDep,
+    admin: GroupAdminDep,
 ) -> None:
     """Delete a supplier.
 
@@ -194,5 +240,14 @@ async def delete_supplier(
     supplier = await supplier_service.get_supplier(session, supplier_id)
     if supplier is None or supplier.group_id != group_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found")
-    await supplier_service.delete_supplier(session, supplier)
+    try:
+        await supplier_service.delete_supplier(session, supplier)
+    except supplier_service.SupplierInUseError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "Supplier is still assigned to containers; reassign them first.",
+                "container_count": exc.container_count,
+            },
+        )
     await session.commit()

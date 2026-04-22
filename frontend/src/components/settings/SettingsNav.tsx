@@ -6,6 +6,7 @@ export type SettingsSectionKey =
   | "group"
   | "members"
   | "hazard-tags"
+  | "suppliers"
   | "buildings"
   | "system";
 

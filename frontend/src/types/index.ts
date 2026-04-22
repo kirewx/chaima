@@ -212,6 +212,7 @@ export interface SupplierRead {
   name: string;
   group_id: string;
   created_at: string;
+  container_count: number;
 }
 
 export interface SupplierCreate {
@@ -220,6 +221,16 @@ export interface SupplierCreate {
 
 export interface SupplierUpdate {
   name?: string | null;
+}
+
+export interface SupplierContainerRow {
+  id: string;
+  identifier: string;
+  amount: number;
+  unit: string;
+  is_archived: boolean;
+  chemical_id: string;
+  chemical_name: string;
 }
 
 export type StorageKind = "building" | "room" | "cabinet" | "shelf";
