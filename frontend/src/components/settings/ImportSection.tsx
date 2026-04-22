@@ -6,8 +6,10 @@ import {
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import { SectionHeader } from "./SectionHeader";
 import { useImportPreview } from "../../api/hooks/useImport";
-import type { ImportPreviewResponse, ImportTarget } from "../../types";
+import type { ImportPreviewResponse, ImportTarget, ImportLocationMapping } from "../../types";
 import { IMPORT_TARGETS } from "../../types";
+import { useStorageTree } from "../../api/hooks/useStorageLocations";
+import LocationPicker from "../LocationPicker";
 
 type WizardState =
   | { step: "upload" }
@@ -64,7 +66,16 @@ export function ImportSection({ groupId }: Props) {
         />
       )}
       {state.step === "locations" && (
-        <Alert severity="info">Location mapping — coming in Task 2.10.</Alert>
+        <LocationMappingStep
+          groupId={groupId}
+          distinct={distinctLocations(state.preview.rows, state.preview.columns, state.columnMapping)}
+          onBack={() =>
+            setState({ step: "columns", preview: state.preview, file: (state as any).file })
+          }
+          onNext={() => {
+            setState({ step: "review" });
+          }}
+        />
       )}
     </Box>
   );
@@ -174,6 +185,138 @@ function ColumnMappingStep({
       <Stack direction="row" spacing={1} sx={{ justifyContent: "flex-end" }}>
         <Button onClick={onBack}>Back</Button>
         <Button variant="contained" disabled={!canProceed} onClick={() => onNext(mapping, quCombined)}>
+          Next
+        </Button>
+      </Stack>
+    </Stack>
+  );
+}
+
+function distinctLocations(rows: string[][], columns: string[], mapping: Record<string, string>): string[] {
+  const colIdx = columns.findIndex((c) => mapping[c] === "location_text");
+  if (colIdx < 0) return [];
+  const set = new Set<string>();
+  for (const r of rows) {
+    const v = (r[colIdx] ?? "").trim();
+    if (v) set.add(v);
+  }
+  return Array.from(set).sort();
+}
+
+function LocationMappingStep({
+  groupId,
+  distinct,
+  onBack,
+  onNext,
+}: {
+  groupId: string;
+  distinct: string[];
+  onBack: () => void;
+  onNext: (mappings: ImportLocationMapping[]) => void;
+}) {
+  const { data: tree = [] } = useStorageTree(groupId);
+  const [rows, setRows] = useState<Record<string, { mode: "existing" | "new"; location_id?: string; new_name?: string; parent_id?: string | null }>>(() => {
+    const init: Record<string, { mode: "new"; new_name: string }> = {};
+    for (const d of distinct) init[d] = { mode: "new", new_name: d };
+    return init;
+  });
+  const [pickerFor, setPickerFor] = useState<string | null>(null);
+
+  const allMapped = distinct.every((d) => {
+    const r = rows[d];
+    if (!r) return false;
+    if (r.mode === "existing") return !!r.location_id;
+    return (r.new_name ?? "").trim() !== "";
+  });
+
+  const submit = () => {
+    const out: ImportLocationMapping[] = distinct.map((d) => {
+      const r = rows[d];
+      if (r.mode === "existing") {
+        return { source_text: d, location_id: r.location_id ?? null, new_location: null };
+      }
+      return {
+        source_text: d,
+        location_id: null,
+        new_location: { name: (r.new_name ?? "").trim(), parent_id: r.parent_id ?? null },
+      };
+    });
+    onNext(out);
+  };
+
+  return (
+    <Stack spacing={2}>
+      <Typography variant="body2" color="text.secondary">
+        Map each distinct location string to an existing storage location or create a new one.
+        Newly created ones are flat (no parent) by default.
+      </Typography>
+
+      <Paper variant="outlined" sx={{ overflow: "hidden" }}>
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <TableCell>Source text</TableCell>
+              <TableCell>Mode</TableCell>
+              <TableCell>Target</TableCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {distinct.map((d) => {
+              const r = rows[d];
+              return (
+                <TableRow key={d}>
+                  <TableCell sx={{ fontWeight: 500 }}>{d}</TableCell>
+                  <TableCell>
+                    <TextField
+                      select size="small" value={r.mode}
+                      onChange={(e) => {
+                        const mode = e.target.value as "existing" | "new";
+                        setRows((s) => ({ ...s, [d]: mode === "existing"
+                          ? { mode: "existing" }
+                          : { mode: "new", new_name: d } }));
+                      }}
+                    >
+                      <MenuItem value="existing">Pick existing</MenuItem>
+                      <MenuItem value="new">Create new</MenuItem>
+                    </TextField>
+                  </TableCell>
+                  <TableCell>
+                    {r.mode === "existing" ? (
+                      <Button size="small" variant="outlined" onClick={() => setPickerFor(d)}>
+                        {r.location_id ? "Change\u2026" : "Pick location"}
+                      </Button>
+                    ) : (
+                      <TextField
+                        size="small"
+                        value={r.new_name ?? ""}
+                        onChange={(e) =>
+                          setRows((s) => ({ ...s, [d]: { ...s[d], new_name: e.target.value } }))
+                        }
+                      />
+                    )}
+                  </TableCell>
+                </TableRow>
+              );
+            })}
+          </TableBody>
+        </Table>
+      </Paper>
+
+      <LocationPicker
+        open={pickerFor !== null}
+        onClose={() => setPickerFor(null)}
+        onSelect={(id) => {
+          if (pickerFor) {
+            setRows((s) => ({ ...s, [pickerFor]: { mode: "existing", location_id: id } }));
+          }
+          setPickerFor(null);
+        }}
+        tree={tree}
+      />
+
+      <Stack direction="row" spacing={1} sx={{ justifyContent: "flex-end" }}>
+        <Button onClick={onBack}>Back</Button>
+        <Button variant="contained" disabled={!allMapped} onClick={submit}>
           Next
         </Button>
       </Stack>
