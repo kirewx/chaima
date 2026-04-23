@@ -14,6 +14,7 @@ from chaima.models.chemical import Chemical, ChemicalSynonym
 from chaima.models.container import Container
 from chaima.models.ghs import ChemicalGHS, GHSCode
 from chaima.models.hazard import ChemicalHazardTag, HazardTag
+from chaima.models.supplier import Supplier
 from chaima.models.user import User
 
 
@@ -250,10 +251,21 @@ async def list_chemicals(
             .correlate(Chemical)
             .exists()
         )
+        supplier_match = (
+            select(Container.id)
+            .join(Supplier, Container.supplier_id == Supplier.id)
+            .where(
+                Container.chemical_id == Chemical.id,
+                Supplier.name.ilike(f"%{search}%"),  # type: ignore[union-attr]
+            )
+            .correlate(Chemical)
+            .exists()
+        )
         query = query.where(
             Chemical.name.ilike(f"%{search}%")  # type: ignore[union-attr]
             | Chemical.cas.ilike(f"%{search}%")  # type: ignore[union-attr]
             | container_match
+            | supplier_match
         )
 
     if hazard_tag_id:

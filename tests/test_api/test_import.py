@@ -50,18 +50,20 @@ async def test_commit_happy_path(client, session, group, user, admin_membership)
     assert summary["created_locations"] == 1
 
 
-async def test_commit_validation_error_400(client, group, admin_membership):
+async def test_commit_blank_rows_skipped(client, group, admin_membership):
     body = {
         "column_mapping": {"Name": "name", "Q": "quantity", "U": "unit"},
         "quantity_unit_combined_column": None,
         "columns": ["Name", "Q", "U"],
-        "rows": [["", "1", "L"]],
+        "rows": [["Ethanol", "1", "L"], ["", "1", "L"]],
         "location_mapping": [],
-        "chemical_groups": [{"canonical_name": "x", "canonical_cas": None, "row_indices": [0]}],
+        "chemical_groups": [
+            {"canonical_name": "Ethanol", "canonical_cas": None, "row_indices": [0]},
+            {"canonical_name": "", "canonical_cas": None, "row_indices": [1]},
+        ],
     }
     resp = await client.post(
         f"/api/v1/groups/{group.id}/import/commit", json=body,
     )
-    assert resp.status_code == 400
-    detail = resp.json()["detail"]
-    assert any("name" in e["reason"].lower() for e in detail["errors"])
+    assert resp.status_code == 200
+    assert resp.json()["created_chemicals"] == 1

@@ -5,6 +5,12 @@ from dataclasses import dataclass
 from io import BytesIO, StringIO
 from typing import Literal
 
+from sqlalchemy.orm import selectinload
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
+
+from chaima.models.import_log import ImportLog
+
 _QU_RE = re.compile(r"^\s*(-?\d+(?:[.,]\d+)?)\s*([a-zA-ZµμÅ%°]+)?\s*$")
 
 
@@ -35,6 +41,10 @@ _HEADER_PATTERNS: list[tuple[str, str]] = [
     ("standort", "location_text"),
     ("location", "location_text"),
     ("lagerort", "location_text"),
+    ("lieferant", "supplier_text"),
+    ("hersteller", "supplier_text"),
+    ("supplier", "supplier_text"),
+    ("vendor", "supplier_text"),
     ("reinheit", "purity"),
     ("purity", "purity"),
     ("bestellt von", "ordered_by"),
@@ -133,6 +143,7 @@ class ParsedRow:
     name: str | None
     cas: str | None
     location_text: str | None
+    supplier_text: str | None
     quantity: float | None
     unit: str | None
     purity: str | None
@@ -142,6 +153,7 @@ class ParsedRow:
     created_by_name: str | None
     comment: str | None
     errors: list[str]
+    warnings: list[str]
 
 
 class MappingValidationError(ValueError):
@@ -160,20 +172,16 @@ def apply_column_mapping(
     missing = _REQUIRED_TARGETS - targets_in_use
     if missing:
         raise MappingValidationError(f"Missing required columns: {sorted(missing)}")
-    has_qty = "quantity" in targets_in_use
-    has_qu = qu_combined_column is not None
-    if not (has_qty or has_qu):
-        raise MappingValidationError(
-            "Need either a 'quantity' column or a 'quantity_unit_combined' column"
-        )
 
     col_index = {col: i for i, col in enumerate(grid.columns)}
     parsed: list[ParsedRow] = []
     for i, row in enumerate(grid.rows):
         errors: list[str] = []
+        warnings: list[str] = []
         values: dict[str, str | None] = {t: None for t in [
-            "name", "cas", "location_text", "quantity", "unit", "purity",
-            "purchased_at", "ordered_by", "identifier", "created_by_name", "comment",
+            "name", "cas", "location_text", "supplier_text", "quantity", "unit",
+            "purity", "purchased_at", "ordered_by", "identifier",
+            "created_by_name", "comment",
         ]}
         qty: float | None = None
         unit: str | None = None
@@ -182,31 +190,25 @@ def apply_column_mapping(
                 continue
             cell = row[col_index[source_col]] if col_index[source_col] < len(row) else ""
             cell = cell.strip() if cell else ""
-            if target == "quantity_unit_combined":
-                q, u = split_quantity_unit(cell)
-                if cell and q is None:
-                    errors.append(f"Unparseable quantity+unit cell: {cell!r}")
-                qty = q if q is not None else qty
-                unit = u if u is not None else unit
-            elif target == "quantity":
+            if target in ("quantity_unit_combined", "quantity"):
                 if cell:
-                    try:
-                        qty = float(cell.replace(",", "."))
-                    except ValueError:
-                        errors.append(f"Unparseable quantity: {cell!r}")
+                    q, u = _parse_qty(cell)
+                    qty = q if q is not None else qty
+                    if u is not None:
+                        unit = u
+                    if q is None:
+                        warnings.append(f"Could not parse quantity from '{cell}'")
             elif target == "unit":
                 unit = cell or None
             else:
                 values[target] = cell or None
-
-        if not values.get("name"):
-            errors.append("Missing chemical name")
 
         parsed.append(ParsedRow(
             index=i,
             name=values["name"],
             cas=values["cas"],
             location_text=values["location_text"],
+            supplier_text=values["supplier_text"],
             quantity=qty,
             unit=unit,
             purity=values["purity"],
@@ -216,8 +218,31 @@ def apply_column_mapping(
             created_by_name=values["created_by_name"],
             comment=values["comment"],
             errors=errors,
+            warnings=warnings,
         ))
     return parsed
+
+
+_NUM_RE = re.compile(r"(-?\d+(?:[.,]\d+)?)")
+
+
+def _parse_qty(cell: str) -> tuple[float | None, str | None]:
+    try:
+        return (float(cell.replace(",", ".")), None)
+    except ValueError:
+        pass
+    q, u = split_quantity_unit(cell)
+    if q is not None:
+        return (q, u)
+    m = _NUM_RE.search(cell)
+    if m is None:
+        return (None, None)
+    num_str = m.group(1).replace(",", ".")
+    rest = re.sub(r"[\d.,]", "", cell).strip()
+    try:
+        return (float(num_str), rest or None)
+    except ValueError:
+        return (None, None)
 
 
 @dataclass
@@ -282,6 +307,7 @@ class ImportSummary:
     created_containers: int
     created_locations: int
     skipped_rows: list[dict]
+    warnings: list[dict]
 
 
 class ImportValidationError(ValueError):
@@ -298,7 +324,7 @@ async def commit_import(
     payload: CommitPayload,
 ) -> ImportSummary:
     from chaima.models.chemical import Chemical
-    from chaima.models.storage import StorageKind, StorageLocation
+    from chaima.models.storage import StorageKind, StorageLocation, StorageLocationGroup
     from chaima.services import containers as container_service
 
     parsed = apply_column_mapping(
@@ -306,9 +332,24 @@ async def commit_import(
         payload.column_mapping,
         payload.quantity_unit_combined_column,
     )
-    errors = [{"index": r.index, "reason": "; ".join(r.errors)} for r in parsed if r.errors]
-    if errors:
-        raise ImportValidationError(errors)
+    blank_indices: set[int] = set()
+    real_errors: list[dict] = []
+    row_warnings: list[dict] = []
+    for r in parsed:
+        if not r.name:
+            blank_indices.add(r.index)
+            continue
+        if r.errors:
+            real_errors.append({"index": r.index, "reason": "; ".join(r.errors)})
+        if r.warnings:
+            row_warnings.append({
+                "chemical": r.name,
+                "row": r.index + 1,
+                "details": "; ".join(r.warnings),
+            })
+    if real_errors:
+        raise ImportValidationError(real_errors)
+    parsed = [r for r in parsed if r.index not in blank_indices]
 
     location_text_to_id: dict[str, uuid_pkg.UUID] = {}
     created_locations = 0
@@ -323,6 +364,8 @@ async def commit_import(
             )
             session.add(new_loc)
             await session.flush()
+            session.add(StorageLocationGroup(location_id=new_loc.id, group_id=group_id))
+            await session.flush()
             location_text_to_id[lm.source_text] = new_loc.id
             created_locations += 1
         else:
@@ -330,29 +373,84 @@ async def commit_import(
                 [{"index": -1, "reason": f"Location '{lm.source_text}' has no mapping"}]
             )
 
+    from sqlmodel import select
+
+    existing_chems = (await session.exec(
+        select(Chemical).where(Chemical.group_id == group_id)
+    )).all()
+    chem_by_name: dict[str, uuid_pkg.UUID] = {
+        c.name.strip().lower(): c.id for c in existing_chems
+    }
+
     row_to_chemical: dict[int, uuid_pkg.UUID] = {}
     created_chemicals = 0
     for cg in payload.chemical_groups:
-        chem = Chemical(
-            name=cg.canonical_name,
-            cas=cg.canonical_cas,
-            group_id=group_id,
-            created_by=viewer_id,
-        )
-        session.add(chem)
-        await session.flush()
-        created_chemicals += 1
+        if not (cg.canonical_name or "").strip():
+            continue
+        key = cg.canonical_name.strip().lower()
+        existing_id = chem_by_name.get(key)
+        if existing_id:
+            chem_id = existing_id
+        else:
+            chem = Chemical(
+                name=cg.canonical_name,
+                cas=cg.canonical_cas,
+                group_id=group_id,
+                created_by=viewer_id,
+            )
+            session.add(chem)
+            await session.flush()
+            chem_id = chem.id
+            chem_by_name[key] = chem_id
+            created_chemicals += 1
         for idx in cg.row_indices:
-            row_to_chemical[idx] = chem.id
+            row_to_chemical[idx] = chem_id
+
+    from chaima.models.supplier import Supplier
+
+    supplier_cache: dict[str, uuid_pkg.UUID] = {}
+    existing_suppliers = (await session.exec(
+        select(Supplier).where(Supplier.group_id == group_id)
+    )).all()
+    for s in existing_suppliers:
+        supplier_cache[s.name.strip().lower()] = s.id
+
+    default_location_id: uuid_pkg.UUID | None = None
+    created_suppliers = 0
 
     created_containers = 0
     for row in parsed:
         chem_id = row_to_chemical.get(row.index)
         if chem_id is None:
-            raise ImportValidationError(
-                [{"index": row.index, "reason": "Row not assigned to any chemical group"}]
-            )
-        loc_id = location_text_to_id.get(row.location_text or "")
+            continue
+        loc_id = location_text_to_id.get(row.location_text or "") if row.location_text else None
+        if loc_id is None:
+            if default_location_id is None:
+                default_loc = StorageLocation(
+                    name="Imported",
+                    kind=StorageKind.CABINET,
+                )
+                session.add(default_loc)
+                await session.flush()
+                session.add(StorageLocationGroup(location_id=default_loc.id, group_id=group_id))
+                await session.flush()
+                default_location_id = default_loc.id
+                created_locations += 1
+            loc_id = default_location_id
+
+        supplier_id: uuid_pkg.UUID | None = None
+        if row.supplier_text:
+            key = row.supplier_text.strip().lower()
+            if key in supplier_cache:
+                supplier_id = supplier_cache[key]
+            else:
+                new_sup = Supplier(name=row.supplier_text.strip(), group_id=group_id)
+                session.add(new_sup)
+                await session.flush()
+                supplier_cache[key] = new_sup.id
+                supplier_id = new_sup.id
+                created_suppliers += 1
+
         identifier = row.identifier or _next_identifier(row.name or "X")
         try:
             container = await container_service.create_container(
@@ -363,6 +461,7 @@ async def commit_import(
                 amount=row.quantity if row.quantity is not None else 0.0,
                 unit=row.unit or "",
                 created_by=viewer_id,
+                supplier_id=supplier_id,
             )
         except container_service.DuplicateIdentifier:
             identifier = f"{identifier}-{row.index}"
@@ -374,6 +473,7 @@ async def commit_import(
                 amount=row.quantity if row.quantity is not None else 0.0,
                 unit=row.unit or "",
                 created_by=viewer_id,
+                supplier_id=supplier_id,
             )
         if row.ordered_by:
             container.ordered_by_name = row.ordered_by
@@ -387,6 +487,7 @@ async def commit_import(
         created_containers=created_containers,
         created_locations=created_locations,
         skipped_rows=[],
+        warnings=row_warnings,
     )
 
 
@@ -397,3 +498,40 @@ def _next_identifier(chem_name: str) -> str:
     key = chem_name[:1].upper() if chem_name else "X"
     _identifier_counters[key] = _identifier_counters.get(key, 0) + 1
     return f"{key}-IMP-{_identifier_counters[key]:04d}"
+
+
+async def find_previous_import(
+    session: AsyncSession,
+    *,
+    group_id: uuid_pkg.UUID,
+    file_name: str,
+) -> ImportLog | None:
+    if not file_name:
+        return None
+    result = await session.exec(
+        select(ImportLog)
+        .where(ImportLog.group_id == group_id, ImportLog.file_name == file_name)
+        .options(selectinload(ImportLog.user))  # type: ignore[arg-type]
+        .order_by(ImportLog.created_at.desc())  # type: ignore[union-attr]
+        .limit(1)
+    )
+    return result.first()
+
+
+async def log_import(
+    session: AsyncSession,
+    *,
+    group_id: uuid_pkg.UUID,
+    file_name: str,
+    imported_by: uuid_pkg.UUID,
+    row_count: int,
+) -> ImportLog:
+    entry = ImportLog(
+        group_id=group_id,
+        file_name=file_name,
+        imported_by=imported_by,
+        row_count=row_count,
+    )
+    session.add(entry)
+    await session.flush()
+    return entry

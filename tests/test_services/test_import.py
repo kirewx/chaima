@@ -125,7 +125,7 @@ def test_apply_column_mapping_combined_qu():
     assert parsed[0].unit == "mL"
     assert parsed[0].errors == []
     assert parsed[1].quantity is None
-    assert "unparseable" in parsed[1].errors[0].lower()
+    assert parsed[1].errors == []
 
 
 def test_apply_column_mapping_missing_required_name():
@@ -169,6 +169,7 @@ def _parsed(index, **kw):
         name=kw.get("name"),
         cas=kw.get("cas"),
         location_text=kw.get("location_text"),
+        supplier_text=kw.get("supplier_text"),
         quantity=kw.get("quantity"),
         unit=kw.get("unit"),
         purity=kw.get("purity"),
@@ -178,6 +179,7 @@ def _parsed(index, **kw):
         created_by_name=kw.get("created_by_name"),
         comment=kw.get("comment"),
         errors=[],
+        warnings=[],
     )
 
 
@@ -226,7 +228,7 @@ async def test_commit_import_happy_path(session, group, user):
     assert {c.name for c in chems} == {"Ethanol", "Acetone"}
 
 
-async def test_commit_import_validation_error(session, group, user):
+async def test_commit_import_skips_blank_rows(session, group, user):
     payload = import_service.CommitPayload(
         column_mapping={"Name": "name", "Qty": "quantity", "Unit": "unit"},
         quantity_unit_combined_column=None,
@@ -237,13 +239,16 @@ async def test_commit_import_validation_error(session, group, user):
         columns=["Name", "Qty", "Unit"],
         location_mapping=[],
         chemical_groups=[
-            import_service.ChemicalGroupPayload(canonical_name="Ethanol", canonical_cas=None, row_indices=[0, 1]),
+            import_service.ChemicalGroupPayload(canonical_name="Ethanol", canonical_cas=None, row_indices=[0]),
+            import_service.ChemicalGroupPayload(canonical_name="", canonical_cas=None, row_indices=[1]),
         ],
     )
-    with pytest.raises(import_service.ImportValidationError):
-        await import_service.commit_import(
-            session, group_id=group.id, viewer_id=user.id, payload=payload,
-        )
+    summary = await import_service.commit_import(
+        session, group_id=group.id, viewer_id=user.id, payload=payload,
+    )
+    await session.commit()
+    assert summary.created_chemicals == 1
+    assert summary.created_containers == 1
 
 
 async def test_commit_import_uses_existing_location(session, group, user):

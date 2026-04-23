@@ -11,7 +11,6 @@ import { ChemicalList } from "../components/ChemicalList";
 import { FilterBar, type ActiveFilter } from "../components/FilterBar";
 import { useDrawer } from "../components/drawer/DrawerContext";
 import FilterDrawer, { type FilterState } from "../components/FilterDrawer";
-import { ExportButton } from "../components/chemicals/ExportButton";
 import type { ChemicalSearchParams } from "../types";
 
 export default function ChemicalsPage() {
@@ -119,7 +118,7 @@ export default function ChemicalsPage() {
         <TextField
           size="small"
           fullWidth
-          placeholder="Search chemical, CAS or container ID…"
+          placeholder="Search chemical, CAS, container ID or supplier…"
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           slotProps={{
@@ -143,11 +142,6 @@ export default function ChemicalsPage() {
             New
           </Box>
         </Button>
-        <ExportButton
-          groupId={groupId}
-          params={searchParams}
-          includeArchived={filters.includeArchived}
-        />
         <Badge
           color="primary"
           variant="dot"

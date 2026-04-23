@@ -328,12 +328,19 @@ export interface PubChemLookupResult {
   ghs_codes: PubChemGHSHit[];
 }
 
+export interface PreviousImport {
+  imported_at: string;
+  imported_by_name: string;
+  row_count: number;
+}
+
 export interface ImportPreviewResponse {
   columns: string[];
   rows: string[][];
   row_count: number;
   sheets: string[] | null;
   detected_mapping: Record<string, string>;
+  previous_import: PreviousImport | null;
 }
 
 export interface ImportLocationMapping {
@@ -349,6 +356,7 @@ export interface ImportChemicalGroup {
 }
 
 export interface ImportCommitBody {
+  file_name: string;
   column_mapping: Record<string, string>;
   quantity_unit_combined_column: string | null;
   columns: string[];
@@ -357,20 +365,27 @@ export interface ImportCommitBody {
   chemical_groups: ImportChemicalGroup[];
 }
 
+export interface ImportWarning {
+  chemical: string;
+  row: number;
+  details: string;
+}
+
 export interface ImportCommitResponse {
   created_chemicals: number;
   created_containers: number;
   created_locations: number;
   skipped_rows: { index: number; reason: string }[];
+  warnings: ImportWarning[];
 }
 
 export type ImportTarget =
-  | "name" | "cas" | "location_text" | "quantity" | "unit"
+  | "name" | "cas" | "location_text" | "supplier_text" | "quantity" | "unit"
   | "quantity_unit_combined" | "purity" | "purchased_at"
   | "ordered_by" | "identifier" | "created_by_name" | "comment" | "ignore";
 
 export const IMPORT_TARGETS: ImportTarget[] = [
-  "name", "cas", "location_text", "quantity", "unit", "quantity_unit_combined",
-  "purity", "purchased_at", "ordered_by", "identifier", "created_by_name",
-  "comment", "ignore",
+  "name", "cas", "location_text", "supplier_text", "quantity", "unit",
+  "quantity_unit_combined", "purity", "purchased_at", "ordered_by",
+  "identifier", "created_by_name", "comment", "ignore",
 ];

@@ -5,7 +5,6 @@ import {
 } from "@mui/material";
 import ScienceIcon from "@mui/icons-material/Science";
 import { SectionHeader } from "./SectionHeader";
-import client from "../../api/client";
 
 interface Props {
   groupId: string;
@@ -26,15 +25,27 @@ export function ChemicalsAdminSection({ groupId }: Props) {
     setEvents([]);
     setErr(null);
     try {
-      const resp = await client.post(
-        `/groups/${groupId}/chemicals/enrich-pubchem`,
-        { chemical_ids: null },
-        { responseType: "text" },
-      );
-      for (const line of (resp.data as string).split("\n")) {
-        if (!line.startsWith("data: ")) continue;
-        const ev = JSON.parse(line.slice(6)) as EnrichEvent;
-        setEvents((prev) => [...prev, ev]);
+      const resp = await fetch(`/api/v1/groups/${groupId}/chemicals/enrich-pubchem`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chemical_ids: null }),
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const reader = resp.body!.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split("\n");
+        buf = parts.pop()!;
+        for (const line of parts) {
+          if (!line.startsWith("data: ")) continue;
+          const ev = JSON.parse(line.slice(6)) as EnrichEvent;
+          setEvents((prev) => [...prev, ev]);
+        }
       }
     } catch (e) {
       setErr((e as Error).message);

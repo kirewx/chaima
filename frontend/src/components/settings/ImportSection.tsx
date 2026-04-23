@@ -1,18 +1,37 @@
 import { useState } from "react";
 import {
-  Alert, Box, Button, MenuItem, Paper, Stack, Stepper, Step, StepLabel,
+  Alert, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle,
+  Divider, Menu, MenuItem, Paper, Stack, Stepper, Step, StepLabel,
   Table, TableBody, TableCell, TableHead, TableRow, TextField, Typography,
 } from "@mui/material";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
+import FileDownloadIcon from "@mui/icons-material/FileDownload";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { SectionHeader } from "./SectionHeader";
 import { useImportPreview, useImportCommit } from "../../api/hooks/useImport";
 import type {
   ImportPreviewResponse, ImportTarget, ImportLocationMapping,
-  ImportChemicalGroup, ImportCommitBody, ImportCommitResponse,
+  ImportChemicalGroup, ImportCommitBody, ImportCommitResponse, PreviousImport,
 } from "../../types";
 import { IMPORT_TARGETS } from "../../types";
 import { useStorageTree } from "../../api/hooks/useStorageLocations";
 import LocationPicker from "../LocationPicker";
+import client from "../../api/client";
+import type { AxiosError } from "axios";
+
+function formatImportError(err: unknown): string {
+  const axErr = err as AxiosError<{ detail?: { message?: string; errors?: { index: number; reason: string }[] } | string }>;
+  const detail = axErr?.response?.data?.detail;
+  if (typeof detail === "string") return detail;
+  if (detail?.errors?.length) {
+    const first3 = detail.errors.slice(0, 3);
+    const lines = first3.map((e) => `Row ${e.index + 1}: ${e.reason}`);
+    if (detail.errors.length > 3) lines.push(`…and ${detail.errors.length - 3} more`);
+    return lines.join("\n");
+  }
+  if (detail?.message) return detail.message;
+  return err instanceof Error ? err.message : "Import failed";
+}
 
 type WizardState =
   | { step: "upload" }
@@ -31,16 +50,29 @@ interface Props {
 export function ImportSection({ groupId }: Props) {
   const [state, setState] = useState<WizardState>({ step: "upload" });
   const preview = useImportPreview(groupId);
+  const [dupWarning, setDupWarning] = useState<{ prev: PreviousImport; res: ImportPreviewResponse; file: File } | null>(null);
 
   const steps = ["Upload", "Columns", "Locations", "Review", "Done"];
   const activeStep = { upload: 0, columns: 1, locations: 2, review: 3, done: 4 }[state.step];
 
+  const proceedToColumns = (res: ImportPreviewResponse, file: File) => {
+    setState({ step: "columns", preview: res, file });
+  };
+
   return (
     <Box>
       <SectionHeader
-        title="Import data"
-        subtitle="Ingest a lab inventory from Excel or CSV. One-time setup — import once, then use chaima going forward."
+        title="Import & Export"
+        subtitle="Import data from Excel/CSV or export your current inventory."
       />
+
+      <ExportPanel groupId={groupId} />
+      <Divider sx={{ my: 3 }} />
+
+      <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>Import data</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+        Ingest a lab inventory from Excel or CSV. One-time setup — import once, then use chaima going forward.
+      </Typography>
 
       <Stepper activeStep={activeStep} sx={{ mb: 3 }}>
         {steps.map((s) => <Step key={s}><StepLabel>{s}</StepLabel></Step>)}
@@ -50,12 +82,45 @@ export function ImportSection({ groupId }: Props) {
         <UploadStep
           onPicked={async (file) => {
             const res = await preview.mutateAsync({ file });
-            setState({ step: "columns", preview: res, file });
+            if (res.previous_import) {
+              setDupWarning({ prev: res.previous_import, res, file });
+            } else {
+              proceedToColumns(res, file);
+            }
           }}
           loading={preview.isPending}
           error={preview.error}
         />
       )}
+
+      <Dialog open={dupWarning !== null} onClose={() => setDupWarning(null)}>
+        <DialogTitle sx={{ display: "flex", alignItems: "center", gap: 1 }}>
+          <WarningAmberIcon color="warning" /> File already imported
+        </DialogTitle>
+        <DialogContent>
+          {dupWarning && (
+            <Typography>
+              <b>{dupWarning.file.name}</b> was already imported on{" "}
+              {new Date(dupWarning.prev.imported_at).toLocaleDateString()} by{" "}
+              {dupWarning.prev.imported_by_name} ({dupWarning.prev.row_count} rows).
+              Importing again may create duplicate chemicals and containers.
+            </Typography>
+          )}
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setDupWarning(null)}>Cancel</Button>
+          <Button
+            variant="contained"
+            color="warning"
+            onClick={() => {
+              if (dupWarning) proceedToColumns(dupWarning.res, dupWarning.file);
+              setDupWarning(null);
+            }}
+          >
+            Import anyway
+          </Button>
+        </DialogActions>
+      </Dialog>
 
       {state.step === "columns" && (
         <ColumnMappingStep
@@ -94,6 +159,7 @@ export function ImportSection({ groupId }: Props) {
       {state.step === "review" && (
         <ChemicalReviewStep
           groupId={groupId}
+          fileName={state.file.name}
           preview={state.preview}
           columnMapping={state.columnMapping}
           quCombined={state.quCombined}
@@ -110,11 +176,43 @@ export function ImportSection({ groupId }: Props) {
         />
       )}
       {state.step === "done" && (
-        <Alert severity="success">
-          Created {state.summary.created_chemicals} chemicals, {state.summary.created_containers} containers,{" "}
-          {state.summary.created_locations} new locations.
-          <Button sx={{ ml: 2 }} onClick={() => setState({ step: "upload" })}>Import another</Button>
-        </Alert>
+        <Stack spacing={2}>
+          <Alert severity="success">
+            Created {state.summary.created_chemicals} chemicals, {state.summary.created_containers} containers,{" "}
+            {state.summary.created_locations} new locations.
+            <Button sx={{ ml: 2 }} onClick={() => setState({ step: "upload" })}>Import another</Button>
+          </Alert>
+          {state.summary.warnings.length > 0 && (
+            <Alert severity="warning">
+              <Typography variant="subtitle2" sx={{ mb: 1 }}>
+                {state.summary.warnings.length} row(s) need manual review (quantity could not be fully parsed):
+              </Typography>
+              <Table size="small" sx={{ "& td, & th": { py: 0.5, px: 1, border: 0 } }}>
+                <TableHead>
+                  <TableRow>
+                    <TableCell sx={{ fontWeight: 600 }}>Row</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Chemical</TableCell>
+                    <TableCell sx={{ fontWeight: 600 }}>Issue</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {state.summary.warnings.slice(0, 50).map((w, i) => (
+                    <TableRow key={i}>
+                      <TableCell>{w.row}</TableCell>
+                      <TableCell>{w.chemical}</TableCell>
+                      <TableCell>{w.details}</TableCell>
+                    </TableRow>
+                  ))}
+                </TableBody>
+              </Table>
+              {state.summary.warnings.length > 50 && (
+                <Typography variant="body2" sx={{ mt: 1 }}>
+                  …and {state.summary.warnings.length - 50} more. Check the imported chemicals in the list.
+                </Typography>
+              )}
+            </Alert>
+          )}
+        </Stack>
       )}
     </Box>
   );
@@ -170,14 +268,13 @@ function ColumnMappingStep({
   const quCombined = Object.entries(mapping).find(([, t]) => t === "quantity_unit_combined")?.[0] ?? null;
 
   const hasName = Object.values(mapping).includes("name");
-  const hasQty = Object.values(mapping).includes("quantity") || quCombined !== null;
-  const canProceed = hasName && hasQty;
+  const canProceed = hasName;
 
   return (
     <Stack spacing={2}>
       <Typography variant="body2" color="text.secondary">
         Map each column to a chaima field. Columns not needed: choose <b>ignore</b>.
-        Required: at least one <b>name</b> and either <b>quantity</b> or <b>quantity_unit_combined</b>.
+        Required: at least one <b>name</b>.
       </Typography>
 
       <Paper variant="outlined" sx={{ overflow: "hidden" }}>
@@ -217,7 +314,7 @@ function ColumnMappingStep({
 
       {!canProceed && (
         <Alert severity="warning">
-          At least one column must be mapped to <b>name</b>, and one to either <b>quantity</b> or <b>quantity_unit_combined</b>.
+          At least one column must be mapped to <b>name</b>.
         </Alert>
       )}
 
@@ -364,9 +461,10 @@ function LocationMappingStep({
 }
 
 function ChemicalReviewStep({
-  groupId, preview, columnMapping, quCombined, locations, onBack, onDone,
+  groupId, fileName, preview, columnMapping, quCombined, locations, onBack, onDone,
 }: {
   groupId: string;
+  fileName: string;
   preview: ImportPreviewResponse;
   columnMapping: Record<string, string>;
   quCombined: string | null;
@@ -380,6 +478,7 @@ function ChemicalReviewStep({
 
   const submit = async () => {
     const body: ImportCommitBody = {
+      file_name: fileName,
       column_mapping: columnMapping,
       quantity_unit_combined_column: quCombined,
       columns: preview.columns,
@@ -419,9 +518,9 @@ function ChemicalReviewStep({
         </Table>
       </Paper>
 
-      {commit.error instanceof Error && (
+      {commit.error != null && (
         <Alert severity="error">
-          {commit.error.message}
+          {formatImportError(commit.error)}
         </Alert>
       )}
 
@@ -458,4 +557,54 @@ function groupOnClient(
     }
   }
   return Array.from(buckets.values());
+}
+
+function ExportPanel({ groupId }: { groupId: string }) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const download = async (fmt: "csv" | "xlsx") => {
+    setAnchor(null);
+    setBusy(true);
+    try {
+      const resp = await client.get(
+        `/groups/${groupId}/chemicals/export`,
+        { params: { format: fmt }, responseType: "blob" },
+      );
+      const cd = resp.headers["content-disposition"] as string | undefined;
+      const match = cd?.match(/filename="([^"]+)"/);
+      const filename = match?.[1] ?? `chaima-export.${fmt}`;
+      const url = URL.createObjectURL(resp.data);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = filename;
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Stack spacing={1}>
+      <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>Export data</Typography>
+      <Typography variant="body2" color="text.secondary">
+        Download your full chemical inventory as Excel or CSV.
+      </Typography>
+      <Box>
+        <Button
+          variant="outlined"
+          startIcon={<FileDownloadIcon />}
+          disabled={busy}
+          onClick={(e) => setAnchor(e.currentTarget)}
+        >
+          Export
+        </Button>
+        <Menu open={Boolean(anchor)} anchorEl={anchor} onClose={() => setAnchor(null)}>
+          <MenuItem onClick={() => download("csv")}>CSV</MenuItem>
+          <MenuItem onClick={() => download("xlsx")}>Excel</MenuItem>
+        </Menu>
+      </Box>
+    </Stack>
+  );
 }

@@ -25,7 +25,7 @@ export default function SettingsPage() {
     { key: "members", label: "Members & Invites", group: "GROUP ADMIN", visible: isMember },
     { key: "hazard-tags", label: "Hazard tags", group: "GROUP ADMIN", visible: isMember },
     { key: "suppliers", label: "Suppliers", group: "GROUP ADMIN", visible: isMember },
-    { key: "import", label: "Import data", group: "GROUP ADMIN", visible: isMember },
+    { key: "import", label: "Import & Export", group: "GROUP ADMIN", visible: isMember },
     { key: "chemicals-admin", label: "Chemicals", group: "GROUP ADMIN", visible: isMember },
     { key: "buildings", label: "Buildings", group: "SYSTEM", visible: isSuperuser },
     { key: "system", label: "System", group: "SYSTEM", visible: isSuperuser },

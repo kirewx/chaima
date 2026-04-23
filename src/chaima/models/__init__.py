@@ -7,6 +7,7 @@ from chaima.models.hazard import (
     HazardTag,
     HazardTagIncompatibility,
 )
+from chaima.models.import_log import ImportLog
 from chaima.models.invite import Invite
 from chaima.models.storage import StorageLocation, StorageLocationGroup
 from chaima.models.supplier import Supplier
@@ -22,6 +23,7 @@ __all__ = [
     "Group",
     "HazardTag",
     "HazardTagIncompatibility",
+    "ImportLog",
     "Invite",
     "StorageLocation",
     "StorageLocationGroup",

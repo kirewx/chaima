@@ -1,5 +1,9 @@
 import { test, expect, type Page } from "@playwright/test";
 import path from "path";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
 
 async function loginAdmin(page: Page) {
   await page.goto("/login");
@@ -16,7 +20,7 @@ test.describe("Import wizard", () => {
 
   test("imports a fixture xlsx end-to-end", async ({ page }) => {
     await page.goto("/settings");
-    await page.getByRole("button", { name: /import data/i }).click();
+    await page.getByRole("button", { name: /import & export/i }).click();
 
     const fileInput = page.locator('input[type="file"]');
     await fileInput.setInputFiles(
