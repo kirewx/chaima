@@ -44,6 +44,7 @@ async def create_location(
     kind: StorageKind,
     description: str | None = None,
     parent_id: UUID | None = None,
+    color: str | None = None,
 ) -> StorageLocation:
     """Create a storage location and link it to the group.
 
@@ -80,7 +81,7 @@ async def create_location(
         parent_kind = parent.kind
     validate_kind_hierarchy(child=kind, parent=parent_kind)
 
-    loc = StorageLocation(name=name, kind=kind, description=description, parent_id=parent_id)
+    loc = StorageLocation(name=name, kind=kind, description=description, parent_id=parent_id, color=color)
     session.add(loc)
     await session.flush()
 
@@ -154,6 +155,7 @@ async def get_tree(session: AsyncSession, group_id: UUID) -> list[StorageLocatio
             kind=loc.kind,
             description=loc.description,
             parent_id=loc.parent_id,
+            color=loc.color,
             container_count=counts.get(loc.id, 0),
         )
 
@@ -175,6 +177,7 @@ async def update_location(
     name: str | None = None,
     description: str | None = None,
     parent_id: UUID | None = None,
+    color: str | None = None,
 ) -> StorageLocation:
     """Update a storage location.
 
@@ -202,6 +205,8 @@ async def update_location(
         location.description = description
     if parent_id is not None:
         location.parent_id = parent_id
+    if color is not None:
+        location.color = color or None
     session.add(location)
     await session.flush()
     return location

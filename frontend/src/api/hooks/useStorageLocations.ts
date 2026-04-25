@@ -31,8 +31,13 @@ export function useUpdateStorageLocation(groupId: string, locationId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: StorageLocationUpdate) =>
-      client.patch(`/groups/${groupId}/storage-locations/${locationId}`, data).then((r) => r.data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["storageLocations", groupId] }); },
+      client
+        .patch(`/groups/${groupId}/storage-locations/${locationId}`, data)
+        .then((r) => r.data as StorageLocationRead),
+    onSuccess: (data) => {
+      queryClient.setQueryData(["storageLocations", groupId, locationId], data);
+      queryClient.invalidateQueries({ queryKey: ["storageLocations", groupId] });
+    },
   });
 }
 

@@ -82,6 +82,7 @@ async def create_location(
             kind=body.kind,
             description=body.description,
             parent_id=body.parent_id,
+            color=body.color,
         )
     except InvalidHierarchy as e:
         raise HTTPException(
@@ -167,7 +168,7 @@ async def update_location(
             status_code=status.HTTP_404_NOT_FOUND, detail="Storage location not found"
         )
     updated = await storage_service.update_location(
-        session, loc, name=body.name, description=body.description, parent_id=body.parent_id
+        session, loc, name=body.name, description=body.description, parent_id=body.parent_id, color=body.color
     )
     await session.commit()
     return StorageLocationRead.model_validate(updated, from_attributes=True)

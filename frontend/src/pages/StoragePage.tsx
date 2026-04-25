@@ -71,7 +71,7 @@ export default function StoragePage() {
               }}
             >
               {containers.data!.items.map((c) => (
-                <ContainerCard key={c.id} container={c} linkToChemical />
+                <ContainerCard key={c.id} container={c} locationColor={nav.current?.color} linkToChemical />
               ))}
             </Box>
           )}

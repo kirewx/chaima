@@ -4,10 +4,12 @@ import { Link as RouterLink } from "react-router-dom";
 import type { ReactNode } from "react";
 import type { ContainerRead } from "../types";
 import { ContainerMenu } from "./ContainerMenu";
+import { DEFAULT_STORAGE_COLOR } from "./drawer/StorageForm";
 
 interface Props {
   container: ContainerRead;
   locationName?: string;
+  locationColor?: string | null;
   supplierName?: string;
   /**
    * When true, the card body is wrapped in a router link that navigates to
@@ -17,9 +19,22 @@ interface Props {
   linkToChemical?: boolean;
 }
 
+/**
+ * Derive a readable text color from a hex background color.
+ * Returns dark or light text depending on luminance.
+ */
+function chipTextColor(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.9)";
+}
+
 export function ContainerCard({
   container,
   locationName,
+  locationColor,
   supplierName,
   linkToChemical,
 }: Props) {
@@ -44,8 +59,8 @@ export function ContainerCard({
         label={container.identifier}
         size="small"
         sx={{
-          bgcolor: "primary.light",
-          color: "primary.dark",
+          bgcolor: locationColor ?? DEFAULT_STORAGE_COLOR,
+          color: chipTextColor(locationColor ?? DEFAULT_STORAGE_COLOR),
           fontFamily: "'JetBrains Mono', ui-monospace, monospace",
           fontWeight: 700,
           fontSize: 11,

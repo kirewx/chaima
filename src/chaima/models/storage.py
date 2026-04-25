@@ -24,6 +24,7 @@ class StorageLocation(SQLModel, table=True):
     name: str
     kind: StorageKind = Field(index=True)
     description: str | None = Field(default=None)
+    color: str | None = Field(default=None)
     created_at: datetime.datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),

@@ -59,6 +59,7 @@ function ContainerCardWithLookups({
     <ContainerCard
       container={container}
       locationName={loc?.name}
+      locationColor={loc?.color}
       supplierName={supplier?.name}
     />
   );

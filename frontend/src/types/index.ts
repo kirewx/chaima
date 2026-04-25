@@ -241,6 +241,7 @@ export interface StorageLocationRead {
   kind: StorageKind;
   description: string | null;
   parent_id: string | null;
+  color: string | null;
   created_at: string;
 }
 
@@ -249,12 +250,14 @@ export interface StorageLocationCreate {
   kind: StorageKind;
   description?: string | null;
   parent_id?: string | null;
+  color?: string | null;
 }
 
 export interface StorageLocationUpdate {
   name?: string | null;
   description?: string | null;
   parent_id?: string | null;
+  color?: string | null;
 }
 
 export interface StorageLocationNode {
@@ -263,6 +266,7 @@ export interface StorageLocationNode {
   kind: StorageKind;
   description: string | null;
   parent_id: string | null;
+  color: string | null;
   container_count: number;
   children: StorageLocationNode[];
 }

@@ -27,6 +27,7 @@ class StorageLocationCreate(BaseModel):
     kind: StorageKind
     description: str | None = None
     parent_id: UUID | None = None
+    color: str | None = None
 
 
 class StorageLocationUpdate(BaseModel):
@@ -45,6 +46,7 @@ class StorageLocationUpdate(BaseModel):
     name: str | None = None
     description: str | None = None
     parent_id: UUID | None = None
+    color: str | None = None
 
 
 class StorageLocationRead(BaseModel):
@@ -73,6 +75,7 @@ class StorageLocationRead(BaseModel):
     kind: StorageKind
     description: str | None
     parent_id: UUID | None
+    color: str | None
     created_at: datetime.datetime
 
 
@@ -105,5 +108,6 @@ class StorageLocationNode(BaseModel):
     kind: StorageKind
     description: str | None
     parent_id: UUID | None
+    color: str | None = None
     container_count: int = 0
     children: list[StorageLocationNode] = []

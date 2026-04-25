@@ -10,6 +10,19 @@ import { useGroup } from "../GroupContext";
 import { useDrawer } from "./DrawerContext";
 import type { StorageKind } from "../../types";
 
+export const DEFAULT_STORAGE_COLOR = "#14b8a6";
+
+const COLOR_PRESETS = [
+  { value: DEFAULT_STORAGE_COLOR, label: "Teal" },
+  { value: "#3b82f6", label: "Blue" },
+  { value: "#f59e0b", label: "Yellow" },
+  { value: "#22c55e", label: "Green" },
+  { value: "#ef4444", label: "Red" },
+  { value: "#f97316", label: "Orange" },
+  { value: "#a855f7", label: "Purple" },
+  { value: "#64748b", label: "Grey" },
+];
+
 const KIND_LABEL: Record<StorageKind, string> = {
   building: "Building",
   room: "Room",
@@ -40,14 +53,16 @@ export function StorageForm(props: Props) {
 
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
+  const [color, setColor] = useState<string>(DEFAULT_STORAGE_COLOR);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (existing) {
       setName(existing.name);
       setDescription(existing.description ?? "");
+      setColor(existing.color ?? DEFAULT_STORAGE_COLOR);
     }
-  }, [existing?.id]);
+  }, [existing?.id, existing?.color, existing?.name, existing?.description]);
 
   const kind: StorageKind =
     props.mode === "create" ? props.childKind : existing?.kind ?? "shelf";
@@ -65,11 +80,13 @@ export function StorageForm(props: Props) {
           kind,
           description: description.trim() || null,
           parent_id: props.parentId ?? null,
+          color,
         });
       } else {
         await updateMut.mutateAsync({
           name: name.trim(),
           description: description.trim() || null,
+          color,
         });
       }
       close();
@@ -112,6 +129,34 @@ export function StorageForm(props: Props) {
           onChange={(e) => setDescription(e.target.value)}
           helperText="Optional — e.g. a shelf note, cabinet contents summary."
         />
+        <Box>
+          <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: "block" }}>
+            Identifier color
+          </Typography>
+          <Stack direction="row" spacing={0.75} sx={{ flexWrap: "wrap" }}>
+            {COLOR_PRESETS.map((c) => (
+              <Box
+                key={c.value}
+                onClick={() => setColor(c.value)}
+                sx={{
+                  width: 28,
+                  height: 28,
+                  borderRadius: "50%",
+                  bgcolor: c.value,
+                  cursor: "pointer",
+                  border: color === c.value ? "2.5px solid" : "2.5px solid transparent",
+                  borderColor: color === c.value ? "text.primary" : "transparent",
+                  transition: "border-color 0.15s",
+                  "&:hover": { opacity: 0.8 },
+                }}
+                title={c.label}
+              />
+            ))}
+          </Stack>
+          <Typography variant="caption" color="text.disabled" sx={{ mt: 0.5, display: "block" }}>
+            Tints the identifier chip on container cards.
+          </Typography>
+        </Box>
         {error && <Alert severity="error">{error}</Alert>}
       </Stack>
 

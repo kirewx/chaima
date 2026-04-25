@@ -2,15 +2,43 @@ import { Box, Stack, Typography, Chip } from "@mui/material";
 import type { ChemicalRead } from "../types";
 import { useContainersForChemical } from "../api/hooks/useContainers";
 import { useStorageLocation } from "../api/hooks/useStorageLocations";
+import { DEFAULT_STORAGE_COLOR } from "./drawer/StorageForm";
 
-interface LocationNameProps {
-  groupId: string;
-  locationId: string;
+function chipTextColor(hex: string): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? "rgba(0,0,0,0.8)" : "rgba(255,255,255,0.9)";
 }
 
-function LocationName({ groupId, locationId }: LocationNameProps) {
+interface FirstContainerLabelProps {
+  groupId: string;
+  locationId: string;
+  identifier: string;
+}
+
+function FirstContainerLabel({ groupId, locationId, identifier }: FirstContainerLabelProps) {
   const { data } = useStorageLocation(groupId, locationId);
-  return <>{data?.name ?? "—"}</>;
+  const color = data?.color ?? DEFAULT_STORAGE_COLOR;
+  return (
+    <>
+      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+        {data?.name ?? "—"}
+      </Typography>
+      <Chip
+        label={identifier}
+        size="small"
+        sx={{
+          bgcolor: color,
+          color: chipTextColor(color),
+          fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+          fontSize: 10,
+          height: 18,
+        }}
+      />
+    </>
+  );
 }
 
 interface Props {
@@ -59,25 +87,16 @@ export function ChemicalRow({ chemical, groupId, expanded, onToggle }: Props) {
       </Stack>
       <Stack sx={{ textAlign: "right", pl: 2, flexShrink: 0 }}>
         <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", justifyContent: "flex-end" }}>
-          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-            {first ? (
-              <LocationName groupId={groupId} locationId={first.location_id} />
-            ) : (
-              "—"
-            )}
-          </Typography>
-          {first && (
-            <Chip
-              label={first.identifier}
-              size="small"
-              sx={{
-                bgcolor: "primary.light",
-                color: "primary.dark",
-                fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-                fontSize: 10,
-                height: 18,
-              }}
+          {first ? (
+            <FirstContainerLabel
+              groupId={groupId}
+              locationId={first.location_id}
+              identifier={first.identifier}
             />
+          ) : (
+            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+              —
+            </Typography>
           )}
         </Stack>
         <Stack direction="row" spacing={0.75} sx={{ alignItems: "center", justifyContent: "flex-end", mt: 0.4 }}>
