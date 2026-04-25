@@ -33,7 +33,10 @@ async def get_user_manager(
     yield UserManager(user_db)
 
 
-cookie_transport = CookieTransport(cookie_max_age=3600)
+cookie_transport = CookieTransport(
+    cookie_max_age=3600,
+    cookie_secure=settings.cookie_secure,
+)
 
 
 def get_jwt_strategy() -> JWTStrategy:

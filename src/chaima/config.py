@@ -5,6 +5,11 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./chaima.db"
     secret_key: SecretStr = SecretStr("CHANGE-ME-IN-PRODUCTION")
+    # Marks auth cookies as `Secure` (HTTPS-only). Defaults to True for
+    # production safety; set CHAIMA_COOKIE_SECURE=false when testing over
+    # plain HTTP on a LAN, otherwise browsers reject the cookie and login
+    # appears to succeed but `/users/me` returns 401.
+    cookie_secure: bool = True
 
     model_config = SettingsConfigDict(env_prefix="CHAIMA_")
 
