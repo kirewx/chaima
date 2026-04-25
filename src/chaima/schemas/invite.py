@@ -38,6 +38,7 @@ class InviteRead(BaseModel):
     expires_at: datetime.datetime
     used_by: UUID | None
     used_at: datetime.datetime | None
+    invite_url: str | None = None
 
     model_config = {"from_attributes": True}
 

@@ -171,17 +171,22 @@ function InvitesTab({ groupId }: { groupId: string }) {
   const [lastToken, setLastToken] = useState<string | null>(null);
   const [toast, setToast] = useState(false);
 
+  const [lastUrl, setLastUrl] = useState<string | null>(null);
+
   const handleGenerate = () => {
     create.mutate(undefined, {
       onSuccess: (data) => {
         setLastToken(data.token);
+        setLastUrl(data.invite_url ?? `${window.location.origin}/invite/${data.token}`);
       },
     });
     setDialogOpen(true);
   };
 
-  const copyUrl = (token: string) => {
-    const url = `${window.location.origin}/invite/${token}`;
+  const inviteUrlFor = (inv: { token: string; invite_url: string | null }) =>
+    inv.invite_url ?? `${window.location.origin}/invite/${inv.token}`;
+
+  const copyUrl = (url: string) => {
     void navigator.clipboard.writeText(url);
     setToast(true);
   };
@@ -240,7 +245,7 @@ function InvitesTab({ groupId }: { groupId: string }) {
               >
                 …{inv.token.slice(-12)}
               </Typography>
-              <IconButton size="small" onClick={() => copyUrl(inv.token)} aria-label="Copy invite link">
+              <IconButton size="small" onClick={() => copyUrl(inviteUrlFor(inv))} aria-label="Copy invite link">
                 <ContentCopyIcon fontSize="small" />
               </IconButton>
               <Button
@@ -263,7 +268,7 @@ function InvitesTab({ groupId }: { groupId: string }) {
           {create.error instanceof Error && (
             <Alert severity="error">{create.error.message}</Alert>
           )}
-          {lastToken && (
+          {lastToken && lastUrl && (
             <Stack spacing={1.5} sx={{ mt: 1 }}>
               <Typography variant="body2" color="text.secondary">
                 Share this link. It is valid once.
@@ -271,15 +276,15 @@ function InvitesTab({ groupId }: { groupId: string }) {
               <TextField
                 size="small"
                 fullWidth
-                value={`${window.location.origin}/invite/${lastToken}`}
+                value={lastUrl}
                 slotProps={{ input: { readOnly: true, sx: { fontFamily: "'JetBrains Mono', monospace", fontSize: 11 } } }}
               />
             </Stack>
           )}
         </DialogContent>
         <DialogActions>
-          {lastToken && (
-            <Button onClick={() => copyUrl(lastToken)} startIcon={<ContentCopyIcon />}>
+          {lastUrl && (
+            <Button onClick={() => copyUrl(lastUrl)} startIcon={<ContentCopyIcon />}>
               Copy
             </Button>
           )}

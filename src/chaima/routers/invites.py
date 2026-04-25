@@ -6,6 +6,7 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from chaima.auth import optional_current_user
+from chaima.config import settings
 from chaima.dependencies import GroupAdminDep, SessionDep, SuperuserDep
 from chaima.models.group import Group
 from chaima.models.invite import Invite
@@ -15,6 +16,16 @@ from chaima.services import invites as invite_service
 from chaima.services.invites import InviteExpiredError, InviteUsedError
 
 router = APIRouter(tags=["invites"])
+
+
+def _to_invite_read(invite: Invite) -> InviteRead:
+    base = settings.public_base_url
+    invite_url = (
+        f"{base.rstrip('/')}/invite/{invite.token}" if base else None
+    )
+    return InviteRead.model_validate(
+        {**invite.model_dump(), "invite_url": invite_url}
+    )
 
 
 @router.post(
@@ -44,7 +55,7 @@ async def create_invite(
     invite = await invite_service.create_invite(
         session, group_id=group.id, created_by=link.user_id
     )
-    return InviteRead.model_validate(invite)
+    return _to_invite_read(invite)
 
 
 @router.get(
@@ -71,7 +82,7 @@ async def list_invites(
     """
     group, _link = member
     invites = await invite_service.list_invites(session, group_id=group.id)
-    return [InviteRead.model_validate(i) for i in invites]
+    return [_to_invite_read(i) for i in invites]
 
 
 @router.get("/api/v1/invites/{token}", response_model=InviteInfo)

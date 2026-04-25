@@ -308,6 +308,7 @@ export interface InviteRead {
   expires_at: string;
   used_by: string | null;
   used_at: string | null;
+  invite_url: string | null;
 }
 
 export interface InviteAccept {

@@ -10,6 +10,10 @@ class Settings(BaseSettings):
     # plain HTTP on a LAN, otherwise browsers reject the cookie and login
     # appears to succeed but `/users/me` returns 401.
     cookie_secure: bool = True
+    # Base URL used to build invite links (e.g. http://chaima.jasperz.de:8000).
+    # When None, the frontend falls back to `window.location.origin`, which
+    # leaks `localhost` if an admin generates the link from the dev machine.
+    public_base_url: str | None = None
 
     model_config = SettingsConfigDict(env_prefix="CHAIMA_")
 
