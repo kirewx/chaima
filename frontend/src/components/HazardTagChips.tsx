@@ -8,7 +8,7 @@ interface Props {
 export function HazardTagChips({ tags }: Props) {
   if (tags.length === 0) return null;
   return (
-    <Stack direction="row" spacing={0.5} useFlexGap flexWrap="wrap">
+    <Stack direction="row" spacing={0.5} useFlexGap sx={{ flexWrap: "wrap" }}>
       {tags.map((t) => (
         <Chip key={t.id} label={t.name} size="small" variant="outlined" />
       ))}
