@@ -110,3 +110,29 @@ async def create_order(
             await session.flush()
 
     return order
+
+
+async def list_orders(
+    session: AsyncSession,
+    *,
+    group_id: UUID,
+    status: str | None = None,
+    supplier_id: UUID | None = None,
+    project_id: UUID | None = None,
+    chemical_id: UUID | None = None,
+) -> list[Order]:
+    stmt = select(Order).where(Order.group_id == group_id)
+    if status is not None:
+        stmt = stmt.where(Order.status == OrderStatus(status))
+    if supplier_id is not None:
+        stmt = stmt.where(Order.supplier_id == supplier_id)
+    if project_id is not None:
+        stmt = stmt.where(Order.project_id == project_id)
+    if chemical_id is not None:
+        stmt = stmt.where(Order.chemical_id == chemical_id)
+    stmt = stmt.order_by(Order.ordered_at.desc())
+    return list((await session.exec(stmt)).all())
+
+
+async def get_order(session: AsyncSession, order_id: UUID) -> Order | None:
+    return await session.get(Order, order_id)

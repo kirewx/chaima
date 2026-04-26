@@ -55,3 +55,30 @@ async def test_create_order_rejects_cross_group_supplier(session, group, chemica
             package_count=1,
             ordered_by_user_id=user.id,
         )
+
+
+@pytest.mark.asyncio
+async def test_list_orders_filters_by_status(session, group, chemical, supplier, user):
+    p = await proj_svc.create_project(session, group_id=group.id, name="Cat")
+    o1 = await svc.create_order(
+        session, group_id=group.id, chemical_id=chemical.id, supplier_id=supplier.id,
+        project_id=p.id, amount_per_package=100, unit="mL", package_count=1,
+        ordered_by_user_id=user.id,
+    )
+    o2 = await svc.create_order(
+        session, group_id=group.id, chemical_id=chemical.id, supplier_id=supplier.id,
+        project_id=p.id, amount_per_package=50, unit="g", package_count=2,
+        ordered_by_user_id=user.id,
+    )
+    o2.status = svc.OrderStatus.CANCELLED
+    session.add(o2)
+    await session.flush()
+
+    open_only = await svc.list_orders(session, group_id=group.id, status="ordered")
+    assert {o.id for o in open_only} == {o1.id}
+
+    cancelled = await svc.list_orders(session, group_id=group.id, status="cancelled")
+    assert {o.id for o in cancelled} == {o2.id}
+
+    all_ = await svc.list_orders(session, group_id=group.id)
+    assert {o.id for o in all_} == {o1.id, o2.id}
