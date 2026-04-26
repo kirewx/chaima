@@ -1,4 +1,3 @@
-# src/chaima/schemas/supplier.py
 import datetime
 from uuid import UUID
 
@@ -13,6 +12,13 @@ class SupplierUpdate(BaseModel):
     name: str | None = None
 
 
+class LeadTimeStats(BaseModel):
+    order_count: int
+    median_days: int
+    p25_days: int
+    p75_days: int
+
+
 class SupplierRead(BaseModel):
     model_config = {"from_attributes": True}
 
@@ -21,6 +27,7 @@ class SupplierRead(BaseModel):
     group_id: UUID
     created_at: datetime.datetime
     container_count: int = 0
+    lead_time: LeadTimeStats | None = None
 
 
 class SupplierContainerRow(BaseModel):
