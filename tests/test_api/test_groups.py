@@ -51,9 +51,10 @@ async def test_list_groups_returns_user_groups(client, session, user):
     resp = await client.get("/api/v1/groups")
     assert resp.status_code == 200
 
-    groups_data = resp.json()
-    assert len(groups_data) == 1
-    result = GroupRead.model_validate(groups_data[0])
+    body = resp.json()
+    assert body["total"] == 1
+    assert len(body["items"]) == 1
+    result = GroupRead.model_validate(body["items"][0])
     assert result.name == "My Group"
 
 
@@ -66,7 +67,9 @@ async def test_list_groups_excludes_non_member_groups(client, session, user):
 
     resp = await client.get("/api/v1/groups")
     assert resp.status_code == 200
-    assert resp.json() == []
+    body = resp.json()
+    assert body["items"] == []
+    assert body["total"] == 0
 
 
 @pytest.mark.asyncio

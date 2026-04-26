@@ -1,11 +1,25 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import client from "../client";
-import type { GroupRead, GroupCreate, GroupUpdate, MemberRead, MemberAdd, MemberUpdate } from "../../types";
+import type { GroupRead, GroupCreate, GroupUpdate, MemberRead, MemberAdd, MemberUpdate, PaginatedResponse } from "../../types";
 
 export function useGroups() {
   return useQuery<GroupRead[]>({
     queryKey: ["groups"],
-    queryFn: () => client.get("/groups").then((r) => r.data),
+    queryFn: () =>
+      client
+        .get<PaginatedResponse<GroupRead>>("/groups")
+        .then((r) => r.data.items),
+  });
+}
+
+export function useAllGroups(enabled: boolean = true) {
+  return useQuery<GroupRead[]>({
+    queryKey: ["groups", "all"],
+    queryFn: () =>
+      client
+        .get<PaginatedResponse<GroupRead>>("/groups", { params: { scope: "all" } })
+        .then((r) => r.data.items),
+    enabled,
   });
 }
 
@@ -22,7 +36,10 @@ export function useCreateGroup() {
   return useMutation({
     mutationFn: (data: GroupCreate) =>
       client.post("/groups", data).then((r) => r.data as GroupRead),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["groups"] }); },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["groups"] });
+      queryClient.invalidateQueries({ queryKey: ["groups", "all"] });
+    },
   });
 }
 
@@ -30,8 +47,22 @@ export function useUpdateGroup(groupId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (data: GroupUpdate) =>
-      client.patch(`/groups/${groupId}`, data).then((r) => r.data),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["groups"] }); },
+      client.patch(`/groups/${groupId}`, data).then((r) => r.data as GroupRead),
+    onSuccess: (updated) => {
+      const patchCache = (key: readonly unknown[]) => {
+        const existing = queryClient.getQueryData<GroupRead[]>(key);
+        if (existing === undefined) {
+          queryClient.invalidateQueries({ queryKey: key });
+          return;
+        }
+        const next = existing.map((g) => (g.id === updated.id ? updated : g));
+        queryClient.setQueryData<GroupRead[]>(key, next);
+      };
+      patchCache(["groups"]);
+      patchCache(["groups", "all"]);
+      // Also patch the single-group cache if present.
+      queryClient.setQueryData<GroupRead>(["groups", groupId], updated);
+    },
   });
 }
 

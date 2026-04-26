@@ -10,13 +10,14 @@ export type SettingsSectionKey =
   | "projects"
   | "import"
   | "chemicals-admin"
+  | "groups"
   | "buildings"
   | "system";
 
 export interface NavItem {
   key: SettingsSectionKey;
   label: string;
-  group: "PERSONAL" | "GROUP ADMIN" | "SYSTEM";
+  group: "PERSONAL" | "GROUP ADMIN" | "SUPERUSER" | "SYSTEM";
   visible: boolean;
 }
 
@@ -28,7 +29,7 @@ interface Props {
 }
 
 export function SettingsNav({ items, active, onSelect, footer }: Props) {
-  const groups: Array<NavItem["group"]> = ["PERSONAL", "GROUP ADMIN", "SYSTEM"];
+  const groups: Array<NavItem["group"]> = ["PERSONAL", "GROUP ADMIN", "SUPERUSER", "SYSTEM"];
   return (
     <Box
       component="nav"

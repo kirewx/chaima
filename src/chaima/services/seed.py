@@ -48,6 +48,7 @@ async def seed_ghs_catalog(session: AsyncSession) -> None:
         inserted += 1
 
     await session.flush()
+    await session.commit()
     logger.info(
         "seeded GHS: %d inserted, %d already present",
         inserted,

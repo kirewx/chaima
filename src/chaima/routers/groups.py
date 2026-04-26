@@ -1,8 +1,9 @@
 """Router for group management endpoints."""
 
+from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, HTTPException, Query, status
 from sqlmodel import select
 
 from chaima.dependencies import (
@@ -21,18 +22,22 @@ from chaima.schemas.group import (
     MemberRead,
     MemberUpdate,
 )
+from chaima.schemas.pagination import PaginatedResponse
 from chaima.services import groups as group_service
 from chaima.services.groups import MemberExistsError, MemberNotFoundError
 
 router = APIRouter(prefix="/api/v1/groups", tags=["groups"])
 
 
-@router.get("", response_model=list[GroupRead])
+@router.get("", response_model=PaginatedResponse[GroupRead])
 async def list_groups(
     session: SessionDep,
     current_user: CurrentUserDep,
-) -> list[GroupRead]:
-    """List all groups the current user belongs to.
+    scope: Literal["mine", "all"] = Query("mine"),
+    limit: int = Query(100, ge=1, le=500),
+    offset: int = Query(0, ge=0),
+) -> PaginatedResponse[GroupRead]:
+    """List groups visible to the current user.
 
     Parameters
     ----------
@@ -40,14 +45,42 @@ async def list_groups(
         The database session (injected).
     current_user : User
         The authenticated user (injected).
+    scope : {"mine", "all"}, optional
+        ``"mine"`` (default) returns only groups the user is a member of.
+        ``"all"`` returns every group in the system and requires superuser
+        privileges.
+    limit : int, optional
+        Pagination limit (default 100, max 500).
+    offset : int, optional
+        Pagination offset (default 0).
 
     Returns
     -------
-    list[GroupRead]
-        All groups the user is a member of.
+    PaginatedResponse[GroupRead]
+        The groups in the requested scope, wrapped in a paginated envelope.
+
+    Raises
+    ------
+    HTTPException
+        403 if ``scope == "all"`` and the caller is not a superuser.
     """
-    groups = await group_service.list_groups_for_user(session, current_user.id)
-    return [GroupRead.model_validate(g) for g in groups]
+    if scope == "all":
+        if not current_user.is_superuser:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Superuser required",
+            )
+        groups = await group_service.list_all_groups(session)
+    else:
+        groups = await group_service.list_groups_for_user(session, current_user.id)
+    total = len(groups)
+    page = groups[offset : offset + limit]
+    return PaginatedResponse(
+        items=[GroupRead.model_validate(g) for g in page],
+        total=total,
+        offset=offset,
+        limit=limit,
+    )
 
 
 @router.post("", response_model=GroupRead, status_code=status.HTTP_201_CREATED)
