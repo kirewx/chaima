@@ -228,3 +228,6 @@ chaima.db
 # Local tooling
 .claude/
 *.stackdump
+
+# Local-only files
+chaima-presentation.html
