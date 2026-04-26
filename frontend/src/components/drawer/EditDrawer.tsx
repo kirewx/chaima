@@ -4,6 +4,8 @@ import { useDrawer } from "./DrawerContext";
 import { ChemicalForm } from "./ChemicalForm";
 import { ContainerForm } from "./ContainerForm";
 import { StorageForm } from "./StorageForm";
+import { OrderForm } from "../orders/OrderForm";
+import { OrderDetailDrawer } from "../orders/OrderDetailDrawer";
 
 const titles: Record<string, string> = {
   "chemical-new": "New chemical",
@@ -12,6 +14,8 @@ const titles: Record<string, string> = {
   "container-edit": "Edit container",
   "storage-new": "New storage location",
   "storage-edit": "Edit storage location",
+  "new-order": "New order",
+  "order-detail": "Order details",
 };
 
 export function EditDrawer() {
@@ -66,6 +70,21 @@ export function EditDrawer() {
         )}
         {config.kind === "storage-edit" && (
           <StorageForm mode="edit" locationId={config.locationId} />
+        )}
+        {config.kind === "new-order" && (
+          <OrderForm
+            groupId={config.groupId}
+            chemicalId={config.chemicalId}
+            wishlistItemId={config.wishlistItemId}
+            onDone={close}
+          />
+        )}
+        {config.kind === "order-detail" && (
+          <OrderDetailDrawer
+            groupId={config.groupId}
+            orderId={config.orderId}
+            onDone={close}
+          />
         )}
       </Box>
     </Drawer>

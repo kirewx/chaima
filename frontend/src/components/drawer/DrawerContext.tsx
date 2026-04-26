@@ -8,6 +8,8 @@ export type DrawerConfig =
   | { kind: "container-edit"; containerId: string }
   | { kind: "storage-new"; childKind: StorageKind; parentId: string | null }
   | { kind: "storage-edit"; locationId: string }
+  | { kind: "new-order"; groupId: string; chemicalId?: string; wishlistItemId?: string }
+  | { kind: "order-detail"; groupId: string; orderId: string }
   | null;
 
 interface Ctx {
