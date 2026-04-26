@@ -136,3 +136,56 @@ async def list_orders(
 
 async def get_order(session: AsyncSession, order_id: UUID) -> Order | None:
     return await session.get(Order, order_id)
+
+
+async def edit_order(
+    session: AsyncSession,
+    order: Order,
+    *,
+    supplier_id: UUID | None = None,
+    project_id: UUID | None = None,
+    amount_per_package: float | None = None,
+    unit: str | None = None,
+    package_count: int | None = None,
+    price_per_package: Decimal | None = None,
+    currency: str | None = None,
+    purity: str | None = None,
+    vendor_catalog_number: str | None = None,
+    vendor_product_url: str | None = None,
+    vendor_order_number: str | None = None,
+    expected_arrival: datetime.date | None = None,
+    comment: str | None = None,
+) -> Order:
+    if order.status != OrderStatus.ORDERED:
+        raise OrderStateError(f"Order is {order.status.value}; edits are not allowed")
+
+    if supplier_id is not None:
+        sup = await session.get(Supplier, supplier_id)
+        if sup is None or sup.group_id != order.group_id:
+            raise CrossGroupReferenceError("supplier")
+        order.supplier_id = supplier_id
+    if project_id is not None:
+        proj = await session.get(Project, project_id)
+        if proj is None or proj.group_id != order.group_id:
+            raise CrossGroupReferenceError("project")
+        order.project_id = project_id
+
+    for attr, value in {
+        "amount_per_package": amount_per_package,
+        "unit": unit,
+        "package_count": package_count,
+        "price_per_package": price_per_package,
+        "currency": currency,
+        "purity": purity,
+        "vendor_catalog_number": vendor_catalog_number,
+        "vendor_product_url": vendor_product_url,
+        "vendor_order_number": vendor_order_number,
+        "expected_arrival": expected_arrival,
+        "comment": comment,
+    }.items():
+        if value is not None:
+            setattr(order, attr, value)
+
+    session.add(order)
+    await session.flush()
+    return order

@@ -82,3 +82,19 @@ async def test_list_orders_filters_by_status(session, group, chemical, supplier,
 
     all_ = await svc.list_orders(session, group_id=group.id)
     assert {o.id for o in all_} == {o1.id, o2.id}
+
+
+@pytest.mark.asyncio
+async def test_edit_order_blocked_after_received(session, group, chemical, supplier, user):
+    p = await proj_svc.create_project(session, group_id=group.id, name="Cat")
+    o = await svc.create_order(
+        session, group_id=group.id, chemical_id=chemical.id, supplier_id=supplier.id,
+        project_id=p.id, amount_per_package=100, unit="mL", package_count=1,
+        ordered_by_user_id=user.id,
+    )
+    o.status = svc.OrderStatus.RECEIVED
+    session.add(o)
+    await session.flush()
+
+    with pytest.raises(svc.OrderStateError):
+        await svc.edit_order(session, o, package_count=5)
