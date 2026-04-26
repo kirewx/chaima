@@ -8,6 +8,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 from chaima.models.group import Group, UserGroupLink
 from chaima.models.user import User
 
+PRESEED_SUPPLIERS = (
+    "Sigma-Aldrich", "Merck", "Carl Roth", "abcr", "BLDPharm",
+    "TCI", "Alfa Aesar", "Fisher Scientific", "Thermo Fisher", "VWR",
+)
+
 
 class MemberExistsError(Exception):
     """Raised when adding a user who is already a member."""
@@ -48,6 +53,15 @@ async def create_group(
     link = UserGroupLink(user_id=creator_id, group_id=group.id, is_admin=True)
     session.add(link)
     await session.flush()
+
+    # Pre-seed standard data so the group is usable for ordering immediately.
+    from chaima.models.project import Project
+    from chaima.models.supplier import Supplier
+
+    session.add(Project(group_id=group.id, name="General"))
+    for supplier_name in PRESEED_SUPPLIERS:
+        session.add(Supplier(group_id=group.id, name=supplier_name))
+    await session.flush()
     return group
 
 
@@ -74,6 +88,23 @@ async def list_groups_for_user(
         .join(UserGroupLink, UserGroupLink.group_id == Group.id)
         .where(UserGroupLink.user_id == user_id)
     )
+    return list(result.all())
+
+
+async def list_all_groups(session: AsyncSession) -> list[Group]:
+    """List every group in the system, ordered by name.
+
+    Parameters
+    ----------
+    session : AsyncSession
+        The database session.
+
+    Returns
+    -------
+    list[Group]
+        All groups, sorted alphabetically by name.
+    """
+    result = await session.exec(select(Group).order_by(Group.name))
     return list(result.all())
 
 

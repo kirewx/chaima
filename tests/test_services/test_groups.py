@@ -1,9 +1,13 @@
 """Service layer tests for group management."""
 
 import pytest
+from sqlmodel import select
 
 from chaima.models.group import Group, UserGroupLink
+from chaima.models.project import Project
+from chaima.models.supplier import Supplier
 from chaima.models.user import User
+from chaima.services import groups as svc
 from chaima.services.groups import (
     MemberExistsError,
     MemberNotFoundError,
@@ -249,3 +253,22 @@ async def test_list_members_returns_all_members(session, group):
     emails = {u.email for _link, u in members}
     assert "alice@example.com" in emails
     assert "bob@example.com" in emails
+
+
+@pytest.mark.asyncio
+async def test_create_group_pre_seeds_general_project(session, user):
+    g = await svc.create_group(session, name="New Lab", creator_id=user.id)
+    rows = (await session.exec(select(Project).where(Project.group_id == g.id))).all()
+    names = sorted(p.name for p in rows)
+    assert names == ["General"]
+
+
+@pytest.mark.asyncio
+async def test_create_group_pre_seeds_ten_suppliers(session, user):
+    g = await svc.create_group(session, name="New Lab", creator_id=user.id)
+    rows = (await session.exec(select(Supplier).where(Supplier.group_id == g.id))).all()
+    assert len(rows) == 10
+    assert {s.name for s in rows} == {
+        "Sigma-Aldrich", "Merck", "Carl Roth", "abcr", "BLDPharm",
+        "TCI", "Alfa Aesar", "Fisher Scientific", "Thermo Fisher", "VWR",
+    }
