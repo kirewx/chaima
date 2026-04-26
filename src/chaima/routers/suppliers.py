@@ -12,13 +12,18 @@ from chaima.schemas.supplier import (
     SupplierUpdate,
 )
 from chaima.services import suppliers as supplier_service
+from chaima.services.orders import lead_time_stats
 
 router = APIRouter(prefix="/api/v1/groups/{group_id}/suppliers", tags=["suppliers"])
 
 
-def _supplier_read_with_count(supplier, container_count: int) -> SupplierRead:
+def _supplier_read_with_count(
+    supplier, container_count: int, lead_time=None
+) -> SupplierRead:
     data = SupplierRead.model_validate(supplier, from_attributes=True)
-    return data.model_copy(update={"container_count": container_count})
+    return data.model_copy(
+        update={"container_count": container_count, "lead_time": lead_time}
+    )
 
 
 @router.get("", response_model=PaginatedResponse[SupplierRead])
@@ -64,8 +69,16 @@ async def list_suppliers(
     counts = await supplier_service.count_supplier_containers(
         session, [s.id for s in items]
     )
+    lead_times = {}
+    for s in items:
+        lead_times[s.id] = await lead_time_stats(
+            session, group_id=group_id, supplier_id=s.id
+        )
     return PaginatedResponse(
-        items=[_supplier_read_with_count(s, counts.get(s.id, 0)) for s in items],
+        items=[
+            _supplier_read_with_count(s, counts.get(s.id, 0), lead_times.get(s.id))
+            for s in items
+        ],
         total=total,
         offset=offset,
         limit=limit,
@@ -101,7 +114,8 @@ async def create_supplier(
     supplier = await supplier_service.create_supplier(session, group_id=group_id, name=body.name)
     await session.commit()
     counts = await supplier_service.count_supplier_containers(session, [supplier.id])
-    return _supplier_read_with_count(supplier, counts.get(supplier.id, 0))
+    lt = await lead_time_stats(session, group_id=group_id, supplier_id=supplier.id)
+    return _supplier_read_with_count(supplier, counts.get(supplier.id, 0), lt)
 
 
 @router.get("/{supplier_id}", response_model=SupplierRead)
@@ -138,7 +152,8 @@ async def get_supplier(
     if supplier is None or supplier.group_id != group_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Supplier not found")
     counts = await supplier_service.count_supplier_containers(session, [supplier.id])
-    return _supplier_read_with_count(supplier, counts.get(supplier.id, 0))
+    lt = await lead_time_stats(session, group_id=group_id, supplier_id=supplier.id)
+    return _supplier_read_with_count(supplier, counts.get(supplier.id, 0), lt)
 
 
 @router.get(
@@ -209,7 +224,8 @@ async def update_supplier(
     updated = await supplier_service.update_supplier(session, supplier, name=body.name)
     await session.commit()
     counts = await supplier_service.count_supplier_containers(session, [updated.id])
-    return _supplier_read_with_count(updated, counts.get(updated.id, 0))
+    lt = await lead_time_stats(session, group_id=group_id, supplier_id=updated.id)
+    return _supplier_read_with_count(updated, counts.get(updated.id, 0), lt)
 
 
 @router.delete("/{supplier_id}", status_code=status.HTTP_204_NO_CONTENT)
