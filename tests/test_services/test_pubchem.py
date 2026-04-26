@@ -124,7 +124,7 @@ async def test_lookup_ghs_happy_path():
     assert "H319" in code_strs
     assert "H336" in code_strs
     h225 = next(c for c in codes if c.code == "H225")
-    assert h225.description.startswith("Highly flammable")
+    assert "flammable" in h225.description.lower()
     assert h225.signal_word == "Danger"
     assert h225.pictogram == "GHS02"
 
@@ -163,16 +163,65 @@ async def test_lookup_caches_result():
 def test_parse_ghs_classification_extracts_codes():
     data = json.loads((FIXTURES / "pubchem_acetone_ghs.json").read_text())
     hits = parse_ghs_classification(data)
-    codes = [h.code for h in hits]
+    codes = sorted(h.code for h in hits)
+    # Fixture has 3 buckets where H225+H336 appear in 3/3 and H319 in 2/3.
+    # Minority codes (H320, H335, H361, H372 — each 1/3) get filtered out.
     assert codes == ["H225", "H319", "H336"]
     assert all(h.signal_word in {"Danger", "Warning"} for h in hits)
     h225 = next(h for h in hits if h.code == "H225")
     assert "flammable" in h225.description.lower()
+    assert h225.pictogram == "GHS02"
+
+
+def test_parse_ghs_classification_majority_vote_filters_minority():
+    """A code appearing in only one of three buckets must be filtered out."""
+    data = json.loads((FIXTURES / "pubchem_acetone_ghs.json").read_text())
+    hits = parse_ghs_classification(data)
+    codes = {h.code for h in hits}
+    # These appeared in exactly 1/3 buckets in the fixture.
+    for minority in {"H320", "H335", "H361", "H372"}:
+        assert minority not in codes, f"{minority} should have been filtered"
+
+
+def test_parse_ghs_classification_small_sample_keeps_all():
+    """With <3 buckets the sample is too small to vote — keep every code."""
+    data = {
+        "Record": {
+            "Section": [
+                {
+                    "TOCHeading": "GHS Classification",
+                    "Information": [
+                        {
+                            "ReferenceNumber": 1,
+                            "Name": "GHS Hazard Statements",
+                            "Value": {
+                                "StringWithMarkup": [
+                                    {"String": "H225: Highly flammable [Danger]"},
+                                ]
+                            },
+                        },
+                        {
+                            "ReferenceNumber": 2,
+                            "Name": "GHS Hazard Statements",
+                            "Value": {
+                                "StringWithMarkup": [
+                                    {"String": "H319: Eye irritation [Warning]"},
+                                ]
+                            },
+                        },
+                    ],
+                }
+            ]
+        }
+    }
+    hits = parse_ghs_classification(data)
+    assert sorted(h.code for h in hits) == ["H225", "H319"]
 
 
 def test_parse_ghs_classification_empty():
     assert parse_ghs_classification({}) == []
-    assert parse_ghs_classification({"Hierarchies": {}}) == []
+    assert parse_ghs_classification({"Record": {}}) == []
+    assert parse_ghs_classification({"Record": {"Section": []}}) == []
 
 
 async def test_fetch_structure_image_success():

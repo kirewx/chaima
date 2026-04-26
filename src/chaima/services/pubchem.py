@@ -11,6 +11,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import re
+from collections import defaultdict
 from typing import Any
 from urllib.parse import quote
 
@@ -21,12 +22,14 @@ from chaima.schemas.pubchem import PubChemGHSHit, PubChemLookupResult
 logger = logging.getLogger(__name__)
 
 _BASE_URL = "https://pubchem.ncbi.nlm.nih.gov/rest/pug"
+_PUG_VIEW_URL = "https://pubchem.ncbi.nlm.nih.gov/rest/pug_view"
 _PER_REQUEST_TIMEOUT = 8.0
 _TOTAL_TIMEOUT = 15.0
 _GHS_TIMEOUT = 30.0
 _SYNONYM_CAP = 20
 _CAS_RE = re.compile(r"^\d{2,7}-\d{2}-\d$")
 _HAZARD_CODE_RE = re.compile(r"^(H\d{3}|EUH\d{3})\b")
+_PICTOGRAM_RE = re.compile(r"GHS\d{2}")
 
 # Simple TTL cache: {key: (result, expiry_timestamp)}
 _CACHE_TTL = 86400  # 24 hours — PubChem data barely changes
@@ -115,7 +118,7 @@ async def lookup_ghs(cid: str) -> list[PubChemGHSHit]:
 
     timeout = httpx.Timeout(_GHS_TIMEOUT, connect=_PER_REQUEST_TIMEOUT)
     try:
-        async with httpx.AsyncClient(base_url=_BASE_URL, timeout=timeout) as client:
+        async with httpx.AsyncClient(timeout=timeout) as client:
             ghs_raw = await _fetch_ghs(client, int(cid))
     except (PubChemUpstreamError, Exception) as exc:
         logger.warning("GHS fetch failed for CID %s: %s", cid, exc)
@@ -193,11 +196,12 @@ async def _fetch_synonyms(client: httpx.AsyncClient, cid: int) -> list[str]:
 
 
 async def _fetch_ghs(client: httpx.AsyncClient, cid: int) -> dict[str, Any]:
-    path = f"/compound/cid/{cid}/classification/JSON"
+    # PubChem's PUG-REST classification endpoint returns the entire Compound
+    # TOC tree (tens of MB) and ignores classification_type filters, so we
+    # use PUG-View and ask only for the GHS Classification heading.
+    url = f"{_PUG_VIEW_URL}/data/compound/{cid}/JSON"
     try:
-        resp = await client.get(
-            path, params={"classification_type": "ghs"}
-        )
+        resp = await client.get(url, params={"heading": "GHS Classification"})
     except (httpx.TimeoutException, httpx.TransportError) as exc:
         raise PubChemUpstreamError(str(exc)) from exc
     # 404 here just means "no GHS data" — not fatal.
@@ -248,60 +252,137 @@ def _to_float(value: Any) -> float | None:
 
 
 def parse_ghs_classification(data: dict[str, Any]) -> list[PubChemGHSHit]:
-    """Extract H-code hits from a PubChem GHS classification response.
+    """Extract H-code hits from a PubChem PUG-View GHS Classification body.
 
-    PubChem serializes GHS data as a flat ``Hierarchy.Node[]`` list where
-    each node has an ``Information`` dict. Signal word and pictogram
-    apply to the whole compound; hazard-statement nodes carry the code
-    and description in one ``Description`` string shaped like
-    ``"H225: Highly flammable liquid and vapour [Danger ...]"``.
+    PUG-View nests the data as ``Record.Section[].Section[].Section[]`` and
+    aggregates many sources (ECHA, registrant filings, EPA, etc.) into a
+    single ``GHS Classification`` section. Each source occupies several
+    ``Information`` items sharing the same ``ReferenceNumber`` — typically
+    one each for ``Signal``, ``Pictogram(s)``, and ``GHS Hazard Statements``.
+
+    To suppress minority-source over-flagging, codes are kept only when
+    they appear in a strict majority of source buckets. When fewer than
+    three buckets are present the sample is too small to vote, so every
+    observed code is kept.
 
     Parameters
     ----------
     data : dict
-        The parsed JSON body from ``/classification/JSON``.
+        The parsed JSON body from
+        ``/rest/pug_view/data/compound/{cid}/JSON?heading=GHS+Classification``.
 
     Returns
     -------
     list[PubChemGHSHit]
-        One hit per hazard statement. Empty list if the shape is
-        missing, malformed, or has no hazard statements.
+        One hit per surviving H-code. Empty list if the body lacks a GHS
+        Classification section or carries no hazard statements.
     """
-    hierarchies = (data.get("Hierarchies") or {}).get("Hierarchy") or []
-    if not hierarchies:
+    sections = list(_iter_ghs_sections(data))
+    if not sections:
         return []
 
-    signal_word: str | None = None
-    pictogram: str | None = None
-    hits: list[PubChemGHSHit] = []
+    code_counts: dict[str, int] = defaultdict(int)
+    first_hit: dict[str, PubChemGHSHit] = {}
+    bucket_count = 0
 
-    # A compound usually has one hierarchy; walk all to be safe.
-    for hierarchy in hierarchies:
-        nodes = hierarchy.get("Node") or []
-        for node in nodes:
-            info = node.get("Information") or {}
-            name = info.get("Name")
-            desc = info.get("Description") or ""
-            if name == "Signal":
-                signal_word = desc.strip() or signal_word
-            elif name == "Pictogram" and pictogram is None:
-                # Prefer the first pictogram code encountered.
-                match = re.search(r"GHS\d{2}", desc)
-                if match:
-                    pictogram = match.group(0)
-            elif name == "GHS Hazard Statements":
-                hits.append(_parse_hazard_statement(desc))
+    for section in sections:
+        buckets: dict[Any, list[dict[str, Any]]] = defaultdict(list)
+        for info in section.get("Information") or []:
+            buckets[info.get("ReferenceNumber")].append(info)
 
-    # Back-fill per-statement signal word / pictogram from the compound
-    # defaults when the hazard statement didn't carry its own.
-    for h in hits:
-        if h.signal_word is None:
-            h.signal_word = signal_word
-        if h.pictogram is None:
-            h.pictogram = pictogram
+        for items in buckets.values():
+            bucket_count += 1
+            signal_word: str | None = None
+            pictogram: str | None = None
+            statements: list[PubChemGHSHit] = []
+            for info in items:
+                name = info.get("Name")
+                value = info.get("Value") or {}
+                if name == "Signal":
+                    for s in _value_strings(value):
+                        if s.strip():
+                            signal_word = signal_word or s.strip()
+                elif name == "Pictogram(s)":
+                    for code in _pictogram_codes(value):
+                        pictogram = pictogram or code
+                elif name == "GHS Hazard Statements":
+                    for s in _value_strings(value):
+                        hit = _parse_hazard_statement(s)
+                        if hit.code:
+                            statements.append(hit)
 
-    # Drop any entries where we couldn't parse a code.
-    return [h for h in hits if h.code]
+            seen_in_bucket: set[str] = set()
+            for hit in statements:
+                if hit.code in seen_in_bucket:
+                    continue
+                seen_in_bucket.add(hit.code)
+                code_counts[hit.code] += 1
+                if hit.code not in first_hit:
+                    if hit.signal_word is None:
+                        hit.signal_word = signal_word
+                    if hit.pictogram is None:
+                        hit.pictogram = pictogram
+                    first_hit[hit.code] = hit
+
+    if bucket_count == 0:
+        return []
+    threshold = 1 if bucket_count < 3 else bucket_count // 2 + 1
+    kept = [
+        first_hit[code]
+        for code, count in code_counts.items()
+        if count >= threshold
+    ]
+    # Sort by support descending, then code ascending for deterministic order.
+    kept.sort(key=lambda h: (-code_counts[h.code], h.code))
+    return kept
+
+
+def _iter_ghs_sections(node: Any):
+    """Yield every ``Section`` dict whose ``TOCHeading`` is GHS Classification.
+
+    PUG-View documents have a top-level ``Record.Section[]`` containing
+    ``Safety and Hazards`` → ``Hazards Identification`` → ``GHS
+    Classification``. We walk the tree generically so the parser also
+    works on minimal fixtures or future shape tweaks.
+    """
+    if not isinstance(node, dict):
+        return
+    if node.get("TOCHeading") == "GHS Classification":
+        yield node
+    for child in node.get("Section") or []:
+        yield from _iter_ghs_sections(child)
+    record = node.get("Record")
+    if isinstance(record, dict):
+        yield from _iter_ghs_sections(record)
+
+
+def _value_strings(value: dict[str, Any]) -> list[str]:
+    """Return every ``String`` from a PUG-View ``Value.StringWithMarkup``."""
+    out: list[str] = []
+    for entry in value.get("StringWithMarkup") or []:
+        s = (entry or {}).get("String")
+        if isinstance(s, str):
+            out.append(s)
+    return out
+
+
+def _pictogram_codes(value: dict[str, Any]) -> list[str]:
+    """Return GHSxx pictogram codes parsed from Markup URLs / Extras.
+
+    PUG-View renders pictograms as inline icons, with the GHS code embedded
+    in the icon URL (``.../images/ghs/GHS02.svg``) and sometimes mirrored
+    in the ``Extra`` label.
+    """
+    codes: list[str] = []
+    for entry in value.get("StringWithMarkup") or []:
+        for markup in (entry or {}).get("Markup") or []:
+            for field in (markup.get("URL"), markup.get("Extra")):
+                if not isinstance(field, str):
+                    continue
+                m = _PICTOGRAM_RE.search(field)
+                if m and m.group(0) not in codes:
+                    codes.append(m.group(0))
+    return codes
 
 
 async def fetch_structure_image(cid: str) -> bytes | None:
