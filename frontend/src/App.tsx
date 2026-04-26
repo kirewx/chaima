@@ -5,6 +5,7 @@ import LoginPage from "./pages/LoginPage";
 import InvitePage from "./pages/InvitePage";
 import ChemicalsPage from "./pages/ChemicalsPage";
 import StoragePage from "./pages/StoragePage";
+import OrdersPage from "./pages/OrdersPage";
 import SettingsPage from "./pages/SettingsPage";
 
 export default function App() {
@@ -17,6 +18,7 @@ export default function App() {
           <Route path="/" element={<ChemicalsPage />} />
           <Route path="/storage" element={<StoragePage />} />
           <Route path="/storage/:locationId" element={<StoragePage />} />
+          <Route path="/orders" element={<OrdersPage />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Route>
       </Route>

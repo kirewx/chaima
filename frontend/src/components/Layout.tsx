@@ -14,6 +14,7 @@ import { EditDrawer } from "./drawer/EditDrawer";
 const navItems = [
   { to: "/", label: "Chemicals" },
   { to: "/storage", label: "Storage" },
+  { to: "/orders", label: "Orders" },
   { to: "/settings", label: "Settings" },
 ];
 
