@@ -51,16 +51,17 @@ These deviate from generic Python defaults — failing to follow them will cause
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/test_services/test_projects_model.py`:
+Create `tests/test_services/test_projects_model.py`. The model import MUST be at module top so `SQLModel.metadata` registers the table before the `engine` fixture's `create_all` call:
 
 ```python
 import pytest
+from sqlalchemy.exc import IntegrityError
+
+from chaima.models.project import Project
 
 
 @pytest.mark.asyncio
 async def test_project_can_be_inserted(session, group):
-    from chaima.models.project import Project
-
     p = Project(group_id=group.id, name="Catalysis")
     session.add(p)
     await session.flush()
@@ -72,9 +73,6 @@ async def test_project_can_be_inserted(session, group):
 
 @pytest.mark.asyncio
 async def test_project_unique_within_group(session, group):
-    from sqlalchemy.exc import IntegrityError
-    from chaima.models.project import Project
-
     session.add(Project(group_id=group.id, name="General"))
     await session.flush()
     session.add(Project(group_id=group.id, name="General"))
@@ -137,17 +135,17 @@ git commit -m "feat(orders): add Project SQLModel"
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/test_services/test_order_model.py`:
+Create `tests/test_services/test_order_model.py`. Module-top imports register tables before `engine.create_all`:
 
 ```python
 import pytest
 
+from chaima.models.order import Order, OrderStatus
+from chaima.models.project import Project
+
 
 @pytest.mark.asyncio
 async def test_order_can_be_inserted(session, group, chemical, supplier, user):
-    from chaima.models.project import Project
-    from chaima.models.order import Order, OrderStatus
-
     project = Project(group_id=group.id, name="Catalysis")
     session.add(project)
     await session.flush()
@@ -263,16 +261,18 @@ git commit -m "feat(orders): add Order SQLModel"
 
 - [ ] **Step 1: Write the failing test**
 
-Create `tests/test_services/test_wishlist_model.py`:
+Create `tests/test_services/test_wishlist_model.py`. Module-top imports register tables before `engine.create_all`. The two `noqa` imports are required because `WishlistItem.converted_to_order_id → chemical_order → project`, and SQLite's `create_all` won't materialize a table whose FK targets aren't all registered:
 
 ```python
 import pytest
 
+from chaima.models.order import Order  # noqa: F401  -- registers chemical_order for FK
+from chaima.models.project import Project  # noqa: F401  -- chemical_order FKs to project
+from chaima.models.wishlist import WishlistItem, WishlistStatus
+
 
 @pytest.mark.asyncio
 async def test_wishlist_with_chemical_id(session, group, chemical, user):
-    from chaima.models.wishlist import WishlistItem, WishlistStatus
-
     item = WishlistItem(
         group_id=group.id,
         chemical_id=chemical.id,
@@ -288,8 +288,6 @@ async def test_wishlist_with_chemical_id(session, group, chemical, user):
 
 @pytest.mark.asyncio
 async def test_wishlist_freeform(session, group, user):
-    from chaima.models.wishlist import WishlistItem, WishlistStatus
-
     item = WishlistItem(
         group_id=group.id,
         freeform_name="Some new reagent",
@@ -377,15 +375,11 @@ git commit -m "feat(orders): add WishlistItem SQLModel"
 
 - [ ] **Step 1: Write the failing test**
 
-Append to `tests/test_services/test_order_model.py`:
+Append to `tests/test_services/test_order_model.py`. Add `from chaima.models.container import Container` to the existing module-top imports (next to `Order` / `Project`), then append:
 
 ```python
 @pytest.mark.asyncio
 async def test_container_links_to_order(session, group, chemical, supplier, user, storage_location):
-    from chaima.models.container import Container
-    from chaima.models.order import Order
-    from chaima.models.project import Project
-
     project = Project(group_id=group.id, name="X")
     session.add(project)
     await session.flush()
@@ -2361,8 +2355,11 @@ async def test_promote_freeform_reuses_existing_chemical_by_cid(
         )
     monkeypatch.setattr("chaima.services.pubchem.lookup", fake_lookup)
 
+    # `freeform_name` is required by the create_wishlist guard; promote_wishlist
+    # will still prefer `freeform_cas` for the PubChem query.
     item = await svc.create_wishlist(
-        session, group_id=group.id, freeform_cas="67-64-1",
+        session, group_id=group.id,
+        freeform_name="acetone", freeform_cas="67-64-1",
         requested_by_user_id=user.id,
     )
     resolved_id = await svc.promote_wishlist(session, item)
