@@ -6,6 +6,7 @@ operation that requires an explicit transaction (handled inline below).
 from __future__ import annotations
 
 import datetime
+from dataclasses import dataclass
 from decimal import Decimal
 from statistics import median, quantiles
 from uuid import UUID
@@ -202,3 +203,85 @@ async def cancel_order(
     session.add(order)
     await session.flush()
     return order
+
+
+@dataclass
+class ContainerReceiveRow:
+    identifier: str
+    storage_location_id: UUID
+    purity_override: str | None = None
+
+
+async def _validate_location_in_group(
+    session: AsyncSession, group_id: UUID, location_id: UUID
+) -> bool:
+    """True if the location is linked to the group via StorageLocationGroup."""
+    result = await session.exec(
+        select(StorageLocationGroup).where(
+            StorageLocationGroup.location_id == location_id,
+            StorageLocationGroup.group_id == group_id,
+        )
+    )
+    return result.first() is not None
+
+
+async def receive_order(
+    session: AsyncSession,
+    order: Order,
+    *,
+    rows: list[ContainerReceiveRow],
+    received_by_user_id: UUID,
+) -> list[Container]:
+    """Mark an order received and spawn N containers in one transaction.
+
+    The caller's session is the unit of work - anything raised here aborts
+    the whole receipt. The router commits on success.
+    """
+    if order.status != OrderStatus.ORDERED:
+        raise OrderStateError(f"Order is {order.status.value}; cannot receive")
+    if len(rows) != order.package_count:
+        raise ContainerCountMismatchError(
+            f"expected {order.package_count} containers, got {len(rows)}"
+        )
+
+    # Validate every storage_location belongs to the group BEFORE creating any container.
+    for i, row in enumerate(rows):
+        ok = await _validate_location_in_group(session, order.group_id, row.storage_location_id)
+        if not ok:
+            raise StorageLocationInvalidError(i, row.storage_location_id)
+
+    # Reject duplicate identifiers within the receipt payload.
+    seen: set[str] = set()
+    for i, row in enumerate(rows):
+        if row.identifier in seen:
+            raise ValueError(f"Container row {i}: duplicate identifier '{row.identifier}'")
+        seen.add(row.identifier)
+
+    # Spawn containers.
+    spawned: list[Container] = []
+    today = datetime.date.today()
+    for row in rows:
+        c = Container(
+            chemical_id=order.chemical_id,
+            location_id=row.storage_location_id,
+            supplier_id=order.supplier_id,
+            identifier=row.identifier,
+            amount=order.amount_per_package,
+            unit=order.unit,
+            purity=row.purity_override or order.purity,
+            order_id=order.id,
+            purchased_at=today,
+            created_by=received_by_user_id,
+        )
+        session.add(c)
+        spawned.append(c)
+    await session.flush()
+
+    # Mark the order received.
+    order.status = OrderStatus.RECEIVED
+    order.received_by_user_id = received_by_user_id
+    order.received_at = datetime.datetime.now(datetime.timezone.utc)
+    session.add(order)
+    await session.flush()
+
+    return spawned

@@ -4,6 +4,7 @@ from decimal import Decimal
 import pytest
 
 from chaima.models.group import Group
+from chaima.models.storage import StorageLocationGroup
 from chaima.models.supplier import Supplier
 from chaima.services import orders as svc
 from chaima.services import projects as proj_svc
@@ -116,3 +117,72 @@ async def test_cancel_order(session, group, chemical, supplier, user):
 
     with pytest.raises(svc.OrderStateError):
         await svc.cancel_order(session, cancelled)
+
+
+@pytest.mark.asyncio
+async def test_receive_spawns_n_containers(
+    session, group, chemical, supplier, user, storage_location
+):
+    from chaima.models.container import Container
+    from sqlmodel import select
+
+    # Make storage_location visible to this group
+    session.add(StorageLocationGroup(location_id=storage_location.id, group_id=group.id))
+
+    p = await proj_svc.create_project(session, group_id=group.id, name="Cat")
+    o = await svc.create_order(
+        session, group_id=group.id, chemical_id=chemical.id, supplier_id=supplier.id,
+        project_id=p.id, amount_per_package=100, unit="mL", package_count=3,
+        purity="99%", ordered_by_user_id=user.id,
+    )
+    await session.flush()
+
+    rows = [
+        svc.ContainerReceiveRow(identifier=f"lot-{i}", storage_location_id=storage_location.id)
+        for i in range(3)
+    ]
+    containers = await svc.receive_order(session, o, rows=rows, received_by_user_id=user.id)
+    assert len(containers) == 3
+    assert all(c.amount == 100 and c.unit == "mL" and c.purity == "99%" for c in containers)
+    assert all(c.order_id == o.id for c in containers)
+
+    # Order is now received and locked from edits
+    assert o.status == svc.OrderStatus.RECEIVED
+    with pytest.raises(svc.OrderStateError):
+        await svc.edit_order(session, o, package_count=5)
+
+
+@pytest.mark.asyncio
+async def test_receive_rejects_count_mismatch(
+    session, group, chemical, supplier, user, storage_location
+):
+    session.add(StorageLocationGroup(location_id=storage_location.id, group_id=group.id))
+    p = await proj_svc.create_project(session, group_id=group.id, name="Cat")
+    o = await svc.create_order(
+        session, group_id=group.id, chemical_id=chemical.id, supplier_id=supplier.id,
+        project_id=p.id, amount_per_package=100, unit="mL", package_count=3,
+        ordered_by_user_id=user.id,
+    )
+    rows = [svc.ContainerReceiveRow(identifier="lot-0", storage_location_id=storage_location.id)]
+    with pytest.raises(svc.ContainerCountMismatchError):
+        await svc.receive_order(session, o, rows=rows, received_by_user_id=user.id)
+
+
+@pytest.mark.asyncio
+async def test_receive_rejects_invalid_storage_location(
+    session, group, chemical, supplier, user
+):
+    """A storage_location_id outside the group must reject by index."""
+    import uuid
+
+    p = await proj_svc.create_project(session, group_id=group.id, name="Cat")
+    o = await svc.create_order(
+        session, group_id=group.id, chemical_id=chemical.id, supplier_id=supplier.id,
+        project_id=p.id, amount_per_package=100, unit="mL", package_count=1,
+        ordered_by_user_id=user.id,
+    )
+    bogus = uuid.uuid4()
+    rows = [svc.ContainerReceiveRow(identifier="lot-0", storage_location_id=bogus)]
+    with pytest.raises(svc.StorageLocationInvalidError) as ei:
+        await svc.receive_order(session, o, rows=rows, received_by_user_id=user.id)
+    assert ei.value.index == 0
