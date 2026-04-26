@@ -8,7 +8,7 @@ keep the endpoint from being used as an open proxy to PubChem.
 from fastapi import APIRouter, HTTPException, Query
 
 from chaima.dependencies import CurrentUserDep
-from chaima.schemas.pubchem import PubChemGHSHit, PubChemLookupResult
+from chaima.schemas.pubchem import PubChemGHSHit, PubChemLookupResult, PubChemVendorList
 from chaima.services import pubchem as pubchem_service
 from chaima.services.pubchem import PubChemNotFound, PubChemUpstreamError
 
@@ -46,3 +46,10 @@ async def lookup_ghs(
     classification API can take 10-15 seconds to respond.
     """
     return await pubchem_service.lookup_ghs(cid)
+
+
+@router.get("/vendors/{cid}", response_model=PubChemVendorList)
+async def get_pubchem_vendors(cid: str) -> PubChemVendorList:
+    """PubChem 'Chemical Vendors' for a CID. Returns empty list on upstream failure."""
+    vendors = await pubchem_service.lookup_vendors(cid)
+    return PubChemVendorList(cid=cid, vendors=vendors)
