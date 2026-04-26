@@ -11,6 +11,7 @@ import { BuildingsSection } from "../components/settings/BuildingsSection";
 import { SystemSection } from "../components/settings/SystemSection";
 import { ImportSection } from "../components/settings/ImportSection";
 import { ChemicalsAdminSection } from "../components/settings/ChemicalsAdminSection";
+import { ProjectsAdminSection } from "../components/settings/ProjectsAdminSection";
 
 export default function SettingsPage() {
   const { data: user } = useCurrentUser();
@@ -25,6 +26,7 @@ export default function SettingsPage() {
     { key: "members", label: "Members & Invites", group: "GROUP ADMIN", visible: isMember },
     { key: "hazard-tags", label: "Hazard tags", group: "GROUP ADMIN", visible: isMember },
     { key: "suppliers", label: "Suppliers", group: "GROUP ADMIN", visible: isMember },
+    { key: "projects", label: "Projects", group: "GROUP ADMIN", visible: isMember },
     { key: "import", label: "Import & Export", group: "GROUP ADMIN", visible: isMember },
     { key: "chemicals-admin", label: "Chemicals", group: "GROUP ADMIN", visible: isMember },
     { key: "buildings", label: "Buildings", group: "SYSTEM", visible: isSuperuser },
@@ -51,6 +53,9 @@ export default function SettingsPage() {
         )}
         {active === "chemicals-admin" && isMember && user?.main_group_id && (
           <ChemicalsAdminSection groupId={user.main_group_id} />
+        )}
+        {active === "projects" && isMember && user?.main_group_id && (
+          <ProjectsAdminSection groupId={user.main_group_id} />
         )}
         {active === "buildings" && isSuperuser && <BuildingsSection />}
         {active === "system" && isSuperuser && <SystemSection />}

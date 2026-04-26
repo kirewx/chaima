@@ -7,6 +7,7 @@ export type SettingsSectionKey =
   | "members"
   | "hazard-tags"
   | "suppliers"
+  | "projects"
   | "import"
   | "chemicals-admin"
   | "buildings"
