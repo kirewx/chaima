@@ -98,3 +98,21 @@ async def test_edit_order_blocked_after_received(session, group, chemical, suppl
 
     with pytest.raises(svc.OrderStateError):
         await svc.edit_order(session, o, package_count=5)
+
+
+@pytest.mark.asyncio
+async def test_cancel_order(session, group, chemical, supplier, user):
+    p = await proj_svc.create_project(session, group_id=group.id, name="Cat")
+    o = await svc.create_order(
+        session, group_id=group.id, chemical_id=chemical.id, supplier_id=supplier.id,
+        project_id=p.id, amount_per_package=100, unit="mL", package_count=1,
+        ordered_by_user_id=user.id,
+    )
+
+    cancelled = await svc.cancel_order(session, o, reason="vendor out of stock")
+    assert cancelled.status == svc.OrderStatus.CANCELLED
+    assert cancelled.cancelled_at is not None
+    assert cancelled.cancellation_reason == "vendor out of stock"
+
+    with pytest.raises(svc.OrderStateError):
+        await svc.cancel_order(session, cancelled)

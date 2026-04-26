@@ -189,3 +189,16 @@ async def edit_order(
     session.add(order)
     await session.flush()
     return order
+
+
+async def cancel_order(
+    session: AsyncSession, order: Order, *, reason: str | None = None
+) -> Order:
+    if order.status != OrderStatus.ORDERED:
+        raise OrderStateError(f"Order is {order.status.value}; cannot cancel")
+    order.status = OrderStatus.CANCELLED
+    order.cancelled_at = datetime.datetime.now(datetime.timezone.utc)
+    order.cancellation_reason = reason
+    session.add(order)
+    await session.flush()
+    return order
