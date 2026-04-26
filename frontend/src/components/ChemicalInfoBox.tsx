@@ -1,4 +1,4 @@
-import { Box, Stack, Typography, Link as MuiLink } from "@mui/material";
+import { Alert, Box, Button, Stack, Typography, Link as MuiLink } from "@mui/material";
 import LinkIcon from "@mui/icons-material/Link";
 import DescriptionIcon from "@mui/icons-material/Description";
 import type {
@@ -11,6 +11,8 @@ import { ChemicalMenu } from "./ChemicalMenu";
 import { GHSPictogramRow } from "./GHSPictogramRow";
 import { HazardTagChips } from "./HazardTagChips";
 import { useChemicalStructureSvg } from "../api/hooks/useChemicalStructureSvg";
+import { useDrawer } from "./drawer/DrawerContext";
+import { useOrders } from "../api/hooks/useOrders";
 
 interface Props {
   chemical: ChemicalRead;
@@ -48,6 +50,14 @@ export function ChemicalInfoBox({
   const props = propertyBullets(chemical);
   const { data: structureSvg, isLoading: svgLoading } =
     useChemicalStructureSvg(groupId, chemical.id);
+  const { open: openDrawer } = useDrawer();
+  const openOrders = useOrders(groupId, { chemical_id: chemical.id, status: "ordered" });
+  const onOrderItems = openOrders.data?.items ?? [];
+  const onOrderCount = onOrderItems.reduce((sum, o) => sum + o.package_count, 0);
+  const nextArrival = onOrderItems
+    .map((o) => o.expected_arrival)
+    .filter((d): d is string => Boolean(d))
+    .sort()[0];
 
   return (
     <Box
@@ -200,6 +210,27 @@ export function ChemicalInfoBox({
           <Typography variant="caption" color="text.secondary" sx={{ display: "block", mt: 0.4 }}>
             <b>{containers.length} containers</b>
           </Typography>
+          {chemical.is_archived && (
+            <Alert severity="warning" sx={{ mt: 1, py: 0 }}>
+              This chemical is archived. Ordering it does not auto-unarchive.
+            </Alert>
+          )}
+          <Stack spacing={0.5} sx={{ mt: 1 }}>
+            <Button
+              size="small"
+              variant="outlined"
+              onClick={() => openDrawer({ kind: "new-order", groupId, chemicalId: chemical.id })}
+              sx={{ alignSelf: "flex-start" }}
+            >
+              Order more
+            </Button>
+            {onOrderCount > 0 && (
+              <Typography variant="caption" color="text.secondary">
+                On order: {onOrderCount} package{onOrderCount === 1 ? "" : "s"}
+                {nextArrival ? `, expected ${nextArrival}` : ""}
+              </Typography>
+            )}
+          </Stack>
         </Box>
 
         {(ghsCodes.length > 0 || hazardTags.length > 0) && (
