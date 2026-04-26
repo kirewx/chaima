@@ -52,3 +52,36 @@ class PubChemLookupResult(BaseModel):
     smiles: str | None = None
     synonyms: list[str]
     ghs_codes: list[PubChemGHSHit]
+
+
+class PubChemVendor(BaseModel):
+    """One vendor entry parsed from the PubChem categorized vendor list.
+
+    Parameters
+    ----------
+    name : str
+        Vendor / supplier name as reported by PubChem.
+    url : str
+        Vendor product or landing page URL.
+    country : str or None
+        ISO country code or country name, if PubChem provides one.
+    """
+
+    name: str
+    url: str
+    country: str | None = None
+
+
+class PubChemVendorList(BaseModel):
+    """Normalized list of vendors for a given PubChem CID.
+
+    Parameters
+    ----------
+    cid : str
+        PubChem compound ID the vendors belong to.
+    vendors : list[PubChemVendor]
+        Vendor entries returned by PubChem, normalized for the frontend.
+    """
+
+    cid: str
+    vendors: list[PubChemVendor]
