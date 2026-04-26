@@ -1,0 +1,43 @@
+{
+  "Record": {
+    "Section": [
+      {
+        "TOCHeading": "Chemical Vendors",
+        "Information": [
+          {
+            "Name": "Vendor",
+            "Value": {
+              "StringWithMarkup": [
+                {
+                  "String": "Sigma-Aldrich",
+                  "Markup": [
+                    {
+                      "URL": "https://www.sigmaaldrich.com/...",
+                      "Type": "URL"
+                    }
+                  ]
+                }
+              ]
+            }
+          },
+          {
+            "Name": "Vendor",
+            "Value": {
+              "StringWithMarkup": [
+                {
+                  "String": "abcr GmbH",
+                  "Markup": [
+                    {
+                      "URL": "https://www.abcr.com/...",
+                      "Type": "URL"
+                    }
+                  ]
+                }
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

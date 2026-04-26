@@ -437,3 +437,77 @@ def _parse_hazard_statement(text: str) -> PubChemGHSHit:
         signal_word=local_signal,
         pictogram=None,
     )
+
+
+def parse_chemical_vendors(data: dict[str, Any]) -> list["PubChemVendor"]:
+    """Extract vendor entries from a PubChem PUG-View Chemical Vendors body.
+
+    Returns a deduplicated list of vendors keyed on URL. Empty list if the
+    body lacks the section (or PubChem returned 404).
+    """
+    from chaima.schemas.pubchem import PubChemVendor
+
+    sections = list(_iter_sections(data, "Chemical Vendors"))
+    seen_urls: set[str] = set()
+    vendors: list[PubChemVendor] = []
+
+    for section in sections:
+        for info in section.get("Information") or []:
+            value = info.get("Value") or {}
+            for entry in value.get("StringWithMarkup") or []:
+                name = (entry.get("String") or "").strip()
+                url: str | None = None
+                for markup in entry.get("Markup") or []:
+                    candidate = markup.get("URL")
+                    if isinstance(candidate, str) and candidate.startswith("http"):
+                        url = candidate
+                        break
+                if not name or not url or url in seen_urls:
+                    continue
+                seen_urls.add(url)
+                vendors.append(PubChemVendor(name=name, url=url))
+    return vendors
+
+
+def _iter_sections(node: Any, heading: str):
+    """Yield every Section dict whose TOCHeading matches the given string."""
+    if not isinstance(node, dict):
+        return
+    if node.get("TOCHeading") == heading:
+        yield node
+    for child in node.get("Section") or []:
+        yield from _iter_sections(child, heading)
+    record = node.get("Record")
+    if isinstance(record, dict):
+        yield from _iter_sections(record, heading)
+
+
+async def lookup_vendors(cid: str) -> list["PubChemVendor"]:
+    """Fetch PubChem 'Chemical Vendors' for a CID. Cached 24h.
+
+    Returns an empty list on any upstream failure — never raises.
+    """
+    from chaima.schemas.pubchem import PubChemVendor  # noqa: F401
+
+    cache_key = f"vendors:{cid}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+
+    url = f"{_PUG_VIEW_URL}/data/compound/{cid}/JSON"
+    timeout = httpx.Timeout(_TOTAL_TIMEOUT, connect=_PER_REQUEST_TIMEOUT)
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            resp = await client.get(url, params={"heading": "Chemical Vendors"})
+    except (httpx.TimeoutException, httpx.TransportError) as exc:
+        logger.warning("PubChem vendors fetch failed for CID %s: %s", cid, exc)
+        return []
+    if resp.status_code == 404:
+        result: list = []
+    elif resp.status_code >= 400:
+        logger.warning("PubChem vendors returned %s for CID %s", resp.status_code, cid)
+        return []
+    else:
+        result = parse_chemical_vendors(_safe_json(resp))
+    _cache_set(cache_key, result)
+    return result
