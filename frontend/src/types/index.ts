@@ -213,6 +213,7 @@ export interface SupplierRead {
   group_id: string;
   created_at: string;
   container_count: number;
+  lead_time: LeadTimeStats | null;
 }
 
 export interface SupplierCreate {
@@ -394,3 +395,147 @@ export const IMPORT_TARGETS: ImportTarget[] = [
   "quantity_unit_combined", "purity", "purchased_at", "ordered_by",
   "identifier", "created_by_name", "comment", "ignore",
 ];
+
+export type OrderStatus = "ordered" | "received" | "cancelled";
+
+export interface ProjectRead {
+  id: string;
+  group_id: string;
+  name: string;
+  is_archived: boolean;
+  created_at: string;
+}
+
+export interface ProjectCreate {
+  name: string;
+}
+
+export interface ProjectUpdate {
+  name?: string | null;
+  is_archived?: boolean | null;
+}
+
+export interface OrderCreate {
+  chemical_id: string;
+  supplier_id: string;
+  project_id: string;
+  amount_per_package: number;
+  unit: string;
+  package_count: number;
+  price_per_package?: number | string | null;
+  currency?: string;
+  purity?: string | null;
+  vendor_catalog_number?: string | null;
+  vendor_product_url?: string | null;
+  vendor_order_number?: string | null;
+  expected_arrival?: string | null;
+  comment?: string | null;
+  wishlist_item_id?: string | null;
+}
+
+export interface OrderUpdate {
+  supplier_id?: string;
+  project_id?: string;
+  amount_per_package?: number;
+  unit?: string;
+  package_count?: number;
+  price_per_package?: number | string | null;
+  currency?: string;
+  purity?: string | null;
+  vendor_catalog_number?: string | null;
+  vendor_product_url?: string | null;
+  vendor_order_number?: string | null;
+  expected_arrival?: string | null;
+  comment?: string | null;
+}
+
+export interface OrderRead {
+  id: string;
+  group_id: string;
+  chemical_id: string;
+  chemical_name: string | null;
+  supplier_id: string;
+  supplier_name: string | null;
+  project_id: string;
+  project_name: string | null;
+  amount_per_package: number;
+  unit: string;
+  package_count: number;
+  price_per_package: string | null;  // Decimal serialized as string
+  currency: string;
+  purity: string | null;
+  vendor_catalog_number: string | null;
+  vendor_product_url: string | null;
+  vendor_order_number: string | null;
+  expected_arrival: string | null;
+  comment: string | null;
+  status: OrderStatus;
+  ordered_by_user_id: string;
+  ordered_at: string;
+  received_by_user_id: string | null;
+  received_at: string | null;
+  cancelled_at: string | null;
+  cancellation_reason: string | null;
+}
+
+export interface ContainerReceiveRow {
+  identifier: string;
+  storage_location_id: string;
+  purity_override?: string | null;
+}
+
+export interface OrderReceive {
+  containers: ContainerReceiveRow[];
+}
+
+export interface OrderCancel {
+  cancellation_reason?: string | null;
+}
+
+export type WishlistStatus = "open" | "converted" | "dismissed";
+
+export interface WishlistRead {
+  id: string;
+  group_id: string;
+  chemical_id: string | null;
+  chemical_name: string | null;
+  freeform_name: string | null;
+  freeform_cas: string | null;
+  requested_by_user_id: string;
+  requested_at: string;
+  comment: string | null;
+  status: WishlistStatus;
+  converted_to_order_id: string | null;
+  dismissed_at: string | null;
+  dismissed_by_user_id: string | null;
+}
+
+export interface WishlistCreate {
+  chemical_id?: string | null;
+  freeform_name?: string | null;
+  freeform_cas?: string | null;
+  comment?: string | null;
+}
+
+export interface WishlistPromoteResult {
+  wishlist_item_id: string;
+  chemical_id: string;
+}
+
+export interface PubChemVendor {
+  name: string;
+  url: string;
+  country: string | null;
+}
+
+export interface PubChemVendorList {
+  cid: string;
+  vendors: PubChemVendor[];
+}
+
+export interface LeadTimeStats {
+  order_count: number;
+  median_days: number;
+  p25_days: number;
+  p75_days: number;
+}
