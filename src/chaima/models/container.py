@@ -13,6 +13,9 @@ class Container(SQLModel, table=True):
     chemical_id: uuid_pkg.UUID = Field(foreign_key="chemical.id", index=True)
     location_id: uuid_pkg.UUID = Field(foreign_key="storage_location.id", index=True)
     supplier_id: uuid_pkg.UUID | None = Field(default=None, foreign_key="supplier.id")
+    order_id: uuid_pkg.UUID | None = Field(
+        default=None, foreign_key="chemical_order.id", index=True
+    )
     ordered_by_name: str | None = Field(default=None, index=True)
     identifier: str = Field(index=True)
     amount: float
