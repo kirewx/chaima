@@ -25,6 +25,7 @@ from chaima.routers.storage_locations import router as storage_locations_router
 from chaima.routers.import_ import router as import_router
 from chaima.routers.projects import router as projects_router
 from chaima.routers.orders import router as orders_router
+from chaima.routers.wishlist import router as wishlist_router
 from chaima.routers.suppliers import router as suppliers_router
 from chaima.schemas import UserRead, UserUpdate
 from chaima.services.seed import run_seeds
@@ -92,6 +93,7 @@ app.include_router(ghs_router)
 app.include_router(suppliers_router)
 app.include_router(projects_router)
 app.include_router(orders_router)
+app.include_router(wishlist_router)
 app.include_router(storage_locations_router)
 app.include_router(hazard_tags_router)
 app.include_router(chemicals_router)
