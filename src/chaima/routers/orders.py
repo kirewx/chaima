@@ -13,6 +13,7 @@ from chaima.dependencies import (
 from chaima.models.chemical import Chemical
 from chaima.models.project import Project
 from chaima.models.supplier import Supplier
+from chaima.models.user import User
 from chaima.schemas.container import ContainerRead
 from chaima.schemas.order import (
     ContainerReceiveRow as ContainerReceiveRowSchema,
@@ -29,16 +30,24 @@ router = APIRouter(prefix="/api/v1/groups/{group_id}/orders", tags=["orders"])
 
 
 async def _hydrate(session, order) -> OrderRead:
-    """Populate chemical_name / supplier_name / project_name on the read schema."""
+    """Populate chemical/supplier/project names and orderer/receiver emails."""
     chemical = await session.get(Chemical, order.chemical_id)
     supplier = await session.get(Supplier, order.supplier_id)
     project = await session.get(Project, order.project_id)
+    ordered_by = await session.get(User, order.ordered_by_user_id)
+    received_by = (
+        await session.get(User, order.received_by_user_id)
+        if order.received_by_user_id
+        else None
+    )
     base = OrderRead.model_validate(order)
     return base.model_copy(
         update={
             "chemical_name": chemical.name if chemical else None,
             "supplier_name": supplier.name if supplier else None,
             "project_name": project.name if project else None,
+            "ordered_by_user_email": ordered_by.email if ordered_by else None,
+            "received_by_user_email": received_by.email if received_by else None,
         }
     )
 

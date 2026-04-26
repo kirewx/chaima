@@ -207,6 +207,22 @@ export interface IncompatibilityCreate {
   reason?: string | null;
 }
 
+export interface HazardTagBulkUpdate {
+  hazard_tag_ids: string[];
+}
+
+export interface GHSCodeBulkUpdate {
+  ghs_ids: string[];
+}
+
+export interface ConflictRead {
+  chem_a_name: string;
+  chem_b_name: string;
+  kind: "ghs" | "tag";
+  code_or_tag: string;
+  reason: string;
+}
+
 export interface SupplierRead {
   id: string;
   name: string;
@@ -471,8 +487,10 @@ export interface OrderRead {
   comment: string | null;
   status: OrderStatus;
   ordered_by_user_id: string;
+  ordered_by_user_email: string | null;
   ordered_at: string;
   received_by_user_id: string | null;
+  received_by_user_email: string | null;
   received_at: string | null;
   cancelled_at: string | null;
   cancellation_reason: string | null;

@@ -66,6 +66,17 @@ export function OrderDetailDrawer({ groupId, orderId, onDone }: Props) {
         {order.supplier_name} ({order.project_name})
       </Typography>
 
+      <Typography variant="caption" color="text.secondary">
+        Ordered by {order.ordered_by_user_email ?? "(unknown)"} on{" "}
+        {new Date(order.ordered_at).toLocaleDateString()}
+        {order.received_by_user_email && order.received_at && (
+          <>
+            {" · "}received by {order.received_by_user_email} on{" "}
+            {new Date(order.received_at).toLocaleDateString()}
+          </>
+        )}
+      </Typography>
+
       {order.price_per_package && (
         <Typography variant="body2">
           {order.currency} {order.price_per_package} per package · total{" "}

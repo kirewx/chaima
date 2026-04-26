@@ -78,9 +78,14 @@ export function OrderList({ groupId, status }: Props) {
                   <Typography variant="subtitle2" noWrap>
                     {o.chemical_name ?? "(unknown)"}
                   </Typography>
-                  <Typography variant="caption" color="text.secondary">
+                  <Typography variant="caption" color="text.secondary" sx={{ display: "block" }}>
                     {o.supplier_name} • {o.project_name}
                   </Typography>
+                  {o.ordered_by_user_email && (
+                    <Typography variant="caption" color="text.disabled" sx={{ display: "block" }}>
+                      by {o.ordered_by_user_email}
+                    </Typography>
+                  )}
                 </Box>
                 <Box>
                   <Typography variant="body2">

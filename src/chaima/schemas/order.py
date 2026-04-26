@@ -85,8 +85,10 @@ class OrderRead(BaseModel):
     status: OrderStatus
 
     ordered_by_user_id: UUID
+    ordered_by_user_email: str | None = None
     ordered_at: datetime.datetime
     received_by_user_id: UUID | None
+    received_by_user_email: str | None = None
     received_at: datetime.datetime | None
     cancelled_at: datetime.datetime | None
     cancellation_reason: str | None
