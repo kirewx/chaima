@@ -70,3 +70,59 @@ async def dismiss_wishlist(
     session.add(item)
     await session.flush()
     return item
+
+
+async def promote_wishlist(session: AsyncSession, item: WishlistItem) -> UUID:
+    """Resolve the wishlist item to a Chemical id (creating one if needed).
+
+    Returns the chemical_id; the wishlist's status remains `open` until the
+    caller's subsequent POST /orders with wishlist_item_id flips it to
+    `converted` atomically.
+    """
+    if item.chemical_id is not None:
+        return item.chemical_id
+
+    from chaima.services import pubchem as pubchem_svc
+    from chaima.services.pubchem import PubChemNotFound, PubChemUpstreamError
+
+    query = (item.freeform_cas or item.freeform_name or "").strip()
+    if not query:
+        raise WishlistChemicalNotResolvable("wishlist item has no resolvable text")
+
+    try:
+        result = await pubchem_svc.lookup(query)
+    except PubChemNotFound:
+        raise WishlistChemicalNotResolvable(query)
+    except PubChemUpstreamError:
+        raise WishlistChemicalNotResolvable(f"upstream error for {query}")
+
+    # Reuse existing Chemical with the same CID in this group.
+    existing = (
+        await session.exec(
+            select(Chemical).where(
+                Chemical.group_id == item.group_id, Chemical.cid == result.cid
+            )
+        )
+    ).first()
+    if existing is not None:
+        item.chemical_id = existing.id
+        session.add(item)
+        await session.flush()
+        return existing.id
+
+    # Create a skeleton Chemical.
+    chemical = Chemical(
+        group_id=item.group_id,
+        name=result.name,
+        cas=result.cas,
+        cid=result.cid,
+        smiles=result.smiles,
+        molar_mass=result.molar_mass,
+        created_by=item.requested_by_user_id,
+    )
+    session.add(chemical)
+    await session.flush()
+    item.chemical_id = chemical.id
+    session.add(item)
+    await session.flush()
+    return chemical.id
