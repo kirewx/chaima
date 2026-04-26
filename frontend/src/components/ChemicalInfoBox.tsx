@@ -1,4 +1,4 @@
-import { Alert, Box, Button, Stack, Typography, Link as MuiLink } from "@mui/material";
+import { Alert, Box, Button, Chip, Stack, Typography, Link as MuiLink } from "@mui/material";
 import LinkIcon from "@mui/icons-material/Link";
 import DescriptionIcon from "@mui/icons-material/Description";
 import type {
@@ -13,6 +13,16 @@ import { HazardTagChips } from "./HazardTagChips";
 import { useChemicalStructureSvg } from "../api/hooks/useChemicalStructureSvg";
 import { useDrawer } from "./drawer/DrawerContext";
 import { useOrders } from "../api/hooks/useOrders";
+import { RoleGate } from "./RoleGate";
+
+function worstSignalWord(codes: GHSCodeRead[]): "Danger" | "Warning" | null {
+  let hasWarning = false;
+  for (const c of codes) {
+    if (c.signal_word === "Danger") return "Danger";
+    if (c.signal_word === "Warning") hasWarning = true;
+  }
+  return hasWarning ? "Warning" : null;
+}
 
 interface Props {
   chemical: ChemicalRead;
@@ -50,7 +60,7 @@ export function ChemicalInfoBox({
   const props = propertyBullets(chemical);
   const { data: structureSvg, isLoading: svgLoading } =
     useChemicalStructureSvg(groupId, chemical.id);
-  const { open: openDrawer } = useDrawer();
+  const drawer = useDrawer();
   const openOrders = useOrders(groupId, { chemical_id: chemical.id, status: "ordered" });
   const onOrderItems = openOrders.data?.items ?? [];
   const onOrderCount = onOrderItems.reduce((sum, o) => sum + o.package_count, 0);
@@ -219,7 +229,7 @@ export function ChemicalInfoBox({
             <Button
               size="small"
               variant="outlined"
-              onClick={() => openDrawer({ kind: "new-order", groupId, chemicalId: chemical.id })}
+              onClick={() => drawer.open({ kind: "new-order", groupId, chemicalId: chemical.id })}
               sx={{ alignSelf: "flex-start" }}
             >
               Order more
@@ -233,19 +243,54 @@ export function ChemicalInfoBox({
           </Stack>
         </Box>
 
-        {(ghsCodes.length > 0 || hazardTags.length > 0) && (
-          <Box sx={{ mb: 1.5 }}>
-            <Typography variant="h5" sx={{ mb: 0.75 }}>
-              Hazards
-            </Typography>
-            {ghsCodes.length > 0 && (
-              <Box sx={{ mb: hazardTags.length > 0 ? 1 : 0 }}>
-                <GHSPictogramRow codes={ghsCodes} size={40} />
-              </Box>
-            )}
-            {hazardTags.length > 0 && <HazardTagChips tags={hazardTags} />}
-          </Box>
-        )}
+        <Box sx={{ mb: 1.5 }}>
+          <Typography variant="h5" sx={{ mb: 0.75 }}>
+            Hazards
+          </Typography>
+          {(() => {
+            const signal = worstSignalWord(ghsCodes);
+            if (ghsCodes.length === 0 && hazardTags.length === 0) {
+              return (
+                <Stack spacing={0.75}>
+                  <Typography variant="caption" color="text.disabled">
+                    No hazard data
+                  </Typography>
+                  <RoleGate
+                    allow={["admin", "superuser", "creator"]}
+                    creatorId={chemical.created_by}
+                  >
+                    <Button
+                      size="small"
+                      variant="text"
+                      onClick={() =>
+                        drawer.open({ kind: "chemical-edit", chemicalId: chemical.id })
+                      }
+                      sx={{ alignSelf: "flex-start", px: 0 }}
+                    >
+                      Add hazard data
+                    </Button>
+                  </RoleGate>
+                </Stack>
+              );
+            }
+            return (
+              <Stack spacing={0.75}>
+                {signal && (
+                  <Chip
+                    label={signal}
+                    size="small"
+                    color={signal === "Danger" ? "error" : "warning"}
+                    sx={{ alignSelf: "flex-start", fontWeight: 600 }}
+                  />
+                )}
+                {ghsCodes.length > 0 && (
+                  <GHSPictogramRow codes={ghsCodes} size={40} />
+                )}
+                {hazardTags.length > 0 && <HazardTagChips tags={hazardTags} />}
+              </Stack>
+            );
+          })()}
+        </Box>
 
         <Typography variant="h5" sx={{ mb: 0.5 }}>
           Links

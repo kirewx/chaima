@@ -1,9 +1,10 @@
-import { Box, Typography, Stack, CircularProgress, Button } from "@mui/material";
+import { Alert, Box, Typography, Stack, CircularProgress, Button } from "@mui/material";
 import { useStorageNavigation } from "../hooks/useStorageNavigation";
 import { StorageBreadcrumbs } from "../components/StorageBreadcrumbs";
 import { StorageChildList } from "../components/StorageChildList";
 import { ContainerCard } from "../components/ContainerCard";
 import { useShelfContainers } from "../api/hooks/useStorageLocations";
+import { useLocationConflicts } from "../api/hooks/useCompatibility";
 import { useGroup } from "../components/GroupContext";
 import { RoleGate } from "../components/RoleGate";
 import { useDrawer } from "../components/drawer/DrawerContext";
@@ -18,6 +19,8 @@ export default function StoragePage() {
     nav.isLeaf && nav.current ? nav.current.id : null,
   );
 
+  const conflicts = useLocationConflicts(groupId, nav.current?.id ?? null);
+
   if (nav.loading) {
     return (
       <Box sx={{ display: "flex", justifyContent: "center", py: 6 }}>
@@ -29,6 +32,22 @@ export default function StoragePage() {
   return (
     <Box sx={{ p: 2 }}>
       <StorageBreadcrumbs path={nav.path} />
+
+      {nav.current && conflicts.data && conflicts.data.length > 0 && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          <strong>
+            This location has {conflicts.data.length} storage conflict
+            {conflicts.data.length === 1 ? "" : "s"}.
+          </strong>
+          <ul style={{ margin: "4px 0 0 16px", padding: 0 }}>
+            {conflicts.data.map((c, i) => (
+              <li key={i}>
+                {c.chem_a_name} and {c.chem_b_name}: {c.reason}
+              </li>
+            ))}
+          </ul>
+        </Alert>
+      )}
 
       <Stack direction="row" sx={{ alignItems: "baseline", justifyContent: "space-between", mb: 2 }}>
         <Typography variant="h1">{nav.current?.name ?? "Storage"}</Typography>

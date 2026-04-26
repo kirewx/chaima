@@ -18,6 +18,7 @@ import { useSuppliers, useCreateSupplier } from "../../api/hooks/useSuppliers";
 import type { SupplierRead } from "../../types";
 import { useCurrentUser } from "../../api/hooks/useAuth";
 import { useStorageTree } from "../../api/hooks/useStorageLocations";
+import { useCompatibilityCheck } from "../../api/hooks/useCompatibility";
 import LocationPicker from "../LocationPicker";
 
 function todayIsoDate(): string {
@@ -95,6 +96,12 @@ export function ContainerForm({ chemicalId, containerId, onDone }: Props) {
       ? errMsg
       : undefined;
   const otherErr = errMsg && !identifierErr ? errMsg : undefined;
+
+  const conflicts = useCompatibilityCheck(
+    groupId,
+    chemicalId ?? null,
+    locationId ?? null,
+  );
 
   const canSubmit =
     !!identifier.trim() && amount !== "" && !!unit.trim() && !!locationId;
@@ -272,6 +279,19 @@ export function ContainerForm({ chemicalId, containerId, onDone }: Props) {
         onChange={(e) => setReceivedDate(e.target.value || null)}
         size="small"
       />
+
+      {conflicts.data && conflicts.data.length > 0 && (
+        <Alert severity="warning" sx={{ mt: 1 }}>
+          <strong>Storage conflict.</strong>
+          <ul style={{ margin: "4px 0 0 16px", padding: 0 }}>
+            {conflicts.data.map((c, i) => (
+              <li key={i}>
+                {c.chem_a_name} and {c.chem_b_name}: {c.reason}
+              </li>
+            ))}
+          </ul>
+        </Alert>
+      )}
 
       <Stack direction="row" spacing={1} sx={{ justifyContent: "flex-end", mt: 2 }}>
         <Button onClick={onDone} disabled={saving}>

@@ -1,10 +1,19 @@
 import { useQuery } from "@tanstack/react-query";
 import client from "../client";
-import type { PaginatedResponse, GHSCodeRead } from "../../types";
+import type { GHSCodeRead, PaginatedResponse } from "../../types";
 
-export function useGHSCodes(search?: string) {
-  return useQuery<PaginatedResponse<GHSCodeRead>>({
-    queryKey: ["ghsCodes", search],
-    queryFn: () => client.get("/ghs-codes", { params: { search, limit: 100 } }).then((r) => r.data),
+async function fetchGHSCodes(): Promise<GHSCodeRead[]> {
+  const resp = await client.get<PaginatedResponse<GHSCodeRead>>(
+    "/ghs-codes",
+    { params: { limit: 100, offset: 0 } },
+  );
+  return resp.data.items;
+}
+
+export function useGHSCodes() {
+  return useQuery({
+    queryKey: ["ghs-codes"],
+    queryFn: fetchGHSCodes,
+    staleTime: 60 * 60 * 1000,
   });
 }
