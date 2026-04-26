@@ -186,3 +186,37 @@ async def test_receive_rejects_invalid_storage_location(
     with pytest.raises(svc.StorageLocationInvalidError) as ei:
         await svc.receive_order(session, o, rows=rows, received_by_user_id=user.id)
     assert ei.value.index == 0
+
+
+@pytest.mark.asyncio
+async def test_lead_time_stats_null_under_three_orders(session, group, chemical, supplier, user):
+    stats = await svc.lead_time_stats(session, group_id=group.id, supplier_id=supplier.id)
+    assert stats is None
+
+
+@pytest.mark.asyncio
+async def test_lead_time_stats_returns_quantiles(
+    session, group, chemical, supplier, user, storage_location
+):
+    """3+ received orders → returns median/p25/p75."""
+    session.add(StorageLocationGroup(location_id=storage_location.id, group_id=group.id))
+    p = await proj_svc.create_project(session, group_id=group.id, name="Cat")
+
+    deltas = [5, 10, 14, 20]
+    for d in deltas:
+        o = await svc.create_order(
+            session, group_id=group.id, chemical_id=chemical.id, supplier_id=supplier.id,
+            project_id=p.id, amount_per_package=100, unit="mL", package_count=1,
+            ordered_by_user_id=user.id,
+        )
+        o.status = svc.OrderStatus.RECEIVED
+        o.received_at = o.ordered_at + datetime.timedelta(days=d)
+        session.add(o)
+    await session.flush()
+
+    stats = await svc.lead_time_stats(session, group_id=group.id, supplier_id=supplier.id)
+    assert stats is not None
+    assert stats.order_count == 4
+    assert stats.median_days == 12  # median of [5,10,14,20] = 12
+    assert 5 <= stats.p25_days <= 12
+    assert 12 <= stats.p75_days <= 20

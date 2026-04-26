@@ -21,6 +21,7 @@ from chaima.models.project import Project
 from chaima.models.storage import StorageLocation, StorageLocationGroup
 from chaima.models.supplier import Supplier
 from chaima.models.wishlist import WishlistItem, WishlistStatus
+from chaima.schemas.supplier import LeadTimeStats
 
 
 class CrossGroupReferenceError(Exception):
@@ -285,3 +286,40 @@ async def receive_order(
     await session.flush()
 
     return spawned
+
+
+async def lead_time_stats(
+    session: AsyncSession, *, group_id: UUID, supplier_id: UUID
+) -> LeadTimeStats | None:
+    """Median + IQR of received orders' (received_at - ordered_at) days."""
+    rows = (
+        await session.exec(
+            select(Order).where(
+                Order.group_id == group_id,
+                Order.supplier_id == supplier_id,
+                Order.status == OrderStatus.RECEIVED,
+            )
+        )
+    ).all()
+    deltas = [
+        (o.received_at - o.ordered_at).days
+        for o in rows
+        if o.received_at is not None and o.ordered_at is not None
+    ]
+    if len(deltas) < 3:
+        return None
+    sorted_deltas = sorted(deltas)
+    if len(sorted_deltas) < 4:
+        # quantiles needs n>=2; for n=3 use simple split.
+        p25 = sorted_deltas[0]
+        p75 = sorted_deltas[-1]
+    else:
+        qs = quantiles(sorted_deltas, n=4)  # returns 3 values: q1, q2, q3
+        p25 = int(round(qs[0]))
+        p75 = int(round(qs[2]))
+    return LeadTimeStats(
+        order_count=len(deltas),
+        median_days=int(round(median(deltas))),
+        p25_days=p25,
+        p75_days=p75,
+    )
