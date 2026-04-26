@@ -93,7 +93,7 @@ async def test_receive_count_mismatch_returns_400(
 
 
 @pytest.mark.asyncio
-async def test_cancel_admin_only(client, group, chemical, supplier, membership):
+async def test_cancel_by_creator(client, group, chemical, supplier, membership):
     project = await _make_project(client, group.id)
     create_resp = await client.post(
         f"/api/v1/groups/{group.id}/orders",
@@ -107,6 +107,37 @@ async def test_cancel_admin_only(client, group, chemical, supplier, membership):
     resp = await client.post(
         f"/api/v1/groups/{group.id}/orders/{order_id}/cancel",
         json={"cancellation_reason": "no longer needed"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["status"] == "cancelled"
+
+
+@pytest.mark.asyncio
+async def test_cancel_forbidden_for_other_non_admin_member(
+    client, session, group, chemical, supplier, membership
+):
+    """A non-admin member who didn't create the order cannot cancel it."""
+    from uuid import UUID, uuid4
+    from chaima.models.order import Order
+
+    project = await _make_project(client, group.id)
+    other_user_id = uuid4()
+    order = Order(
+        group_id=group.id,
+        chemical_id=chemical.id,
+        supplier_id=supplier.id,
+        project_id=UUID(project["id"]),
+        amount_per_package=1.0,
+        unit="g",
+        package_count=1,
+        ordered_by_user_id=other_user_id,
+    )
+    session.add(order)
+    await session.commit()
+
+    resp = await client.post(
+        f"/api/v1/groups/{group.id}/orders/{order.id}/cancel",
+        json={"cancellation_reason": "not mine"},
     )
     assert resp.status_code == 403
 

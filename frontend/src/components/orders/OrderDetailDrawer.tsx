@@ -13,8 +13,9 @@ import {
 } from "@mui/material";
 import { useState } from "react";
 import { useOrder, useCancelOrder } from "../../api/hooks/useOrders";
+import { useCurrentUser } from "../../api/hooks/useAuth";
+import { useGroupMembers } from "../../api/hooks/useGroups";
 import { useDrawer } from "../drawer/DrawerContext";
-import { RoleGate } from "../RoleGate";
 import { ReceiveOrderDialog } from "./ReceiveOrderDialog";
 
 interface Props {
@@ -26,10 +27,16 @@ interface Props {
 export function OrderDetailDrawer({ groupId, orderId, onDone }: Props) {
   const { data: order, isLoading } = useOrder(groupId, orderId);
   const cancel = useCancelOrder(groupId, orderId);
+  const { data: user } = useCurrentUser();
+  const { data: members = [] } = useGroupMembers(groupId);
   const { open: openDrawer } = useDrawer();
   const [showReceive, setShowReceive] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+
+  const isCreator = !!user && !!order && user.id === order.ordered_by_user_id;
+  const isGroupAdmin = !!user && members.some((m) => m.user_id === user.id && m.is_admin);
+  const canCancel = !!user && (isCreator || isGroupAdmin || user.is_superuser);
 
   if (isLoading || !order) {
     return (
@@ -115,16 +122,14 @@ export function OrderDetailDrawer({ groupId, orderId, onDone }: Props) {
             Mark received
           </Button>
         )}
-        {order.status === "ordered" && (
-          <RoleGate allow={["admin"]}>
-            <Button
-              variant="outlined"
-              color="error"
-              onClick={() => setShowCancel(true)}
-            >
-              Cancel
-            </Button>
-          </RoleGate>
+        {order.status === "ordered" && canCancel && (
+          <Button
+            variant="outlined"
+            color="error"
+            onClick={() => setShowCancel(true)}
+          >
+            Cancel
+          </Button>
         )}
         <Button variant="outlined" onClick={reorder}>
           Reorder

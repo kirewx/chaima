@@ -183,11 +183,14 @@ async def receive_order(
 @router.post("/{order_id}/cancel", response_model=OrderRead)
 async def cancel_order(
     group_id: UUID, order_id: UUID, body: OrderCancel,
-    session: SessionDep, admin: GroupAdminDep,
+    session: SessionDep, current_user: CurrentUserDep, member: GroupMemberDep,
 ) -> OrderRead:
     order = await order_service.get_order(session, order_id)
     if order is None or order.group_id != group_id:
         raise HTTPException(status_code=404, detail="Order not found")
+    _, link = member
+    if order.ordered_by_user_id != current_user.id and not link.is_admin:
+        raise HTTPException(status_code=403, detail="Only the creator or an admin can cancel")
     try:
         await order_service.cancel_order(session, order, reason=body.cancellation_reason)
     except order_service.OrderStateError as exc:
