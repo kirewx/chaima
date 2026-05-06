@@ -105,6 +105,29 @@ async def lookup(query: str) -> PubChemLookupResult:
     return result
 
 
+async def lookup_synonyms(cid: str) -> list[str]:
+    """Fetch the synonym list for a CID. Cached 24h, capped at ``_SYNONYM_CAP``.
+
+    Returns an empty list on any upstream failure — never raises.
+    """
+    cache_key = f"syn:{cid}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+
+    timeout = httpx.Timeout(_TOTAL_TIMEOUT, connect=_PER_REQUEST_TIMEOUT)
+    try:
+        async with httpx.AsyncClient(base_url=_BASE_URL, timeout=timeout) as client:
+            synonyms = await _fetch_synonyms(client, int(cid))
+    except (PubChemUpstreamError, Exception) as exc:
+        logger.warning("PubChem synonyms fetch failed for CID %s: %s", cid, exc)
+        return []
+
+    result = synonyms[:_SYNONYM_CAP]
+    _cache_set(cache_key, result)
+    return result
+
+
 async def lookup_ghs(cid: str) -> list[PubChemGHSHit]:
     """Fetch GHS hazard codes for a CID (the slow part).
 

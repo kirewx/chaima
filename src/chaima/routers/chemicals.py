@@ -10,7 +10,7 @@ from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 
-from chaima.dependencies import CurrentUserDep, GroupAdminDep, GroupMemberDep, SessionDep
+from chaima.dependencies import CurrentUserDep, GroupAdminDep, GroupMemberDep, SessionDep, SuperuserDep
 from chaima.services import enrich as enrich_service
 from chaima.schemas.chemical import (
     ChemicalCreate,
@@ -672,10 +672,30 @@ async def enrich_pubchem(
     group_id: UUID,
     body: EnrichBody,
     session: SessionDep,
-    admin: GroupAdminDep,
+    user: SuperuserDep,
 ) -> StreamingResponse:
     async def generate():
         async for event in enrich_service.enrich_group_chemicals(
+            session, group_id, body.chemical_ids,
+        ):
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@router.post("/refetch-ghs")
+async def refetch_ghs(
+    group_id: UUID,
+    body: EnrichBody,
+    session: SessionDep,
+    user: SuperuserDep,
+) -> StreamingResponse:
+    """Stream a bulk re-fetch of GHS hazards from PubChem for every chemical
+    in the group that has a CID. Superuser-only. Existing GHS codes on a
+    chemical are preserved; new codes are merged in.
+    """
+    async def generate():
+        async for event in enrich_service.refetch_group_ghs(
             session, group_id, body.chemical_ids,
         ):
             yield f"data: {json.dumps(event)}\n\n"

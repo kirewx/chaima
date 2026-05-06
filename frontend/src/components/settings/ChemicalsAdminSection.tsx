@@ -4,10 +4,12 @@ import {
   LinearProgress, Stack, TextField, Typography,
 } from "@mui/material";
 import ScienceIcon from "@mui/icons-material/Science";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import { SectionHeader } from "./SectionHeader";
 import { useChemicals, useChemicalDetail } from "../../api/hooks/useChemicals";
 import { useHazardTags } from "../../api/hooks/useHazardTags";
 import { useGHSCodes } from "../../api/hooks/useGHSCodes";
+import { useCurrentUser } from "../../api/hooks/useAuth";
 import client from "../../api/client";
 import type { ChemicalRead } from "../../types";
 
@@ -19,11 +21,18 @@ type EnrichEvent =
   | { id: string; name: string; status: "enriched" | "skipped" | "not_found" | "error" }
   | { summary: { enriched: number; skipped: number; not_found: number; error: number } };
 
+type RefetchGHSEvent =
+  | { id: string; name: string; status: "updated" | "unchanged" | "skipped" | "error" }
+  | { summary: { updated: number; unchanged: number; skipped: number; error: number } };
+
 export function ChemicalsAdminSection({ groupId }: Props) {
   const [open, setOpen] = useState(false);
   const [events, setEvents] = useState<EnrichEvent[]>([]);
   const [running, setRunning] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+
+  const { data: currentUser } = useCurrentUser();
+  const isSuperuser = !!currentUser?.is_superuser;
 
   const start = async () => {
     setRunning(true);
@@ -71,19 +80,23 @@ export function ChemicalsAdminSection({ groupId }: Props) {
         subtitle="Bulk maintenance operations for this group's chemical database."
       />
       <Stack spacing={2} sx={{ maxWidth: 600 }}>
-        <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
-          <Button
-            variant="contained"
-            size="small"
-            startIcon={<ScienceIcon />}
-            onClick={() => setOpen(true)}
-          >
-            Enrich missing data from PubChem
-          </Button>
-          <Typography variant="body2" color="text.secondary">
-            Fills SMILES, molar mass, CAS, CID for chemicals that lack them.
-          </Typography>
-        </Stack>
+        {isSuperuser && (
+          <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+            <Button
+              variant="contained"
+              size="small"
+              startIcon={<ScienceIcon />}
+              onClick={() => setOpen(true)}
+            >
+              Enrich missing data from PubChem
+            </Button>
+            <Typography variant="body2" color="text.secondary">
+              Superuser-only. Fills SMILES, molar mass, CAS, CID for chemicals that lack them.
+            </Typography>
+          </Stack>
+        )}
+
+        {isSuperuser && <RefetchGHSControl groupId={groupId} />}
       </Stack>
 
       <Dialog open={open} onClose={() => !running && setOpen(false)} fullWidth maxWidth="sm">
@@ -121,6 +134,108 @@ export function ChemicalsAdminSection({ groupId }: Props) {
 
       <AssignHazardsDebug groupId={groupId} />
     </Box>
+  );
+}
+
+function RefetchGHSControl({ groupId }: { groupId: string }) {
+  const [open, setOpen] = useState(false);
+  const [events, setEvents] = useState<RefetchGHSEvent[]>([]);
+  const [running, setRunning] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const start = async () => {
+    setRunning(true);
+    setEvents([]);
+    setErr(null);
+    try {
+      const resp = await fetch(`/api/v1/groups/${groupId}/chemicals/refetch-ghs`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chemical_ids: null }),
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const reader = resp.body!.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split("\n");
+        buf = parts.pop()!;
+        for (const line of parts) {
+          if (!line.startsWith("data: ")) continue;
+          const ev = JSON.parse(line.slice(6)) as RefetchGHSEvent;
+          setEvents((prev) => [...prev, ev]);
+        }
+      }
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const summary = events.find((e) => "summary" in e) as
+    | { summary: { updated: number; unchanged: number; skipped: number; error: number } }
+    | undefined;
+  const perChemCount = events.filter((e) => "id" in e).length;
+
+  return (
+    <>
+      <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<WarningAmberIcon />}
+          onClick={() => setOpen(true)}
+        >
+          Refetch GHS hazards & synonyms from PubChem
+        </Button>
+        <Typography variant="body2" color="text.secondary">
+          Superuser-only. Existing GHS codes and synonyms are preserved; new ones are merged in.
+        </Typography>
+      </Stack>
+
+      <Dialog open={open} onClose={() => !running && setOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Refetch GHS hazards & synonyms</DialogTitle>
+        <DialogContent>
+          {!running && !summary && (
+            <Typography>
+              For every chemical in this group that has a PubChem CID, this re-queries
+              PubChem's GHS Classification and synonym list, then merges new H-codes and
+              synonyms into the chemical's set. Existing entries you've curated manually
+              are preserved.
+            </Typography>
+          )}
+          {running && (
+            <Stack spacing={2}>
+              <LinearProgress />
+              <Typography variant="body2">{perChemCount} processed…</Typography>
+            </Stack>
+          )}
+          {summary && (
+            <Alert severity="success">
+              Updated {summary.summary.updated}, unchanged {summary.summary.unchanged},
+              skipped {summary.summary.skipped}, errors {summary.summary.error}.
+            </Alert>
+          )}
+          {err && <Alert severity="error">{err}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          {!running && !summary && (
+            <>
+              <Button onClick={() => setOpen(false)}>Cancel</Button>
+              <Button variant="contained" onClick={start}>Start</Button>
+            </>
+          )}
+          {(running || summary) && (
+            <Button onClick={() => { setOpen(false); setEvents([]); }} disabled={running}>Close</Button>
+          )}
+        </DialogActions>
+      </Dialog>
+    </>
   );
 }
 
