@@ -81,7 +81,7 @@ async def test_create_building_room_cabinet_shelf(client, group, membership):
 async def test_get_tree_exposes_kind_and_container_count(
     client, session, group, membership, user
 ):
-    """Tree response surfaces kind, parent_id, and direct container_count."""
+    """Tree response surfaces kind, parent_id, and subtree container_count."""
     room = StorageLocation(name="Room A", kind=StorageKind.ROOM)
     session.add(room)
     await session.flush()
@@ -115,7 +115,7 @@ async def test_get_tree_exposes_kind_and_container_count(
     room_node = tree[0]
     assert room_node.kind == StorageKind.ROOM
     assert room_node.parent_id is None
-    assert room_node.container_count == 0
+    assert room_node.container_count == 1  # rolled up from descendant shelf
     assert len(room_node.children) == 1
     shelf_node = room_node.children[0]
     assert shelf_node.kind == StorageKind.SHELF

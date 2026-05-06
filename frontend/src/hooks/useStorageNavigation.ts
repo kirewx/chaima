@@ -19,6 +19,10 @@ export interface StorageNavigation {
   isLeaf: boolean;
   /** The kind of child that should be added by the "+ Add ..." button below the list, or null if the user can't add here. */
   nextChildKind: "building" | "room" | "cabinet" | "shelf" | null;
+  /** Parent id to use when the "+ Add ..." button is clicked. For non-SU at root creating a room, this is the implicit building derived from the tree. Null at the SU root view (buildings are top-level) or when the parent is the currently-selected node. */
+  nextChildParentId: string | null;
+  /** If non-null, the "+ Add ..." action is blocked with this human-readable reason (used for tooltip + disabled state). */
+  nextChildDisabledReason: string | null;
 }
 
 function findPath(
@@ -71,6 +75,26 @@ export function useStorageNavigation(): StorageNavigation {
       nextChildKind = CHILD_KIND[current.kind] ?? null;
     }
 
+    let nextChildParentId: string | null = current?.id ?? null;
+    let nextChildDisabledReason: string | null = null;
+
+    if (!current && nextChildKind === "room") {
+      // Non-SU adding a room at the root view: the parent must be the
+      // group's building. We derive it from the unflattened tree.
+      const buildings = all.filter((n) => n.kind === "building");
+      if (buildings.length === 1) {
+        nextChildParentId = buildings[0].id;
+      } else if (buildings.length === 0) {
+        nextChildParentId = null;
+        nextChildDisabledReason =
+          "No building is set up for your group yet. Ask a superuser to create one.";
+      } else {
+        nextChildParentId = null;
+        nextChildDisabledReason =
+          "Your group is linked to multiple buildings. Ask a superuser to clarify which one to use.";
+      }
+    }
+
     return {
       loading: tree.isLoading,
       visibleRoots,
@@ -79,6 +103,8 @@ export function useStorageNavigation(): StorageNavigation {
       children,
       isLeaf,
       nextChildKind,
+      nextChildParentId,
+      nextChildDisabledReason,
     };
   }, [tree.data, tree.isLoading, user?.is_superuser, locationId]);
 }

@@ -167,6 +167,14 @@ async def get_tree(session: AsyncSession, group_id: UUID) -> list[StorageLocatio
         else:
             roots.append(node)
 
+    def _rollup(node: StorageLocationNode) -> int:
+        for child in node.children:
+            node.container_count += _rollup(child)
+        return node.container_count
+
+    for root in roots:
+        _rollup(root)
+
     return roots
 
 

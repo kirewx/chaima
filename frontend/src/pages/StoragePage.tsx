@@ -100,7 +100,8 @@ export default function StoragePage() {
           children={nav.children}
           parentId={nav.current?.id ?? null}
           nextChildKind={nav.nextChildKind}
-          parentHintForNewChild={nav.current?.id ?? null}
+          parentHintForNewChild={nav.nextChildParentId}
+          addDisabledReason={nav.nextChildDisabledReason}
         />
       )}
     </Box>

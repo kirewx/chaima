@@ -95,8 +95,9 @@ class StorageLocationNode(BaseModel):
     parent_id : UUID or None
         Parent location ID, if any.
     container_count : int
-        Number of non-archived containers pinned directly to this node
-        (not transitive — does not include containers in descendant nodes).
+        Number of non-archived containers in this node's subtree (the node
+        itself plus all descendants). For shelves this equals the directly
+        pinned containers; for cabinets/rooms/buildings it rolls up.
     children : list[StorageLocationNode]
         Child nodes in the tree.
     """
