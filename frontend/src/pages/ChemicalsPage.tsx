@@ -158,7 +158,21 @@ export default function ChemicalsPage() {
         </Badge>
       </Stack>
       <FilterBar filters={activeFilters} />
-      <ChemicalList items={items} loading={isLoading} groupId={groupId} />
+      <ChemicalList
+        items={items}
+        loading={isLoading}
+        groupId={groupId}
+        onLoadMore={
+          isMultiGroup ? undefined : () => void singleGroup.fetchNextPage()
+        }
+        hasMore={!isMultiGroup && !!singleGroup.hasNextPage}
+        loadingMore={!isMultiGroup && singleGroup.isFetchingNextPage}
+        footerNote={
+          isMultiGroup
+            ? "Showing the first 100 chemicals per group. Switch to a single group to load more."
+            : undefined
+        }
+      />
       <FilterDrawer
         open={filtersOpen}
         onOpen={() => setFiltersOpen(true)}
