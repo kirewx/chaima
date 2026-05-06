@@ -23,6 +23,8 @@ export interface StorageNavigation {
   nextChildParentId: string | null;
   /** If non-null, the "+ Add ..." action is blocked with this human-readable reason (used for tooltip + disabled state). */
   nextChildDisabledReason: string | null;
+  /** Title to render at the root view (when no location is selected). For non-SU with a single building, this is the building's name so the page reads "Lab Building" instead of a generic "Storage". */
+  rootLabel: string;
 }
 
 function findPath(
@@ -78,10 +80,11 @@ export function useStorageNavigation(): StorageNavigation {
     let nextChildParentId: string | null = current?.id ?? null;
     let nextChildDisabledReason: string | null = null;
 
+    const buildings = all.filter((n) => n.kind === "building");
+
     if (!current && nextChildKind === "room") {
       // Non-SU adding a room at the root view: the parent must be the
       // group's building. We derive it from the unflattened tree.
-      const buildings = all.filter((n) => n.kind === "building");
       if (buildings.length === 1) {
         nextChildParentId = buildings[0].id;
       } else if (buildings.length === 0) {
@@ -95,6 +98,11 @@ export function useStorageNavigation(): StorageNavigation {
       }
     }
 
+    // For non-SU the building layer is hidden, so use its name as the root
+    // page title instead of a generic "Storage".
+    const rootLabel =
+      !isSuperuser && buildings.length === 1 ? buildings[0].name : "Storage";
+
     return {
       loading: tree.isLoading,
       visibleRoots,
@@ -105,6 +113,7 @@ export function useStorageNavigation(): StorageNavigation {
       nextChildKind,
       nextChildParentId,
       nextChildDisabledReason,
+      rootLabel,
     };
   }, [tree.data, tree.isLoading, user?.is_superuser, locationId]);
 }

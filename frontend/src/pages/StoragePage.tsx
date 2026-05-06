@@ -50,7 +50,7 @@ export default function StoragePage() {
       )}
 
       <Stack direction="row" sx={{ alignItems: "baseline", justifyContent: "space-between", mb: 2 }}>
-        <Typography variant="h1">{nav.current?.name ?? "Storage"}</Typography>
+        <Typography variant="h1">{nav.current?.name ?? nav.rootLabel}</Typography>
         {nav.current && (
           <RoleGate allow={["admin", "superuser"]}>
             <Button
