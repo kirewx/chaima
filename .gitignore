@@ -230,5 +230,5 @@ chaima.db
 *.stackdump
 
 # Local-only files
-chaima-presentation.html
+presentation/
 skills-lock.json
