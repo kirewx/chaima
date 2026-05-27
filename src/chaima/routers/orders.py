@@ -2,7 +2,7 @@
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
 
 from chaima.dependencies import (
     CurrentUserDep,
@@ -25,6 +25,8 @@ from chaima.schemas.order import (
 )
 from chaima.schemas.pagination import PaginatedResponse
 from chaima.services import orders as order_service
+from chaima.services.events import log_event
+from chaima.models.analytics import EventType
 
 router = APIRouter(prefix="/api/v1/groups/{group_id}/orders", tags=["orders"])
 
@@ -84,6 +86,7 @@ async def create_order(
     session: SessionDep,
     current_user: CurrentUserDep,
     member: GroupMemberDep,
+    background_tasks: BackgroundTasks,
 ) -> OrderRead:
     try:
         order = await order_service.create_order(
@@ -109,6 +112,13 @@ async def create_order(
     except order_service.CrossGroupReferenceError as exc:
         raise HTTPException(status_code=404, detail=f"{exc} not found in this group")
     await session.commit()
+    log_event(
+        background_tasks,
+        user_id=current_user.id,
+        group_id=group_id,
+        type=EventType.ORDER_CREATED,
+        payload={"order_id": str(order.id)},
+    )
     return await _hydrate(session, order)
 
 

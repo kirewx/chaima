@@ -5,7 +5,7 @@ from datetime import date
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, File, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, Response, UploadFile, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
@@ -27,6 +27,8 @@ from chaima.schemas.chemical import (
 from chaima.schemas.pagination import PaginatedResponse
 from chaima.models.chemical import Chemical
 from chaima.services import chemicals as chemical_service
+from chaima.services.events import log_event, _persist_event
+from chaima.models.analytics import EventType
 from chaima.services import export as export_service
 from chaima.services import files as files_service
 from chaima.services import images as images_service
@@ -65,6 +67,7 @@ async def list_chemicals(
     session: SessionDep,
     member: GroupMemberDep,
     user: CurrentUserDep,
+    background_tasks: BackgroundTasks,
     search: str | None = Query(None),
     hazard_tag_id: UUID | None = Query(None),
     ghs_code_id: UUID | None = Query(None),
@@ -77,38 +80,6 @@ async def list_chemicals(
     offset: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),
 ) -> PaginatedResponse[ChemicalRead]:
-    """List chemicals in a group.
-
-    Parameters
-    ----------
-    group_id : UUID
-        Group to list chemicals for.
-    session : SessionDep
-        Database session.
-    member : GroupMemberDep
-        Verified group membership.
-    search : str or None, optional
-        Filter by name or CAS (case-insensitive partial match).
-    hazard_tag_id : UUID or None, optional
-        Filter to chemicals with this hazard tag.
-    ghs_code_id : UUID or None, optional
-        Filter to chemicals with this GHS code.
-    has_containers : bool or None, optional
-        Filter by active container presence.
-    sort : str, optional
-        Sort field. Defaults to ``"name"``.
-    order : str, optional
-        Sort direction. Defaults to ``"asc"``.
-    offset : int, optional
-        Pagination offset. Defaults to 0.
-    limit : int, optional
-        Page size. Defaults to 20.
-
-    Returns
-    -------
-    PaginatedResponse[ChemicalRead]
-        Paginated list of chemicals.
-    """
     items, total = await chemical_service.list_chemicals(
         session,
         group_id,
@@ -125,6 +96,15 @@ async def list_chemicals(
         offset=offset,
         limit=limit,
     )
+    # Analytics: only log "real" searches; sub-3-char queries are typing noise.
+    if search and len(search.strip()) >= 3:
+        log_event(
+            background_tasks,
+            user_id=user.id,
+            group_id=group_id,
+            type=EventType.SEARCH_EXECUTED,
+            payload={"query": search.strip(), "result_count": total},
+        )
     return PaginatedResponse(
         items=[ChemicalRead.model_validate(i, from_attributes=True) for i in items],
         total=total,
@@ -140,6 +120,7 @@ async def create_chemical(
     session: SessionDep,
     member: GroupMemberDep,
     user: CurrentUserDep,
+    background_tasks: BackgroundTasks,
 ) -> ChemicalRead:
     """Create a chemical in a group.
 
@@ -212,13 +193,23 @@ async def create_chemical(
             detail="A chemical with this name already exists in the group",
         )
     await session.refresh(chem)
+    log_event(
+        background_tasks,
+        user_id=user.id,
+        group_id=group_id,
+        type=EventType.CHEMICAL_CREATED,
+        payload={"chemical_id": str(chem.id)},
+    )
     return ChemicalRead.model_validate(chem, from_attributes=True)
 
 
 @router.post("/extract-from-photo", response_model=vision_service.ExtractedLabel)
 async def extract_from_photo(
+    group_id: UUID,
     session: SessionDep,
     member: GroupMemberDep,
+    user: CurrentUserDep,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
 ) -> vision_service.ExtractedLabel:
     """Extract chemical-label fields from a photo via the vision service.
@@ -227,7 +218,26 @@ async def extract_from_photo(
     """
     data = await file.read()
     images_service.validate_image_upload(file, data)
-    return vision_service.extract_from_image(data, file.content_type or "image/jpeg")
+    try:
+        result = vision_service.extract_from_image(data, file.content_type or "image/jpeg")
+    except Exception:
+        # Persist the failure event immediately (not via BackgroundTasks) so it
+        # is written even though the response path raises an exception and
+        # background tasks may not execute.
+        await _persist_event(
+            user_id=user.id, group_id=group_id,
+            type=EventType.PHOTO_EXTRACT,
+            payload={"success": False, "confidence": None},
+        )
+        raise
+
+    log_event(
+        background_tasks,
+        user_id=user.id, group_id=group_id,
+        type=EventType.PHOTO_EXTRACT,
+        payload={"success": True, "confidence": result.confidence},
+    )
+    return result
 
 
 @router.get("/export")

@@ -12,7 +12,8 @@ export type SettingsSectionKey =
   | "chemicals-admin"
   | "groups"
   | "buildings"
-  | "system";
+  | "system"
+  | "analytics";
 
 export interface NavItem {
   key: SettingsSectionKey;

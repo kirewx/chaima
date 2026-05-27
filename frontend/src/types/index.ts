@@ -578,3 +578,46 @@ export interface ContainerPrefill {
   purity?: string;
   purchased_at?: string;
 }
+
+export type AnalyticsRange = "24h" | "7d" | "30d" | "90d";
+
+export interface AnalyticsSummary {
+  active_users: number;
+  total_logins: number;
+  total_searches: number;
+  total_creates: number;
+  total_photo_extracts: number;
+  total_pubchem_fetches: number;
+  range_start: string;
+  range_end: string;
+}
+
+export interface UserStatsRow {
+  user_id: string;
+  email: string;
+  last_login_at: string | null;
+  logins_in_range: number;
+  searches: number;
+  chemicals_created: number;
+  containers_created: number;
+  orders_created: number;
+  wishlist_added: number;
+  photo_extracts: number;
+}
+
+export interface TopSearchRow {
+  query: string;
+  count: number;
+  avg_result_count: number;
+  empty_count: number;
+}
+
+export interface SlowEndpointRow {
+  method: string;
+  path: string;
+  p50_ms: number;
+  p95_ms: number;
+  p99_ms: number;
+  count: number;
+  error_count: number;
+}

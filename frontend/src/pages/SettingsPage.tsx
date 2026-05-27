@@ -13,6 +13,7 @@ import { ImportSection } from "../components/settings/ImportSection";
 import { ChemicalsAdminSection } from "../components/settings/ChemicalsAdminSection";
 import { ProjectsAdminSection } from "../components/settings/ProjectsAdminSection";
 import { GroupsAdminSection } from "../components/settings/GroupsAdminSection";
+import { AnalyticsSection } from "../components/settings/AnalyticsSection";
 
 export default function SettingsPage() {
   const { data: user } = useCurrentUser();
@@ -31,6 +32,7 @@ export default function SettingsPage() {
     { key: "import", label: "Import & Export", group: "GROUP ADMIN", visible: isMember },
     { key: "chemicals-admin", label: "Chemicals", group: "GROUP ADMIN", visible: isMember },
     { key: "groups", label: "Groups", group: "SUPERUSER", visible: isSuperuser },
+    { key: "analytics", label: "Analytics", group: "SUPERUSER", visible: isSuperuser },
     { key: "buildings", label: "Buildings", group: "SUPERUSER", visible: isSuperuser },
     { key: "system", label: "System", group: "SYSTEM", visible: isSuperuser },
   ];
@@ -60,6 +62,7 @@ export default function SettingsPage() {
           <ProjectsAdminSection groupId={user.main_group_id} />
         )}
         {active === "groups" && isSuperuser && <GroupsAdminSection />}
+        {active === "analytics" && isSuperuser && <AnalyticsSection />}
         {active === "buildings" && isSuperuser && <BuildingsSection />}
         {active === "system" && isSuperuser && <SystemSection />}
       </Box>
