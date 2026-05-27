@@ -557,3 +557,24 @@ export interface LeadTimeStats {
   p25_days: number;
   p75_days: number;
 }
+
+export interface ExtractedLabel {
+  cas: string | null;
+  name: string | null;
+  amount: number | null;
+  unit: string | null;
+  supplier_name: string | null;
+  identifier: string | null;
+  purity: string | null;
+  purchased_at: string | null;  // ISO date YYYY-MM-DD
+  confidence: "high" | "medium" | "low";
+}
+
+export interface ContainerPrefill {
+  identifier?: string;
+  amount?: number;
+  unit?: string;
+  supplier_name?: string;
+  purity?: string;
+  purchased_at?: string;
+}
