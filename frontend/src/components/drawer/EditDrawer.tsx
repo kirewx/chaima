@@ -58,6 +58,8 @@ export function EditDrawer() {
             containerId={
               config.kind === "container-edit" ? config.containerId : undefined
             }
+            prefill={config.kind === "container-new" ? config.prefill : undefined}
+            photoFile={config.kind === "container-new" ? config.photoFile : undefined}
             onDone={close}
           />
         )}
