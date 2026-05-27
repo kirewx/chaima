@@ -14,6 +14,7 @@ dependencies = [
     "openpyxl>=3.1.5",
     "pillow>=11.0.0",
     "pydantic-settings>=2.13.1",
+    "python-dotenv>=1.0.0",
     "rdkit>=2026.3.1",
     "sqlmodel>=0.0.38",
     "typer>=0.21.1",
