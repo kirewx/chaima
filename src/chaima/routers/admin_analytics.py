@@ -62,3 +62,13 @@ async def get_slow_endpoints(
     return await analytics_service.slow_endpoints(
         session, range_=range, limit=limit, now=_now(),
     )
+
+
+@router.post("/_compact")
+async def compact_analytics(
+    session: SessionDep,
+    user: SuperuserDep,
+) -> dict[str, Any]:
+    """Roll old events into the daily summary and prune retention."""
+    result = await analytics_service.compact(session, now=_now())
+    return result

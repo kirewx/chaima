@@ -135,3 +135,105 @@ async def test_top_searches_requires_superuser(client):
 async def test_slow_endpoints_requires_superuser(client):
     r = await client.get("/api/v1/admin/analytics/slow-endpoints", params={"range": "7d"})
     assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_compact_endpoint_requires_superuser(client):
+    r = await client.post("/api/v1/admin/analytics/_compact")
+    assert r.status_code == 403
+
+
+@pytest.mark.asyncio
+async def test_compact_rolls_old_events_into_daily(superuser_client, session, superuser, group):
+    """Events older than 30 days move from event → event_daily, then disappear."""
+    from chaima.models.analytics import Event, EventDaily
+    from sqlmodel import select
+    now = dt.datetime.now(dt.timezone.utc)
+
+    session.add_all([
+        Event(user_id=superuser.id, group_id=group.id, type="login_success",
+              payload=None, created_at=now - dt.timedelta(days=40)),
+        Event(user_id=superuser.id, group_id=group.id, type="login_success",
+              payload=None, created_at=now - dt.timedelta(days=40)),
+        Event(user_id=superuser.id, group_id=group.id, type="search_executed",
+              payload={"query": "x", "result_count": 1},
+              created_at=now - dt.timedelta(days=45)),
+        # Fresh — must NOT be compacted:
+        Event(user_id=superuser.id, group_id=group.id, type="login_success",
+              payload=None, created_at=now - dt.timedelta(hours=1)),
+    ])
+    await session.flush()
+
+    r = await superuser_client.post("/api/v1/admin/analytics/_compact")
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["events_aggregated"] == 3
+    assert body["events_deleted"] == 3
+
+    remaining = (await session.exec(select(Event))).all()
+    assert len(remaining) == 1  # the fresh one
+
+    daily = (await session.exec(select(EventDaily))).all()
+    assert len(daily) == 2  # 2 distinct (day, type) combos
+    total = sum(d.count for d in daily)
+    assert total == 3
+
+
+@pytest.mark.asyncio
+async def test_compact_prunes_slow_requests_older_than_30d(
+    superuser_client, session, superuser,
+):
+    from chaima.models.analytics import SlowRequest
+    from sqlmodel import select
+    now = dt.datetime.now(dt.timezone.utc)
+
+    session.add_all([
+        SlowRequest(user_id=superuser.id, method="GET", path="/x", status=200,
+                    duration_ms=600, created_at=now - dt.timedelta(days=40)),
+        SlowRequest(user_id=superuser.id, method="GET", path="/x", status=200,
+                    duration_ms=600, created_at=now - dt.timedelta(hours=1)),
+    ])
+    await session.flush()
+
+    r = await superuser_client.post("/api/v1/admin/analytics/_compact")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["slow_requests_deleted"] == 1
+
+    remaining = (await session.exec(select(SlowRequest))).all()
+    assert len(remaining) == 1
+
+
+@pytest.mark.asyncio
+async def test_compact_prunes_daily_older_than_365d(superuser_client, session, superuser):
+    from chaima.models.analytics import EventDaily
+    from sqlmodel import select
+    today = dt.date.today()
+
+    session.add_all([
+        EventDaily(day=today - dt.timedelta(days=400), user_id=superuser.id,
+                   type="login_success", count=5),
+        EventDaily(day=today - dt.timedelta(days=10), user_id=superuser.id,
+                   type="login_success", count=1),
+    ])
+    await session.flush()
+
+    r = await superuser_client.post("/api/v1/admin/analytics/_compact")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["event_daily_deleted"] == 1
+
+    remaining = (await session.exec(select(EventDaily))).all()
+    assert len(remaining) == 1
+
+
+@pytest.mark.asyncio
+async def test_compact_is_idempotent(superuser_client):
+    r1 = await superuser_client.post("/api/v1/admin/analytics/_compact")
+    r2 = await superuser_client.post("/api/v1/admin/analytics/_compact")
+    assert r1.status_code == 200
+    assert r2.status_code == 200
+    # Second call has nothing to do.
+    assert r2.json()["events_aggregated"] == 0
+    assert r2.json()["events_deleted"] == 0
+    assert r2.json()["slow_requests_deleted"] == 0
