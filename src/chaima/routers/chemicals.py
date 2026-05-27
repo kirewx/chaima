@@ -27,7 +27,7 @@ from chaima.schemas.chemical import (
 from chaima.schemas.pagination import PaginatedResponse
 from chaima.models.chemical import Chemical
 from chaima.services import chemicals as chemical_service
-from chaima.services.events import log_event
+from chaima.services.events import log_event, _persist_event
 from chaima.models.analytics import EventType
 from chaima.services import export as export_service
 from chaima.services import files as files_service
@@ -205,8 +205,11 @@ async def create_chemical(
 
 @router.post("/extract-from-photo", response_model=vision_service.ExtractedLabel)
 async def extract_from_photo(
+    group_id: UUID,
     session: SessionDep,
     member: GroupMemberDep,
+    user: CurrentUserDep,
+    background_tasks: BackgroundTasks,
     file: UploadFile = File(...),
 ) -> vision_service.ExtractedLabel:
     """Extract chemical-label fields from a photo via the vision service.
@@ -215,7 +218,26 @@ async def extract_from_photo(
     """
     data = await file.read()
     images_service.validate_image_upload(file, data)
-    return vision_service.extract_from_image(data, file.content_type or "image/jpeg")
+    try:
+        result = vision_service.extract_from_image(data, file.content_type or "image/jpeg")
+    except Exception:
+        # Persist the failure event immediately (not via BackgroundTasks) so it
+        # is written even though the response path raises an exception and
+        # background tasks may not execute.
+        await _persist_event(
+            user_id=user.id, group_id=group_id,
+            type=EventType.PHOTO_EXTRACT,
+            payload={"success": False, "confidence": None},
+        )
+        raise
+
+    log_event(
+        background_tasks,
+        user_id=user.id, group_id=group_id,
+        type=EventType.PHOTO_EXTRACT,
+        payload={"success": True, "confidence": result.confidence},
+    )
+    return result
 
 
 @router.get("/export")

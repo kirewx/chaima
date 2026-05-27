@@ -18,6 +18,8 @@ from chaima.services.pubchem import (
     lookup_ghs as pubchem_lookup_ghs,
     lookup_synonyms as pubchem_lookup_synonyms,
 )
+from chaima.services.events import _persist_event
+from chaima.models.analytics import EventType
 
 
 def _merge_synonyms(existing: list[str], incoming: list[str]) -> list[str]:
@@ -41,23 +43,46 @@ async def enrich_one(session: AsyncSession, chemical: Chemical) -> EnrichStatus:
     query = chemical.cas or chemical.name
     if not query:
         return "skipped"
+
+    success = False
+    cas_resolved = False
     try:
         result = await pubchem_lookup(query)
+        success = True
     except PubChemNotFound:
+        await _persist_event(
+            user_id=None, group_id=chemical.group_id,
+            type=EventType.PUBCHEM_FETCH,
+            payload={"success": False, "cas_resolved": False},
+        )
         return "not_found"
     except Exception:
+        await _persist_event(
+            user_id=None, group_id=chemical.group_id,
+            type=EventType.PUBCHEM_FETCH,
+            payload={"success": False, "cas_resolved": False},
+        )
         return "error"
 
     if result.cid and not chemical.cid:
         chemical.cid = str(result.cid)
     if result.cas and not chemical.cas:
         chemical.cas = result.cas
+        cas_resolved = True
+    elif result.cas:
+        cas_resolved = True
     if result.smiles and not chemical.smiles:
         chemical.smiles = result.smiles
     if result.molar_mass is not None and chemical.molar_mass is None:
         chemical.molar_mass = result.molar_mass
     session.add(chemical)
     await session.flush()
+
+    await _persist_event(
+        user_id=None, group_id=chemical.group_id,
+        type=EventType.PUBCHEM_FETCH,
+        payload={"success": success, "cas_resolved": cas_resolved},
+    )
     return "enriched"
 
 

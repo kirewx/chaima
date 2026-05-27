@@ -117,3 +117,75 @@ async def test_create_order_emits_order_created(
     rows = (await session.exec(select(Event).where(Event.type == "order_created"))).all()
     assert len(rows) == 1
     assert rows[0].payload == {"order_id": order_id}
+
+
+import io
+from PIL import Image
+
+
+def _jpeg() -> bytes:
+    buf = io.BytesIO()
+    Image.new("RGB", (32, 32), color=(50, 50, 50)).save(buf, format="JPEG")
+    return buf.getvalue()
+
+
+@pytest.mark.asyncio
+async def test_photo_extract_success_emits_event(
+    client, group, membership, session, patch_events_session_maker, monkeypatch
+):
+    from chaima.services.vision import ExtractedLabel
+    monkeypatch.setattr(
+        "chaima.routers.chemicals.vision_service.extract_from_image",
+        lambda data, mime: ExtractedLabel(name="Acetone", confidence="high"),
+    )
+    files = {"file": ("label.jpg", io.BytesIO(_jpeg()), "image/jpeg")}
+    r = await client.post(
+        f"/api/v1/groups/{group.id}/chemicals/extract-from-photo", files=files,
+    )
+    assert r.status_code == 200, r.text
+    rows = (await session.exec(select(Event).where(Event.type == "photo_extract"))).all()
+    assert len(rows) == 1
+    assert rows[0].payload == {"success": True, "confidence": "high"}
+
+
+@pytest.mark.asyncio
+async def test_photo_extract_failure_still_emits_event(
+    client, group, membership, session, patch_events_session_maker, monkeypatch
+):
+    from fastapi import HTTPException
+    def _raise(data, mime):
+        raise HTTPException(status_code=502, detail="vision_service_unavailable")
+    monkeypatch.setattr(
+        "chaima.routers.chemicals.vision_service.extract_from_image", _raise,
+    )
+    files = {"file": ("label.jpg", io.BytesIO(_jpeg()), "image/jpeg")}
+    r = await client.post(
+        f"/api/v1/groups/{group.id}/chemicals/extract-from-photo", files=files,
+    )
+    assert r.status_code == 502
+    rows = (await session.exec(select(Event).where(Event.type == "photo_extract"))).all()
+    assert len(rows) == 1
+    assert rows[0].payload == {"success": False, "confidence": None}
+
+
+@pytest.mark.asyncio
+async def test_enrich_one_emits_pubchem_fetch(session, group, user, patch_events_session_maker, monkeypatch):
+    """services.enrich.enrich_one writes a pubchem_fetch event for every call."""
+    from chaima.models.chemical import Chemical
+    from chaima.services import enrich as enrich_service
+
+    chem = Chemical(name="Acetone", cas="67-64-1", group_id=group.id, created_by=user.id)
+    session.add(chem)
+    await session.flush()
+
+    # Fake a successful PubChem response.
+    from types import SimpleNamespace
+    async def _ok(_q):
+        return SimpleNamespace(cid="180", cas="67-64-1", smiles="CC(=O)C", molar_mass=58.08)
+    monkeypatch.setattr("chaima.services.enrich.pubchem_lookup", _ok)
+
+    await enrich_service.enrich_one(session, chem)
+
+    rows = (await session.exec(select(Event).where(Event.type == "pubchem_fetch"))).all()
+    assert len(rows) == 1
+    assert rows[0].payload == {"success": True, "cas_resolved": True}
