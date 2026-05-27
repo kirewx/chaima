@@ -28,6 +28,7 @@ from chaima.routers.orders import router as orders_router
 from chaima.routers.wishlist import router as wishlist_router
 from chaima.routers.suppliers import router as suppliers_router
 from chaima.schemas import UserRead, UserUpdate
+from chaima.middleware.slow_request import SlowRequestMiddleware
 from chaima.services.seed import run_seeds
 
 
@@ -76,6 +77,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="ChAIMa", lifespan=lifespan)
+app.add_middleware(SlowRequestMiddleware, threshold_ms=500)
 
 app.include_router(
     fastapi_users.get_auth_router(auth_backend),
