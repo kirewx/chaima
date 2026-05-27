@@ -79,9 +79,14 @@ async def supplier(session, group):
     return s
 
 
-@pytest_asyncio.fixture
+@pytest_asyncio.fixture(autouse=True)
 async def patch_events_session_maker(engine, monkeypatch):
-    """Point `services.events` and `middleware.slow_request` at the test engine."""
+    """Redirect analytics writes to the test engine for EVERY test.
+
+    Without this, `_persist_event` and `SlowRequestMiddleware` open sessions
+    against the production `async_session_maker` (chaima.db) and leak phantom
+    events tied to in-memory user UUIDs that don't exist in production.
+    """
     from sqlalchemy.ext.asyncio import async_sessionmaker
     from sqlmodel.ext.asyncio.session import AsyncSession
     test_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
