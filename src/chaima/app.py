@@ -27,6 +27,7 @@ from chaima.routers.projects import router as projects_router
 from chaima.routers.orders import router as orders_router
 from chaima.routers.wishlist import router as wishlist_router
 from chaima.routers.suppliers import router as suppliers_router
+from chaima.routers.admin_analytics import router as admin_analytics_router
 from chaima.schemas import UserRead, UserUpdate
 from chaima.middleware.slow_request import SlowRequestMiddleware
 from chaima.services.seed import run_seeds
@@ -104,6 +105,7 @@ app.include_router(invites_router)
 app.include_router(pubchem_router)
 app.include_router(import_router)
 app.include_router(compatibility_router)
+app.include_router(admin_analytics_router)
 
 # Serve built frontend assets when available (after `uv build` or `vite build`).
 # During development the Vite dev server proxies /api to this backend instead.
