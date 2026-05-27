@@ -314,6 +314,21 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
           }
         });
       }
+
+      // Chain into container-new when a photo or extracted prefill is present.
+      const hasPrefillData =
+        photoFile != null ||
+        (extractedContainerPrefill &&
+          Object.values(extractedContainerPrefill).some((v) => v !== undefined));
+      if (hasPrefillData) {
+        drawer.open({
+          kind: "container-new",
+          chemicalId: created.id,
+          prefill: extractedContainerPrefill ?? undefined,
+          photoFile: photoFile ?? undefined,
+        });
+        return;
+      }
     }
     onDone();
   };
@@ -448,7 +463,12 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
           setUnarchiving(true);
           try {
             await client.post(`/groups/${groupId}/chemicals/${chemId}/unarchive`);
-            drawer.open({ kind: "container-new", chemicalId: chemId });
+            drawer.open({
+              kind: "container-new",
+              chemicalId: chemId,
+              prefill: extractedContainerPrefill ?? undefined,
+              photoFile: photoFile ?? undefined,
+            });
           } finally {
             setUnarchiving(false);
           }
@@ -474,7 +494,14 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
                 <Button
                   variant="outlined"
                   size="small"
-                  onClick={() => drawer.open({ kind: "container-new", chemicalId: chemId! })}
+                  onClick={() =>
+                    drawer.open({
+                      kind: "container-new",
+                      chemicalId: chemId!,
+                      prefill: extractedContainerPrefill ?? undefined,
+                      photoFile: photoFile ?? undefined,
+                    })
+                  }
                 >
                   Add container
                 </Button>
