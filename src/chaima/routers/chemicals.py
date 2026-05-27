@@ -29,6 +29,8 @@ from chaima.models.chemical import Chemical
 from chaima.services import chemicals as chemical_service
 from chaima.services import export as export_service
 from chaima.services import files as files_service
+from chaima.services import images as images_service
+from chaima.services import vision as vision_service
 from chaima.services.structure import InvalidSmilesError, render_structure_svg
 
 router = APIRouter(prefix="/api/v1/groups/{group_id}/chemicals", tags=["chemicals"])
@@ -198,6 +200,21 @@ async def create_chemical(
         )
     await session.refresh(chem)
     return ChemicalRead.model_validate(chem, from_attributes=True)
+
+
+@router.post("/extract-from-photo", response_model=vision_service.ExtractedLabel)
+async def extract_from_photo(
+    session: SessionDep,
+    member: GroupMemberDep,
+    file: UploadFile = File(...),
+) -> vision_service.ExtractedLabel:
+    """Extract chemical-label fields from a photo via the vision service.
+
+    Stateless: image bytes are passed to Gemini and discarded; no DB writes.
+    """
+    data = await file.read()
+    images_service.validate_image_upload(file, data)
+    return vision_service.extract_from_image(data, file.content_type or "image/jpeg")
 
 
 @router.get("/export")
