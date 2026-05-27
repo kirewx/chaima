@@ -115,6 +115,43 @@ async def test_create_duplicate_chemical_returns_409(client, session, group, mem
     assert resp.status_code == 409
 
 
+async def test_create_chemical_with_duplicate_cas_returns_409(
+    client, session, group, membership, user,
+):
+    session.add(Chemical(
+        group_id=group.id, name="Acetone", cas="67-64-1", created_by=user.id,
+    ))
+    await session.commit()
+
+    resp = await client.post(
+        f"/api/v1/groups/{group.id}/chemicals",
+        json={"name": "Propanone", "cas": "67-64-1"},
+    )
+    assert resp.status_code == 409
+    detail = resp.json()["detail"]
+    assert detail["existing_chemical_name"] == "Acetone"
+    assert "existing_chemical_id" in detail
+    assert detail["is_archived"] is False
+
+
+async def test_update_chemical_to_duplicate_cas_returns_409(
+    client, session, group, membership, user,
+):
+    first = Chemical(group_id=group.id, name="Acetone", cas="67-64-1", created_by=user.id)
+    second = Chemical(group_id=group.id, name="Ethanol", cas="64-17-5", created_by=user.id)
+    session.add(first)
+    session.add(second)
+    await session.commit()
+
+    resp = await client.patch(
+        f"/api/v1/groups/{group.id}/chemicals/{second.id}",
+        json={"cas": "67-64-1"},
+    )
+    assert resp.status_code == 409
+    detail = resp.json()["detail"]
+    assert detail["existing_chemical_name"] == "Acetone"
+
+
 async def test_not_member(client, group):
     resp = await client.get(f"/api/v1/groups/{group.id}/chemicals")
     assert resp.status_code == 403

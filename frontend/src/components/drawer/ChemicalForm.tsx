@@ -145,6 +145,7 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
       ? (err.response.data?.detail as {
           message?: string;
           existing_chemical_id?: string;
+          existing_chemical_name?: string;
           is_archived?: boolean;
         })
       : null;
@@ -455,7 +456,7 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
 
       {(duplicate?.exists || conflictDetail?.existing_chemical_id) && (() => {
         const chemId = duplicate?.chemical_id ?? conflictDetail?.existing_chemical_id;
-        const chemName = duplicate?.chemical_name;
+        const chemName = duplicate?.chemical_name ?? conflictDetail?.existing_chemical_name;
         const archived = duplicate?.is_archived ?? conflictDetail?.is_archived;
 
         const handleUnarchiveAndAdd = async () => {

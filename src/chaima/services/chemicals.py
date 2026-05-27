@@ -31,8 +31,51 @@ class DuplicateNameError(Exception):
         self.is_archived = is_archived
 
 
+class DuplicateCasError(Exception):
+    """Raised when a chemical CAS already exists within the same group."""
+
+    def __init__(
+        self,
+        message: str,
+        *,
+        chemical_id: UUID | None = None,
+        chemical_name: str | None = None,
+        is_archived: bool = False,
+    ):
+        super().__init__(message)
+        self.chemical_id = chemical_id
+        self.chemical_name = chemical_name
+        self.is_archived = is_archived
+
+
 class ChemicalNotFound(LookupError):
     """Raised when a chemical id does not exist."""
+
+
+def _normalize_cas(cas: str | None) -> str | None:
+    """Strip whitespace; treat empty/whitespace-only strings as no CAS."""
+    if cas is None:
+        return None
+    stripped = cas.strip()
+    return stripped or None
+
+
+async def _find_by_cas(
+    session: AsyncSession,
+    group_id: UUID,
+    cas: str,
+    *,
+    exclude_id: UUID | None = None,
+) -> Chemical | None:
+    """Return the chemical in ``group_id`` whose CAS exactly matches ``cas``."""
+    stmt = select(Chemical).where(
+        Chemical.group_id == group_id,
+        Chemical.cas == cas,
+    )
+    if exclude_id is not None:
+        stmt = stmt.where(Chemical.id != exclude_id)
+    result = await session.exec(stmt)
+    return result.first()
 
 
 async def find_existing(
@@ -162,6 +205,18 @@ async def create_chemical(
             chemical_id=existing.id,
             is_archived=existing.is_archived,
         )
+
+    cas = _normalize_cas(cas)
+    if cas:
+        existing_by_cas = await _find_by_cas(session, group_id, cas)
+        if existing_by_cas is not None:
+            raise DuplicateCasError(
+                f"Chemical with CAS '{cas}' already exists "
+                f"({existing_by_cas.name})",
+                chemical_id=existing_by_cas.id,
+                chemical_name=existing_by_cas.name,
+                is_archived=existing_by_cas.is_archived,
+            )
 
     chem = Chemical(
         group_id=group_id,
@@ -392,6 +447,23 @@ async def update_chemical(
     """
     synonyms = kwargs.pop("synonyms", None)
     ghs_codes = kwargs.pop("ghs_codes", None)
+
+    if "cas" in kwargs:
+        new_cas_raw = kwargs["cas"]
+        new_cas = _normalize_cas(new_cas_raw) if isinstance(new_cas_raw, str) else None
+        if new_cas and new_cas != chemical.cas:
+            existing_by_cas = await _find_by_cas(
+                session, chemical.group_id, new_cas, exclude_id=chemical.id,
+            )
+            if existing_by_cas is not None:
+                raise DuplicateCasError(
+                    f"Chemical with CAS '{new_cas}' already exists "
+                    f"({existing_by_cas.name})",
+                    chemical_id=existing_by_cas.id,
+                    chemical_name=existing_by_cas.name,
+                    is_archived=existing_by_cas.is_archived,
+                )
+        kwargs["cas"] = new_cas
 
     for key, value in kwargs.items():
         if value is not None:
