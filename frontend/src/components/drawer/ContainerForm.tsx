@@ -19,6 +19,7 @@ import {
 } from "../../api/hooks/useContainers";
 import { useSuppliers, useCreateSupplier } from "../../api/hooks/useSuppliers";
 import { useExtractFromPhoto } from "../../api/hooks/useExtractFromPhoto";
+import client from "../../api/client";
 import type { ContainerPrefill, SupplierRead } from "../../types";
 import { useCurrentUser } from "../../api/hooks/useAuth";
 import { useStorageTree } from "../../api/hooks/useStorageLocations";
@@ -86,6 +87,7 @@ export function ContainerForm({ chemicalId, containerId, prefill, photoFile: ini
     initialPhotoFile ? URL.createObjectURL(initialPhotoFile) : null,
   );
   const [extractError, setExtractError] = useState<string | null>(null);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const extract = useExtractFromPhoto();
 
@@ -149,6 +151,7 @@ export function ContainerForm({ chemicalId, containerId, prefill, photoFile: ini
     !!identifier.trim() && amount !== "" && !!unit.trim() && !!locationId;
 
   const onSubmit = async () => {
+    setImageUploadError(null);
     const payload = {
       identifier: identifier.trim(),
       amount: Number(amount),
@@ -161,8 +164,26 @@ export function ContainerForm({ chemicalId, containerId, prefill, photoFile: ini
 
     if (containerId) {
       await update.mutateAsync(payload);
-    } else {
-      await create.mutateAsync(payload);
+      onDone();
+      return;
+    }
+
+    const created = await create.mutateAsync(payload);
+    if (photoFile) {
+      try {
+        const form = new FormData();
+        form.append("file", photoFile);
+        await client.post(
+          `/groups/${groupId}/containers/${created.id}/image`,
+          form,
+          { headers: { "Content-Type": "multipart/form-data" } },
+        );
+      } catch {
+        setImageUploadError(
+          "Container wurde angelegt, aber das Foto konnte nicht hochgeladen werden.",
+        );
+        return; // keep drawer open so user can retry by re-saving
+      }
     }
     onDone();
   };
@@ -274,6 +295,28 @@ export function ContainerForm({ chemicalId, containerId, prefill, photoFile: ini
       {extractError && <Alert severity="warning" onClose={() => setExtractError(null)}>{extractError}</Alert>}
 
       {otherErr && <Alert severity="error">{otherErr}</Alert>}
+
+      {imageUploadError && (
+        <Alert
+          severity="warning"
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={async () => {
+                if (!photoFile) return;
+                // We don't have the just-created container id in state by now;
+                // the user can manually re-save (form is still open).
+                setImageUploadError(null);
+              }}
+            >
+              Schließen
+            </Button>
+          }
+        >
+          {imageUploadError}
+        </Alert>
+      )}
 
       <TextField
         label="Identifier"
