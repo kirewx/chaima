@@ -12,6 +12,7 @@ import {
   InputAdornment,
 } from "@mui/material";
 import CloseIcon from "@mui/icons-material/Close";
+import CameraAltIcon from "@mui/icons-material/CameraAlt";
 import { useState, useEffect, useRef, type KeyboardEvent } from "react";
 import { AxiosError } from "axios";
 import {
@@ -23,8 +24,10 @@ import {
 } from "../../api/hooks/useChemicals";
 import { useCurrentUser } from "../../api/hooks/useAuth";
 import { usePubChemLookup, fetchPubChemGHS } from "../../api/hooks/usePubChem";
+import { useExtractFromPhoto } from "../../api/hooks/useExtractFromPhoto";
 import { useDrawer } from "./DrawerContext";
 import client from "../../api/client";
+import type { ContainerPrefill } from "../../types";
 
 interface Props {
   chemicalId?: string;
@@ -90,7 +93,21 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
   const [duplicate, setDuplicate] = useState<ChemicalExistsResult | null>(null);
   const [unarchiving, setUnarchiving] = useState(false);
   const [ghsLoading, setGhsLoading] = useState(false);
+  const [photoFile, setPhotoFile] = useState<File | null>(null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(null);
+  const [extractedFields, setExtractedFields] = useState<Set<string>>(new Set());
+  const [extractedContainerPrefill, setExtractedContainerPrefill] =
+    useState<ContainerPrefill | null>(null);
+  const [extractError, setExtractError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const extract = useExtractFromPhoto();
   const ghsPromiseRef = useRef<Promise<string[]> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    };
+  }, [photoPreviewUrl]);
 
   useEffect(() => {
     if (existing.data) {
@@ -303,8 +320,124 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
 
   const fetched = extras.cid !== null;
 
+  const handleFile = async (file: File) => {
+    setExtractError(null);
+    setPhotoFile(file);
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    setPhotoPreviewUrl(URL.createObjectURL(file));
+
+    try {
+      const result = await extract.mutateAsync(file);
+      const filled = new Set<string>();
+      if (result.name) {
+        setName(result.name);
+        filled.add("name");
+      }
+      if (result.cas) {
+        setCas(result.cas);
+        filled.add("cas");
+      }
+      setExtractedFields(filled);
+
+      setExtractedContainerPrefill({
+        identifier: result.identifier ?? undefined,
+        amount: result.amount ?? undefined,
+        unit: result.unit ?? undefined,
+        supplier_name: result.supplier_name ?? undefined,
+        purity: result.purity ?? undefined,
+        purchased_at: result.purchased_at ?? undefined,
+      });
+
+      // Auto-trigger PubChem fetch when we got a CAS or name.
+      const seed = result.cas || result.name;
+      if (seed) {
+        setQuery(seed);
+        void onFetch();
+      }
+    } catch (e) {
+      const axiosErr = e as { response?: { status?: number; data?: { detail?: string } } };
+      const status = axiosErr.response?.status;
+      if (status === 503) setExtractError("Foto-Erkennung ist auf dieser Instanz deaktiviert.");
+      else if (status === 502) setExtractError("Erkennung gerade nicht möglich — bitte manuell eingeben.");
+      else if (status === 413) setExtractError("Bild zu groß (max. 10 MB).");
+      else if (status === 415) setExtractError("Bildformat nicht unterstützt.");
+      else setExtractError("Erkennung fehlgeschlagen — bitte manuell eingeben.");
+    }
+  };
+
   return (
     <Stack spacing={2}>
+      {!chemicalId && (
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 1.5,
+            p: 1,
+            border: "1px solid",
+            borderColor: "divider",
+            borderRadius: 1,
+          }}
+        >
+          {photoPreviewUrl ? (
+            <Box
+              component="img"
+              src={photoPreviewUrl}
+              sx={{ width: 48, height: 48, objectFit: "cover", borderRadius: 1 }}
+            />
+          ) : (
+            <Box
+              sx={{
+                width: 48,
+                height: 48,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                color: "text.secondary",
+                border: "1px dashed",
+                borderColor: "divider",
+                borderRadius: 1,
+              }}
+            >
+              <CameraAltIcon fontSize="small" />
+            </Box>
+          )}
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="body2">Etikett-Foto (optional)</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {extract.isPending
+                ? "Erkennung läuft…"
+                : photoFile
+                ? `Foto übernommen`
+                : "Foto aufnehmen oder hochladen — Felder werden automatisch erkannt"}
+            </Typography>
+          </Box>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<CameraAltIcon />}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={extract.isPending}
+          >
+            {photoFile ? "Ersetzen" : "Foto"}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void handleFile(f);
+              e.target.value = "";
+            }}
+          />
+        </Box>
+      )}
+
+      {extractError && <Alert severity="warning" onClose={() => setExtractError(null)}>{extractError}</Alert>}
+
       {(duplicate?.exists || conflictDetail?.existing_chemical_id) && (() => {
         const chemId = duplicate?.chemical_id ?? conflictDetail?.existing_chemical_id;
         const chemName = duplicate?.chemical_name;
@@ -425,15 +558,65 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
         label="Name"
         required
         value={name}
-        onChange={(e) => setName(e.target.value)}
+        onChange={(e) => {
+          setName(e.target.value);
+          if (extractedFields.has("name")) {
+            setExtractedFields((s) => {
+              const ns = new Set(s);
+              ns.delete("name");
+              return ns;
+            });
+          }
+        }}
         size="small"
+        sx={
+          extractedFields.has("name")
+            ? { "& .MuiOutlinedInput-root": { backgroundColor: "rgba(67, 56, 202, 0.06)" } }
+            : undefined
+        }
+        slotProps={{
+          input: extractedFields.has("name")
+            ? {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <CameraAltIcon fontSize="small" color="primary" />
+                  </InputAdornment>
+                ),
+              }
+            : undefined,
+        }}
       />
       <TextField
         label="CAS number"
         value={cas}
-        onChange={(e) => setCas(e.target.value)}
+        onChange={(e) => {
+          setCas(e.target.value);
+          if (extractedFields.has("cas")) {
+            setExtractedFields((s) => {
+              const ns = new Set(s);
+              ns.delete("cas");
+              return ns;
+            });
+          }
+        }}
         size="small"
         helperText="Optional. Leave blank for internal materials."
+        sx={
+          extractedFields.has("cas")
+            ? { "& .MuiOutlinedInput-root": { backgroundColor: "rgba(67, 56, 202, 0.06)" } }
+            : undefined
+        }
+        slotProps={{
+          input: extractedFields.has("cas")
+            ? {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <CameraAltIcon fontSize="small" color="primary" />
+                  </InputAdornment>
+                ),
+              }
+            : undefined,
+        }}
       />
       <TextField
         label="Molar mass"
