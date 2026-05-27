@@ -78,3 +78,23 @@ export function useUnarchiveContainer(groupId: string) {
     },
   });
 }
+
+export function useUploadContainerImage(groupId: string, containerId: string) {
+  const queryClient = useQueryClient();
+  return useMutation<ContainerRead, unknown, File>({
+    mutationFn: async (file: File) => {
+      const form = new FormData();
+      form.append("file", file);
+      const r = await client.post<ContainerRead>(
+        `/groups/${groupId}/containers/${containerId}/image`,
+        form,
+        { headers: { "Content-Type": "multipart/form-data" } },
+      );
+      return r.data;
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["containers", groupId] });
+      queryClient.invalidateQueries({ queryKey: ["containers", groupId, containerId] });
+    },
+  });
+}
