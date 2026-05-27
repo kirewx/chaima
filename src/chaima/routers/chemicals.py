@@ -120,6 +120,7 @@ async def create_chemical(
     session: SessionDep,
     member: GroupMemberDep,
     user: CurrentUserDep,
+    background_tasks: BackgroundTasks,
 ) -> ChemicalRead:
     """Create a chemical in a group.
 
@@ -192,6 +193,13 @@ async def create_chemical(
             detail="A chemical with this name already exists in the group",
         )
     await session.refresh(chem)
+    log_event(
+        background_tasks,
+        user_id=user.id,
+        group_id=group_id,
+        type=EventType.CHEMICAL_CREATED,
+        payload={"chemical_id": str(chem.id)},
+    )
     return ChemicalRead.model_validate(chem, from_attributes=True)
 
 

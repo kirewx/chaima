@@ -1,7 +1,7 @@
 # src/chaima/routers/containers.py
 from uuid import UUID
 
-from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, UploadFile, status
 
 from chaima.dependencies import CurrentUserDep, GroupMemberDep, SessionDep
 from chaima.schemas.container import ContainerCreate, ContainerRead, ContainerUpdate
@@ -9,6 +9,8 @@ from chaima.schemas.pagination import PaginatedResponse
 from chaima.services import containers as container_service
 from chaima.services import files as files_service
 from chaima.services import images as images_service
+from chaima.services.events import log_event
+from chaima.models.analytics import EventType
 
 router = APIRouter(tags=["containers"])
 
@@ -103,6 +105,7 @@ async def create_container(
     session: SessionDep,
     member: GroupMemberDep,
     user: CurrentUserDep,
+    background_tasks: BackgroundTasks,
 ) -> ContainerRead:
     """Create a container for a chemical.
 
@@ -149,6 +152,13 @@ async def create_container(
         purchased_at=body.purchased_at,
     )
     await session.commit()
+    log_event(
+        background_tasks,
+        user_id=user.id,
+        group_id=group_id,
+        type=EventType.CONTAINER_CREATED,
+        payload={"container_id": str(container.id)},
+    )
     return ContainerRead.model_validate(container, from_attributes=True)
 
 

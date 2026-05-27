@@ -1,7 +1,7 @@
 """Router for wishlist endpoints."""
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, HTTPException, Query, status
 
 from chaima.dependencies import CurrentUserDep, GroupMemberDep, SessionDep
 from chaima.models.chemical import Chemical
@@ -14,6 +14,8 @@ from chaima.schemas.wishlist import (
     WishlistUpdate,
 )
 from chaima.services import wishlist as wishlist_service
+from chaima.services.events import log_event
+from chaima.models.analytics import EventType
 
 router = APIRouter(prefix="/api/v1/groups/{group_id}/wishlist", tags=["wishlist"])
 
@@ -49,6 +51,7 @@ async def create_wishlist(
     session: SessionDep,
     current_user: CurrentUserDep,
     member: GroupMemberDep,
+    background_tasks: BackgroundTasks,
 ) -> WishlistRead:
     item = await wishlist_service.create_wishlist(
         session,
@@ -60,6 +63,13 @@ async def create_wishlist(
         requested_by_user_id=current_user.id,
     )
     await session.commit()
+    log_event(
+        background_tasks,
+        user_id=current_user.id,
+        group_id=group_id,
+        type=EventType.WISHLIST_ADDED,
+        payload={"wishlist_item_id": str(item.id)},
+    )
     return await _hydrate(session, item)
 
 
