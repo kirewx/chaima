@@ -4,6 +4,10 @@ import {
   Box,
   Card,
   CardContent,
+  Divider,
+  List,
+  ListItem,
+  ListItemText,
   MenuItem,
   Select,
   Skeleton,
@@ -21,8 +25,10 @@ import { SectionHeader } from "./SectionHeader";
 import {
   useAnalyticsSummary,
   useAnalyticsUsers,
+  useAnalyticsTopSearches,
+  useAnalyticsSlowEndpoints,
 } from "../../api/hooks/useAdminAnalytics";
-import type { AnalyticsRange, UserStatsRow } from "../../types";
+import type { AnalyticsRange, SlowEndpointRow, TopSearchRow, UserStatsRow } from "../../types";
 
 const RANGE_OPTIONS: { value: AnalyticsRange; label: string }[] = [
   { value: "24h", label: "Letzte 24h" },
@@ -40,6 +46,8 @@ export function AnalyticsSection() {
 
   const summary = useAnalyticsSummary(range);
   const users = useAnalyticsUsers(range);
+  const topSearches = useAnalyticsTopSearches(range);
+  const slowEndpoints = useAnalyticsSlowEndpoints(range);
 
   const onRangeChange = (e: SelectChangeEvent<AnalyticsRange>) => {
     setRange(e.target.value as AnalyticsRange);
@@ -178,6 +186,71 @@ export function AnalyticsSection() {
               </TableBody>
             </Table>
           )}
+        </Box>
+        <Divider />
+
+        <Box
+          sx={{
+            display: "grid",
+            gap: 3,
+            gridTemplateColumns: { xs: "1fr", md: "1fr 1fr" },
+          }}
+        >
+          <Box>
+            <Typography variant="h5" sx={{ mb: 1 }}>
+              Top Suchen
+            </Typography>
+            {topSearches.isError && <Alert severity="error">Konnte Suchen nicht laden.</Alert>}
+            {topSearches.isLoading ? (
+              <Skeleton height={200} />
+            ) : (topSearches.data ?? []).length === 0 ? (
+              <Typography color="text.secondary">Keine Suchen im Zeitraum.</Typography>
+            ) : (
+              <List dense disablePadding>
+                {(topSearches.data ?? []).map((row: TopSearchRow) => (
+                  <ListItem key={row.query} disableGutters>
+                    <ListItemText
+                      primary={row.query}
+                      secondary={
+                        row.empty_count > 0
+                          ? `${row.count}× · ${row.empty_count} ohne Treffer`
+                          : `${row.count}×`
+                      }
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            )}
+          </Box>
+
+          <Box>
+            <Typography variant="h5" sx={{ mb: 1 }}>
+              Slow Endpoints
+            </Typography>
+            {slowEndpoints.isError && (
+              <Alert severity="error">Konnte Endpoints nicht laden.</Alert>
+            )}
+            {slowEndpoints.isLoading ? (
+              <Skeleton height={200} />
+            ) : (slowEndpoints.data ?? []).length === 0 ? (
+              <Typography color="text.secondary">Alles schnell im Zeitraum.</Typography>
+            ) : (
+              <List dense disablePadding>
+                {(slowEndpoints.data ?? []).map((row: SlowEndpointRow) => (
+                  <ListItem key={`${row.method}-${row.path}`} disableGutters>
+                    <ListItemText
+                      primary={`${row.method} ${row.path}`}
+                      secondary={
+                        row.error_count > 0
+                          ? `p95 ${row.p95_ms}ms · ${row.count}× · ${row.error_count} Fehler`
+                          : `p95 ${row.p95_ms}ms · ${row.count}×`
+                      }
+                    />
+                  </ListItem>
+                ))}
+              </List>
+            )}
+          </Box>
         </Box>
       </Stack>
     </Box>
