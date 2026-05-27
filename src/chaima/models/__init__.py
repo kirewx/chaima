@@ -1,3 +1,4 @@
+from chaima.models.analytics import Event, EventDaily, EventType, SlowRequest
 from chaima.models.chemical import Chemical, ChemicalSynonym
 from chaima.models.container import Container
 from chaima.models.ghs import ChemicalGHS, GHSCode
@@ -22,6 +23,9 @@ __all__ = [
     "ChemicalHazardTag",
     "ChemicalSynonym",
     "Container",
+    "Event",
+    "EventDaily",
+    "EventType",
     "GHSCode",
     "Group",
     "HazardTag",
@@ -31,6 +35,7 @@ __all__ = [
     "Order",
     "OrderStatus",
     "Project",
+    "SlowRequest",
     "StorageLocation",
     "StorageLocationGroup",
     "Supplier",
