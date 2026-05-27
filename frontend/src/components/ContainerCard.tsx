@@ -55,40 +55,58 @@ export function ContainerCard({
           <ContainerMenu container={container} />
         </Box>
       )}
-      <Chip
-        label={container.identifier}
-        size="small"
-        sx={{
-          bgcolor: locationColor ?? DEFAULT_STORAGE_COLOR,
-          color: chipTextColor(locationColor ?? DEFAULT_STORAGE_COLOR),
-          fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-          fontWeight: 700,
-          fontSize: 11,
-          height: 20,
-        }}
-      />
-      <Typography sx={{ fontSize: 15, fontWeight: 600, mt: 1 }}>
-        {container.amount} {container.unit}
-      </Typography>
-      {container.purity && (
-        <Typography variant="caption" color="text.secondary">
-          Purity {container.purity}
-        </Typography>
-      )}
-      <Stack
-        spacing={0.25}
-        sx={{
-          mt: 1,
-          pt: 1,
-          borderTop: "1px solid",
-          borderColor: "divider",
-          fontSize: 11,
-          color: "text.secondary",
-        }}
-      >
-        <MetaRow k="Location" v={locationName ?? "—"} />
-        <MetaRow k="Supplier" v={supplierName ?? "—"} />
-        <MetaRow k="Received" v={container.purchased_at ?? "—"} />
+      <Stack direction="row" spacing={1.5} sx={{ alignItems: "flex-start" }}>
+        {container.image_path && (
+          <Box
+            component="img"
+            src={`/uploads/${container.image_path}`}
+            alt={`Photo of container ${container.identifier}`}
+            sx={{
+              width: 64,
+              height: 64,
+              objectFit: "cover",
+              borderRadius: 1,
+              flexShrink: 0,
+            }}
+          />
+        )}
+        <Box sx={{ flex: 1, minWidth: 0 }}>
+          <Chip
+            label={container.identifier}
+            size="small"
+            sx={{
+              bgcolor: locationColor ?? DEFAULT_STORAGE_COLOR,
+              color: chipTextColor(locationColor ?? DEFAULT_STORAGE_COLOR),
+              fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+              fontWeight: 700,
+              fontSize: 11,
+              height: 20,
+            }}
+          />
+          <Typography sx={{ fontSize: 15, fontWeight: 600, mt: 1 }}>
+            {container.amount} {container.unit}
+          </Typography>
+          {container.purity && (
+            <Typography variant="caption" color="text.secondary">
+              Purity {container.purity}
+            </Typography>
+          )}
+          <Stack
+            spacing={0.25}
+            sx={{
+              mt: 1,
+              pt: 1,
+              borderTop: "1px solid",
+              borderColor: "divider",
+              fontSize: 11,
+              color: "text.secondary",
+            }}
+          >
+            <MetaRow k="Location" v={locationName ?? "—"} />
+            <MetaRow k="Supplier" v={supplierName ?? "—"} />
+            <MetaRow k="Received" v={container.purchased_at ?? "—"} />
+          </Stack>
+        </Box>
       </Stack>
     </>
   );

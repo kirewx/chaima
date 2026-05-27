@@ -20,6 +20,76 @@ async def test_create_chemical(session, group, user):
     assert chem.group_id == group.id
 
 
+async def test_create_chemical_with_duplicate_cas_raises(session, group, user):
+    await chemical_service.create_chemical(
+        session, group_id=group.id, created_by=user.id, name="Acetone", cas="67-64-1"
+    )
+    await session.commit()
+    with pytest.raises(chemical_service.DuplicateCasError) as exc:
+        await chemical_service.create_chemical(
+            session, group_id=group.id, created_by=user.id,
+            name="Propanone", cas="67-64-1",
+        )
+    assert exc.value.chemical_name == "Acetone"
+    assert exc.value.chemical_id is not None
+    assert exc.value.is_archived is False
+
+
+async def test_create_chemical_strips_whitespace_from_cas(session, group, user):
+    chem = await chemical_service.create_chemical(
+        session, group_id=group.id, created_by=user.id,
+        name="Acetone", cas="  67-64-1  ",
+    )
+    await session.commit()
+    assert chem.cas == "67-64-1"
+
+    # A second create with the un-stripped version of the same CAS must collide.
+    with pytest.raises(chemical_service.DuplicateCasError):
+        await chemical_service.create_chemical(
+            session, group_id=group.id, created_by=user.id,
+            name="Propanone", cas="67-64-1",
+        )
+
+
+async def test_create_chemical_empty_cas_is_treated_as_none(session, group, user):
+    chem = await chemical_service.create_chemical(
+        session, group_id=group.id, created_by=user.id, name="Acetone", cas="   ",
+    )
+    await session.commit()
+    assert chem.cas is None
+    # Two chemicals without CAS may coexist.
+    chem2 = await chemical_service.create_chemical(
+        session, group_id=group.id, created_by=user.id, name="Methanol", cas="",
+    )
+    await session.commit()
+    assert chem2.cas is None
+
+
+async def test_update_chemical_to_duplicate_cas_raises(session, group, user):
+    first = await chemical_service.create_chemical(
+        session, group_id=group.id, created_by=user.id, name="Acetone", cas="67-64-1",
+    )
+    second = await chemical_service.create_chemical(
+        session, group_id=group.id, created_by=user.id, name="Ethanol", cas="64-17-5",
+    )
+    await session.commit()
+    with pytest.raises(chemical_service.DuplicateCasError) as exc:
+        await chemical_service.update_chemical(session, second, cas="67-64-1")
+    assert exc.value.chemical_id == first.id
+
+
+async def test_update_chemical_same_cas_does_not_raise(session, group, user):
+    chem = await chemical_service.create_chemical(
+        session, group_id=group.id, created_by=user.id, name="Acetone", cas="67-64-1",
+    )
+    await session.commit()
+    # Updating to the same CAS (or with leading/trailing whitespace) is a no-op
+    # — must not trip the duplicate check.
+    updated = await chemical_service.update_chemical(session, chem, cas="  67-64-1  ")
+    await session.commit()
+    assert updated.cas == "67-64-1"
+
+
 async def test_list_chemicals(session, group, user):
     await chemical_service.create_chemical(session, group_id=group.id, created_by=user.id, name="Ethanol")
     await chemical_service.create_chemical(session, group_id=group.id, created_by=user.id, name="Methanol")

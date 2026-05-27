@@ -6,16 +6,21 @@ import {
   Alert,
   CircularProgress,
   Box,
+  InputAdornment,
+  Typography,
   createFilterOptions,
 } from "@mui/material";
-import { useState, useEffect } from "react";
+import CameraAltIcon from "@mui/icons-material/CameraAlt";
+import { useState, useEffect, useRef } from "react";
 import {
   useCreateContainer,
   useUpdateContainer,
   useContainer,
 } from "../../api/hooks/useContainers";
 import { useSuppliers, useCreateSupplier } from "../../api/hooks/useSuppliers";
-import type { SupplierRead } from "../../types";
+import { useExtractFromPhoto } from "../../api/hooks/useExtractFromPhoto";
+import client from "../../api/client";
+import type { ContainerPrefill, SupplierRead } from "../../types";
 import { useCurrentUser } from "../../api/hooks/useAuth";
 import { useStorageTree } from "../../api/hooks/useStorageLocations";
 import { useCompatibilityCheck } from "../../api/hooks/useCompatibility";
@@ -36,10 +41,12 @@ const supplierFilter = createFilterOptions<SupplierOption>();
 interface Props {
   chemicalId?: string;
   containerId?: string;
+  prefill?: ContainerPrefill;
+  photoFile?: File;
   onDone: () => void;
 }
 
-export function ContainerForm({ chemicalId, containerId, onDone }: Props) {
+export function ContainerForm({ chemicalId, containerId, prefill, photoFile: initialPhotoFile, onDone }: Props) {
   const { data: user } = useCurrentUser();
   const groupId = user?.main_group_id ?? "";
 
@@ -54,16 +61,39 @@ export function ContainerForm({ chemicalId, containerId, onDone }: Props) {
   const { data: locationTree = [] } = useStorageTree(groupId);
   const [locationPickerOpen, setLocationPickerOpen] = useState(false);
 
-  const [identifier, setIdentifier] = useState("");
-  const [amount, setAmount] = useState<number | "">("");
-  const [unit, setUnit] = useState("");
-  const [purity, setPurity] = useState("");
+  const [identifier, setIdentifier] = useState(prefill?.identifier ?? "");
+  const [amount, setAmount] = useState<number | "">(prefill?.amount ?? "");
+  const [unit, setUnit] = useState(prefill?.unit ?? "");
+  const [purity, setPurity] = useState(prefill?.purity ?? "");
   const [locationId, setLocationId] = useState<string | null>(null);
   const [locationPath, setLocationPath] = useState<string>("");
   const [supplierId, setSupplierId] = useState<string | null>(null);
   const [receivedDate, setReceivedDate] = useState<string | null>(
-    containerId ? null : todayIsoDate(),
+    containerId ? null : (prefill?.purchased_at ?? todayIsoDate()),
   );
+
+  const [extractedFields, setExtractedFields] = useState<Set<string>>(() => {
+    const s = new Set<string>();
+    if (prefill?.identifier) s.add("identifier");
+    if (prefill?.amount !== undefined) s.add("amount");
+    if (prefill?.unit) s.add("unit");
+    if (prefill?.purity) s.add("purity");
+    if (prefill?.purchased_at) s.add("purchased_at");
+    if (prefill?.supplier_name) s.add("supplier");
+    return s;
+  });
+  const [photoFile, setPhotoFile] = useState<File | null>(initialPhotoFile ?? null);
+  const [photoPreviewUrl, setPhotoPreviewUrl] = useState<string | null>(() =>
+    initialPhotoFile ? URL.createObjectURL(initialPhotoFile) : null,
+  );
+  const [extractError, setExtractError] = useState<string | null>(null);
+  const [imageUploadError, setImageUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const extract = useExtractFromPhoto();
+
+  useEffect(() => () => {
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+  }, [photoPreviewUrl]);
 
   useEffect(() => {
     if (existing.data) {
@@ -76,6 +106,20 @@ export function ContainerForm({ chemicalId, containerId, onDone }: Props) {
       setReceivedDate(existing.data.purchased_at ?? null);
     }
   }, [existing.data]);
+
+  // If prefill carries a supplier_name, match it to an existing supplier or create one.
+  useEffect(() => {
+    if (!prefill?.supplier_name || supplierId) return;
+    if (!suppliersPage) return;  // wait for the supplier list
+    const wanted = prefill.supplier_name.trim().toLowerCase();
+    const match = suppliers.find((s) => s.name.toLowerCase() === wanted);
+    if (match) {
+      setSupplierId(match.id);
+    } else {
+      createSupplier.mutateAsync({ name: prefill.supplier_name.trim() }).then((c) => setSupplierId(c.id)).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suppliersPage, prefill?.supplier_name]);
 
   if (containerId && existing.isLoading) {
     return (
@@ -107,6 +151,7 @@ export function ContainerForm({ chemicalId, containerId, onDone }: Props) {
     !!identifier.trim() && amount !== "" && !!unit.trim() && !!locationId;
 
   const onSubmit = async () => {
+    setImageUploadError(null);
     const payload = {
       identifier: identifier.trim(),
       amount: Number(amount),
@@ -119,25 +164,188 @@ export function ContainerForm({ chemicalId, containerId, onDone }: Props) {
 
     if (containerId) {
       await update.mutateAsync(payload);
-    } else {
-      await create.mutateAsync(payload);
+      onDone();
+      return;
+    }
+
+    const created = await create.mutateAsync(payload);
+    if (photoFile) {
+      try {
+        const form = new FormData();
+        form.append("file", photoFile);
+        await client.post(
+          `/groups/${groupId}/containers/${created.id}/image`,
+          form,
+          { headers: { "Content-Type": "multipart/form-data" } },
+        );
+      } catch {
+        setImageUploadError(
+          "Container wurde angelegt, aber das Foto konnte nicht hochgeladen werden.",
+        );
+        return; // keep drawer open so user can retry by re-saving
+      }
     }
     onDone();
   };
 
+  const handleFile = async (file: File) => {
+    setExtractError(null);
+    setPhotoFile(file);
+    if (photoPreviewUrl) URL.revokeObjectURL(photoPreviewUrl);
+    setPhotoPreviewUrl(URL.createObjectURL(file));
+
+    try {
+      const result = await extract.mutateAsync(file);
+      const next = new Set(extractedFields);
+      if (result.identifier) { setIdentifier(result.identifier); next.add("identifier"); }
+      if (result.amount != null) { setAmount(result.amount); next.add("amount"); }
+      if (result.unit) { setUnit(result.unit); next.add("unit"); }
+      if (result.purity) { setPurity(result.purity); next.add("purity"); }
+      if (result.purchased_at) { setReceivedDate(result.purchased_at); next.add("purchased_at"); }
+      if (result.supplier_name) {
+        const wanted = result.supplier_name.trim().toLowerCase();
+        const match = suppliers.find((s) => s.name.toLowerCase() === wanted);
+        if (match) { setSupplierId(match.id); next.add("supplier"); }
+        else {
+          try {
+            const created = await createSupplier.mutateAsync({ name: result.supplier_name.trim() });
+            setSupplierId(created.id);
+            next.add("supplier");
+          } catch { /* ignore */ }
+        }
+      }
+      setExtractedFields(next);
+    } catch (e) {
+      const axiosErr = e as { response?: { status?: number } };
+      const status = axiosErr.response?.status;
+      if (status === 503) setExtractError("Foto-Erkennung ist auf dieser Instanz deaktiviert.");
+      else if (status === 502) setExtractError("Erkennung gerade nicht möglich — bitte manuell eingeben.");
+      else if (status === 413) setExtractError("Bild zu groß (max. 10 MB).");
+      else if (status === 415) setExtractError("Bildformat nicht unterstützt.");
+      else setExtractError("Erkennung fehlgeschlagen — bitte manuell eingeben.");
+    }
+  };
+
   return (
     <Stack spacing={2}>
+      {!containerId && (
+        <Box
+          sx={{
+            display: "flex",
+            alignItems: "center",
+            gap: 1.5,
+            p: 1,
+            border: "1px solid",
+            borderColor: "divider",
+            borderRadius: 1,
+          }}
+        >
+          {photoPreviewUrl ? (
+            <Box
+              component="img"
+              src={photoPreviewUrl}
+              sx={{ width: 48, height: 48, objectFit: "cover", borderRadius: 1 }}
+            />
+          ) : (
+            <Box
+              sx={{
+                width: 48, height: 48, display: "flex",
+                alignItems: "center", justifyContent: "center",
+                color: "text.secondary", border: "1px dashed",
+                borderColor: "divider", borderRadius: 1,
+              }}
+            >
+              <CameraAltIcon fontSize="small" />
+            </Box>
+          )}
+          <Box sx={{ flex: 1 }}>
+            <Typography variant="body2">Etikett-Foto (optional)</Typography>
+            <Typography variant="caption" color="text.secondary">
+              {extract.isPending
+                ? "Erkennung läuft…"
+                : photoFile
+                ? "Foto wird beim Save am Container abgelegt"
+                : "Foto aufnehmen oder hochladen"}
+            </Typography>
+          </Box>
+          <Button
+            variant="outlined"
+            size="small"
+            startIcon={<CameraAltIcon />}
+            onClick={() => fileInputRef.current?.click()}
+            disabled={extract.isPending}
+          >
+            {photoFile ? "Ersetzen" : "Foto"}
+          </Button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/*"
+            capture="environment"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void handleFile(f);
+              e.target.value = "";
+            }}
+          />
+        </Box>
+      )}
+
+      {extractError && <Alert severity="warning" onClose={() => setExtractError(null)}>{extractError}</Alert>}
+
       {otherErr && <Alert severity="error">{otherErr}</Alert>}
+
+      {imageUploadError && (
+        <Alert
+          severity="warning"
+          action={
+            <Button
+              color="inherit"
+              size="small"
+              onClick={async () => {
+                if (!photoFile) return;
+                // We don't have the just-created container id in state by now;
+                // the user can manually re-save (form is still open).
+                setImageUploadError(null);
+              }}
+            >
+              Schließen
+            </Button>
+          }
+        >
+          {imageUploadError}
+        </Alert>
+      )}
 
       <TextField
         label="Identifier"
         required
         value={identifier}
-        onChange={(e) => setIdentifier(e.target.value)}
+        onChange={(e) => {
+          setIdentifier(e.target.value);
+          if (extractedFields.has("identifier")) {
+            setExtractedFields((s) => { const ns = new Set(s); ns.delete("identifier"); return ns; });
+          }
+        }}
         size="small"
         helperText={identifierErr ?? "Must be unique within your group (e.g. AB01)"}
         error={!!identifierErr}
         autoFocus
+        sx={extractedFields.has("identifier")
+          ? { "& .MuiOutlinedInput-root": { backgroundColor: "rgba(67, 56, 202, 0.06)" } }
+          : undefined}
+        slotProps={{
+          input: extractedFields.has("identifier")
+            ? {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <CameraAltIcon fontSize="small" color="primary" />
+                  </InputAdornment>
+                ),
+              }
+            : undefined,
+        }}
       />
 
       <Stack direction="row" spacing={1}>
@@ -146,29 +354,82 @@ export function ContainerForm({ chemicalId, containerId, onDone }: Props) {
           type="number"
           required
           value={amount}
-          onChange={(e) =>
-            setAmount(e.target.value === "" ? "" : Number(e.target.value))
-          }
+          onChange={(e) => {
+            setAmount(e.target.value === "" ? "" : Number(e.target.value));
+            if (extractedFields.has("amount")) {
+              setExtractedFields((s) => { const ns = new Set(s); ns.delete("amount"); return ns; });
+            }
+          }}
           size="small"
-          sx={{ flex: 1 }}
+          sx={extractedFields.has("amount")
+            ? { flex: 1, "& .MuiOutlinedInput-root": { backgroundColor: "rgba(67, 56, 202, 0.06)" } }
+            : { flex: 1 }}
+          slotProps={{
+            input: extractedFields.has("amount")
+              ? {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <CameraAltIcon fontSize="small" color="primary" />
+                    </InputAdornment>
+                  ),
+                }
+              : undefined,
+          }}
         />
         <TextField
           label="Unit"
           required
           value={unit}
-          onChange={(e) => setUnit(e.target.value)}
+          onChange={(e) => {
+            setUnit(e.target.value);
+            if (extractedFields.has("unit")) {
+              setExtractedFields((s) => { const ns = new Set(s); ns.delete("unit"); return ns; });
+            }
+          }}
           size="small"
-          sx={{ width: 96 }}
+          sx={extractedFields.has("unit")
+            ? { width: 96, "& .MuiOutlinedInput-root": { backgroundColor: "rgba(67, 56, 202, 0.06)" } }
+            : { width: 96 }}
           placeholder="g, mL, L…"
+          slotProps={{
+            input: extractedFields.has("unit")
+              ? {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <CameraAltIcon fontSize="small" color="primary" />
+                    </InputAdornment>
+                  ),
+                }
+              : undefined,
+          }}
         />
       </Stack>
 
       <TextField
         label="Purity"
         value={purity}
-        onChange={(e) => setPurity(e.target.value)}
+        onChange={(e) => {
+          setPurity(e.target.value);
+          if (extractedFields.has("purity")) {
+            setExtractedFields((s) => { const ns = new Set(s); ns.delete("purity"); return ns; });
+          }
+        }}
         size="small"
         placeholder="e.g. 99.8%"
+        sx={extractedFields.has("purity")
+          ? { "& .MuiOutlinedInput-root": { backgroundColor: "rgba(67, 56, 202, 0.06)" } }
+          : undefined}
+        slotProps={{
+          input: extractedFields.has("purity")
+            ? {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <CameraAltIcon fontSize="small" color="primary" />
+                  </InputAdornment>
+                ),
+              }
+            : undefined,
+        }}
       />
 
       <Box>
@@ -274,10 +535,29 @@ export function ContainerForm({ chemicalId, containerId, onDone }: Props) {
       <TextField
         label="Received"
         type="date"
-        slotProps={{ inputLabel: { shrink: true } }}
+        slotProps={{
+          inputLabel: { shrink: true },
+          input: extractedFields.has("purchased_at")
+            ? {
+                startAdornment: (
+                  <InputAdornment position="start">
+                    <CameraAltIcon fontSize="small" color="primary" />
+                  </InputAdornment>
+                ),
+              }
+            : undefined,
+        }}
         value={receivedDate ?? ""}
-        onChange={(e) => setReceivedDate(e.target.value || null)}
+        onChange={(e) => {
+          setReceivedDate(e.target.value || null);
+          if (extractedFields.has("purchased_at")) {
+            setExtractedFields((s) => { const ns = new Set(s); ns.delete("purchased_at"); return ns; });
+          }
+        }}
         size="small"
+        sx={extractedFields.has("purchased_at")
+          ? { "& .MuiOutlinedInput-root": { backgroundColor: "rgba(67, 56, 202, 0.06)" } }
+          : undefined}
       />
 
       {conflicts.data && conflicts.data.length > 0 && (

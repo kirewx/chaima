@@ -1,12 +1,14 @@
 # src/chaima/routers/containers.py
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, File, HTTPException, Query, UploadFile, status
 
 from chaima.dependencies import CurrentUserDep, GroupMemberDep, SessionDep
 from chaima.schemas.container import ContainerCreate, ContainerRead, ContainerUpdate
 from chaima.schemas.pagination import PaginatedResponse
 from chaima.services import containers as container_service
+from chaima.services import files as files_service
+from chaima.services import images as images_service
 
 router = APIRouter(tags=["containers"])
 
@@ -345,6 +347,45 @@ async def archive_container(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Container not found")
     await container_service.archive_container(session, container)
     await session.commit()
+
+
+@flat.post("/{container_id}/image", response_model=ContainerRead)
+async def upload_container_image(
+    group_id: UUID,
+    container_id: UUID,
+    session: SessionDep,
+    member: GroupMemberDep,
+    user: CurrentUserDep,
+    file: UploadFile = File(...),
+) -> ContainerRead:
+    """Upload (or replace) the image attached to a container.
+
+    Auth: container creator OR group admin.
+    """
+    _group, link = member
+    container = await container_service.get_container(session, container_id)
+    if container is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Container not found")
+    from chaima.services import chemicals as chemical_svc
+    chem = await chemical_svc.get_chemical(session, container.chemical_id)
+    if chem is None or chem.group_id != group_id:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Container not found")
+
+    if container.created_by != user.id and not link.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the container creator or a group admin may attach an image",
+        )
+
+    data = await file.read()
+    images_service.validate_image_upload(file, data)
+    container.image_path = files_service.save_upload(
+        group_id, file.filename or "image.jpg", data,
+    )
+    session.add(container)
+    await session.commit()
+    await session.refresh(container)
+    return ContainerRead.model_validate(container, from_attributes=True)
 
 
 router.include_router(nested)
