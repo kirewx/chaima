@@ -77,3 +77,13 @@ async def supplier(session, group):
     session.add(s)
     await session.flush()
     return s
+
+
+@pytest_asyncio.fixture
+async def patch_events_session_maker(engine, monkeypatch):
+    """Point `services.events` at the test engine so background-task writes hit it."""
+    from sqlalchemy.ext.asyncio import async_sessionmaker
+    from sqlmodel.ext.asyncio.session import AsyncSession
+    test_maker = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    monkeypatch.setattr("chaima.services.events.async_session_maker", test_maker)
+    return test_maker
