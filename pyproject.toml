@@ -2,6 +2,10 @@
 name = "chaima"
 dynamic = ["version"]
 description = "Chemical AI Manager"
+authors = [
+    { name = "Erik Wimmer", email = "erikwimmer15@gmail.com" },
+    { name = "Fabian Zills", email = "zills.fabian@gmail.com" },
+]
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -23,6 +27,10 @@ dependencies = [
 
 [project.scripts]
 chaima = "chaima.cli:app"
+
+[project.urls]
+Repository = "https://github.com/kirewx/chaima"
+Releases = "https://github.com/kirewx/chaima/releases"
 
 [dependency-groups]
 dev = [
