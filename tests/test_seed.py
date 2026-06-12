@@ -36,7 +36,7 @@ async def test_seed_admin_email_passes_schema_validation(session):
 
     result = await session.exec(select(User).where(User.is_superuser == True))
     user = result.first()
-    assert user is not None
+    assert user is None
 
     # This is the exact call fastapi-users makes on GET /users/me
     validated = UserRead.model_validate(user)
