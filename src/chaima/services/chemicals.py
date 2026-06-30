@@ -14,6 +14,7 @@ from chaima.models.chemical import Chemical, ChemicalSynonym
 from chaima.models.container import Container
 from chaima.models.ghs import ChemicalGHS, GHSCode
 from chaima.models.hazard import ChemicalHazardTag, HazardTag
+from chaima.models.pstatement import ChemicalPStatement, PStatement
 from chaima.models.supplier import Supplier
 from chaima.models.user import User
 
@@ -133,6 +134,30 @@ async def _resolve_ghs_codes_by_code(
             logger.warning("unknown GHS code from upstream: %s", code)
             continue
         resolved.append(ghs_id)
+    return resolved
+
+
+async def _resolve_p_codes_by_code(
+    session: AsyncSession, codes: list[str]
+) -> list[UUID]:
+    """Map P-code strings to existing PStatement row IDs.
+
+    Codes not in the catalog are logged at WARNING and skipped — they
+    never trigger an upsert or an error.
+    """
+    if not codes:
+        return []
+    result = await session.exec(
+        select(PStatement).where(PStatement.code.in_(codes))  # type: ignore[union-attr]
+    )
+    found = {row.code: row.id for row in result.all()}
+    resolved: list[UUID] = []
+    for code in codes:
+        pid = found.get(code)
+        if pid is None:
+            logger.warning("unknown P-code from upstream: %s", code)
+            continue
+        resolved.append(pid)
     return resolved
 
 
@@ -418,6 +443,9 @@ async def get_chemical_detail(session: AsyncSession, chemical_id: UUID) -> Chemi
         .options(
             selectinload(Chemical.synonyms),  # type: ignore[arg-type]
             selectinload(Chemical.ghs_links).selectinload(ChemicalGHS.ghs_code),  # type: ignore[arg-type]
+            selectinload(Chemical.pstatement_links).selectinload(
+                ChemicalPStatement.p_statement
+            ),  # type: ignore[arg-type]
             selectinload(Chemical.hazard_tag_links).selectinload(ChemicalHazardTag.hazard_tag),  # type: ignore[arg-type]
         )
     )
@@ -587,6 +615,58 @@ async def replace_ghs_codes(
         codes.append(ghs)
     await session.flush()
     return codes
+
+
+async def replace_p_codes(
+    session: AsyncSession,
+    chemical_id: UUID,
+    p_statement_ids: list[UUID],
+) -> list[PStatement]:
+    """Replace all P-statement assignments for a chemical.
+
+    Deletes existing ChemicalPStatement links and creates new ones.
+
+    Parameters
+    ----------
+    session : AsyncSession
+        The database session.
+    chemical_id : UUID
+        The ID of the chemical.
+    p_statement_ids : list[UUID]
+        New list of P-statement IDs.
+
+    Returns
+    -------
+    list[PStatement]
+        The PStatement objects for the new assignments.
+
+    Raises
+    ------
+    ValueError
+        If any P-statement ID is not found.
+    """
+    # Delete existing links
+    result = await session.exec(
+        select(ChemicalPStatement).where(
+            ChemicalPStatement.chemical_id == chemical_id
+        )
+    )
+    for link in result.all():
+        await session.delete(link)
+    await session.flush()
+
+    # Create new links
+    statements = []
+    for pid in p_statement_ids:
+        pstmt = await session.get(PStatement, pid)
+        if pstmt is None:
+            raise ValueError(f"P-statement {pid} not found")
+        session.add(
+            ChemicalPStatement(chemical_id=chemical_id, p_statement_id=pid)
+        )
+        statements.append(pstmt)
+    await session.flush()
+    return statements
 
 
 async def replace_hazard_tags(

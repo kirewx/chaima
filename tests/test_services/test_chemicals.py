@@ -344,6 +344,51 @@ async def test_list_chemicals_my_secrets(session, group, user, other_user, membe
     assert items[0].name == "Secret A"
 
 
+async def test_resolve_p_codes_skips_unknown(session):
+    from chaima.services.seed import seed_p_statements
+    from chaima.services.chemicals import _resolve_p_codes_by_code
+
+    await seed_p_statements(session)
+    ids = await _resolve_p_codes_by_code(session, ["P280", "P999"])
+    assert len(ids) == 1  # P280 resolves, P999 is unknown and skipped
+
+
+async def test_replace_p_codes_round_trips(session, group, user):
+    from chaima.services.seed import seed_p_statements
+    from chaima.services.chemicals import (
+        _resolve_p_codes_by_code,
+        replace_p_codes,
+    )
+    from chaima.models.pstatement import ChemicalPStatement
+    from sqlmodel import select
+
+    await seed_p_statements(session)
+    chem = await chemical_service.create_chemical(
+        session, group_id=group.id, created_by=user.id, name="Ethanol"
+    )
+    ids = await _resolve_p_codes_by_code(session, ["P210", "P280"])
+    await replace_p_codes(session, chem.id, ids)
+    links = (
+        await session.exec(
+            select(ChemicalPStatement).where(
+                ChemicalPStatement.chemical_id == chem.id
+            )
+        )
+    ).all()
+    assert len(links) == 2
+
+    # Replacing with a subset removes the dropped link.
+    await replace_p_codes(session, chem.id, ids[:1])
+    links2 = (
+        await session.exec(
+            select(ChemicalPStatement).where(
+                ChemicalPStatement.chemical_id == chem.id
+            )
+        )
+    ).all()
+    assert len(links2) == 1
+
+
 async def test_list_chemicals_location_filter(session, group, user, membership):
     """location_id filters to chemicals with a container at that location."""
     from chaima.models.container import Container
