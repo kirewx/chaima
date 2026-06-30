@@ -44,8 +44,10 @@ class PubChemLookupResult(BaseModel):
     ghs_codes : list[PubChemGHSHit]
         GHS hazard statements parsed from the PubChem classification.
     precautionary_codes : list[str]
-        GHS precautionary (P) statement codes; empty on the fast lookup
-        (populated via the slower GHS/refetch path).
+        GHS precautionary (P) statement codes. Always empty on the fast
+        lookup (mirrors ``ghs_codes`` — classification is too slow to fetch
+        here); P-codes reach chemicals via the separate refetch path, not
+        through this result.
     """
 
     cid: str

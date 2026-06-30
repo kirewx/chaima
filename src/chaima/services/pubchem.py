@@ -172,8 +172,11 @@ async def lookup_ghs(cid: str) -> list[PubChemGHSHit]:
 async def lookup_precautionary(cid: str) -> list[str]:
     """Fetch GHS precautionary (P) codes for a CID.
 
-    Reuses the cached raw GHS body, so it adds no network cost when called
-    alongside ``lookup_ghs``. Returns an empty list on failure.
+    Shares the raw GHS body cache with ``lookup_ghs`` (``ghsbody:{cid}``):
+    once that body is cached, this adds no extra network round-trip. On a
+    cold cache, a concurrent ``lookup_ghs`` + ``lookup_precautionary`` may
+    each fetch once before the body lands in the cache. Returns an empty
+    list on failure.
     """
     body = await _lookup_ghs_body(cid)
     if not body:
