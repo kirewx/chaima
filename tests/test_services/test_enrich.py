@@ -86,7 +86,8 @@ async def test_refetch_ghs_one_adds_codes_and_synonyms(session, group, user):
     ]
     syns = ["ethyl alcohol", "EtOH"]
     with patch("chaima.services.enrich.pubchem_lookup_ghs", AsyncMock(return_value=hits)), \
-         patch("chaima.services.enrich.pubchem_lookup_synonyms", AsyncMock(return_value=syns)):
+         patch("chaima.services.enrich.pubchem_lookup_synonyms", AsyncMock(return_value=syns)), \
+         patch("chaima.services.enrich.pubchem_lookup_precautionary", AsyncMock(return_value=[])):
         result = await enrich_service.refetch_ghs_one(session, chem)
         await session.commit()
 
@@ -117,7 +118,8 @@ async def test_refetch_ghs_one_merges_synonyms_case_insensitive(session, group, 
     # one should be appended.
     syns = ["etoh", "ethyl alcohol"]
     with patch("chaima.services.enrich.pubchem_lookup_ghs", AsyncMock(return_value=[])), \
-         patch("chaima.services.enrich.pubchem_lookup_synonyms", AsyncMock(return_value=syns)):
+         patch("chaima.services.enrich.pubchem_lookup_synonyms", AsyncMock(return_value=syns)), \
+         patch("chaima.services.enrich.pubchem_lookup_precautionary", AsyncMock(return_value=[])):
         result = await enrich_service.refetch_ghs_one(session, chem)
         await session.commit()
 
@@ -142,9 +144,35 @@ async def test_refetch_ghs_one_unchanged_when_already_present(session, group, us
 
     hits = [PubChemGHSHit(code="H225", description="", signal_word=None, pictogram=None)]
     with patch("chaima.services.enrich.pubchem_lookup_ghs", AsyncMock(return_value=hits)), \
-         patch("chaima.services.enrich.pubchem_lookup_synonyms", AsyncMock(return_value=[])):
+         patch("chaima.services.enrich.pubchem_lookup_synonyms", AsyncMock(return_value=[])), \
+         patch("chaima.services.enrich.pubchem_lookup_precautionary", AsyncMock(return_value=[])):
         result = await enrich_service.refetch_ghs_one(session, chem)
     assert result == "unchanged"
+
+
+async def test_refetch_merges_precautionary_codes(session, group, user):
+    from chaima.models.pstatement import ChemicalPStatement
+    from chaima.services.seed import seed_p_statements
+
+    await seed_p_statements(session)
+    chem = Chemical(name="Ethanol", cid="702", group_id=group.id, created_by=user.id)
+    session.add(chem)
+    await session.commit()
+
+    with patch("chaima.services.enrich.pubchem_lookup_ghs", AsyncMock(return_value=[])), \
+         patch("chaima.services.enrich.pubchem_lookup_synonyms", AsyncMock(return_value=[])), \
+         patch("chaima.services.enrich.pubchem_lookup_precautionary",
+               AsyncMock(return_value=["P210", "P280"])):
+        result = await enrich_service.refetch_ghs_one(session, chem)
+        await session.commit()
+
+    assert result == "updated"
+    links = (await session.exec(
+        ChemicalPStatement.__table__.select().where(
+            ChemicalPStatement.chemical_id == chem.id
+        )
+    )).all()
+    assert len(links) == 2
 
 
 async def test_refetch_ghs_one_unchanged_when_pubchem_empty(session, group, user):
@@ -153,6 +181,7 @@ async def test_refetch_ghs_one_unchanged_when_pubchem_empty(session, group, user
     await session.commit()
 
     with patch("chaima.services.enrich.pubchem_lookup_ghs", AsyncMock(return_value=[])), \
-         patch("chaima.services.enrich.pubchem_lookup_synonyms", AsyncMock(return_value=[])):
+         patch("chaima.services.enrich.pubchem_lookup_synonyms", AsyncMock(return_value=[])), \
+         patch("chaima.services.enrich.pubchem_lookup_precautionary", AsyncMock(return_value=[])):
         result = await enrich_service.refetch_ghs_one(session, chem)
     assert result == "unchanged"
