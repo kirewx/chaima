@@ -43,6 +43,9 @@ class PubChemLookupResult(BaseModel):
         Up to 20 synonyms (common names, trade names, CAS).
     ghs_codes : list[PubChemGHSHit]
         GHS hazard statements parsed from the PubChem classification.
+    precautionary_codes : list[str]
+        GHS precautionary (P) statement codes; empty on the fast lookup
+        (populated via the slower GHS/refetch path).
     """
 
     cid: str
@@ -52,6 +55,7 @@ class PubChemLookupResult(BaseModel):
     smiles: str | None = None
     synonyms: list[str]
     ghs_codes: list[PubChemGHSHit]
+    precautionary_codes: list[str] = []
 
 
 class PubChemVendor(BaseModel):
