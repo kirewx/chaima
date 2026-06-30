@@ -5,7 +5,8 @@ from pathlib import Path
 from sqlmodel import select
 
 from chaima.models.ghs import GHSCode
-from chaima.services.seed import run_seeds, seed_ghs_catalog
+from chaima.models.pstatement import PStatement
+from chaima.services.seed import run_seeds, seed_ghs_catalog, seed_p_statements
 
 CATALOG_PATH = Path("src/chaima/data/ghs_codes.json")
 
@@ -69,14 +70,13 @@ async def test_run_seeds_runs_ghs_catalog(session):
 
 
 async def test_seed_p_statements_inserts_catalog(session):
-    from chaima.models.pstatement import PStatement
-    from chaima.services.seed import seed_p_statements
-
     await seed_p_statements(session)
-    codes = set((await session.exec(select(PStatement.code))).all())
+    rows = (await session.exec(select(PStatement))).all()
+    first_count = len(rows)
+    codes = {r.code for r in rows}
     assert {"P210", "P280", "P305+P351+P338"} <= codes
 
-    # Idempotent: a second run inserts nothing new and does not raise.
+    # Idempotent: a second run inserts no new rows and does not raise.
     await seed_p_statements(session)
-    codes2 = set((await session.exec(select(PStatement.code))).all())
-    assert codes2 == codes
+    second_count = len((await session.exec(select(PStatement))).all())
+    assert second_count == first_count
