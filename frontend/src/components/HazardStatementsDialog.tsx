@@ -12,7 +12,7 @@ import {
 import CloseIcon from "@mui/icons-material/Close";
 import type { GHSCodeRead, PStatementRead } from "../types";
 import { GHSPictogramRow } from "./GHSPictogramRow";
-import { worstSignalWord } from "./hazardSignal";
+import { worstSignalWord } from "../utils/hazardSignal";
 
 interface Props {
   open: boolean;

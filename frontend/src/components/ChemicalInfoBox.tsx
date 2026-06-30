@@ -14,7 +14,7 @@ import { ChemicalMenu } from "./ChemicalMenu";
 import { GHSPictogramRow } from "./GHSPictogramRow";
 import { HazardTagChips } from "./HazardTagChips";
 import { HazardStatementsDialog } from "./HazardStatementsDialog";
-import { worstSignalWord } from "./hazardSignal";
+import { worstSignalWord } from "../utils/hazardSignal";
 import { useChemicalStructureSvg } from "../api/hooks/useChemicalStructureSvg";
 import { useDrawer } from "./drawer/DrawerContext";
 import { useOrders } from "../api/hooks/useOrders";
