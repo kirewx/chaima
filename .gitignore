@@ -226,10 +226,13 @@ uploads/
 
 # Database
 chaima.db
+chaima.db-shm
+chaima.db-wal
 .playwright-cli/
 
 # Local tooling
 .claude/
+.agents/
 *.stackdump
 
 # Local-only files
