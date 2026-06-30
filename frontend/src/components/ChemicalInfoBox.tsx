@@ -1,34 +1,31 @@
+import { useState } from "react";
 import { Alert, Box, Button, Chip, Stack, Typography, Link as MuiLink } from "@mui/material";
 import LinkIcon from "@mui/icons-material/Link";
 import DescriptionIcon from "@mui/icons-material/Description";
+import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import type {
   ChemicalRead,
   ContainerRead,
   GHSCodeRead,
   HazardTagRead,
+  PStatementRead,
 } from "../types";
 import { ChemicalMenu } from "./ChemicalMenu";
 import { GHSPictogramRow } from "./GHSPictogramRow";
 import { HazardTagChips } from "./HazardTagChips";
+import { HazardStatementsDialog } from "./HazardStatementsDialog";
+import { worstSignalWord } from "../utils/hazardSignal";
 import { useChemicalStructureSvg } from "../api/hooks/useChemicalStructureSvg";
 import { useDrawer } from "./drawer/DrawerContext";
 import { useOrders } from "../api/hooks/useOrders";
 import { RoleGate } from "./RoleGate";
-
-function worstSignalWord(codes: GHSCodeRead[]): "Danger" | "Warning" | null {
-  let hasWarning = false;
-  for (const c of codes) {
-    if (c.signal_word === "Danger") return "Danger";
-    if (c.signal_word === "Warning") hasWarning = true;
-  }
-  return hasWarning ? "Warning" : null;
-}
 
 interface Props {
   chemical: ChemicalRead;
   containers: ContainerRead[];
   ghsCodes?: GHSCodeRead[];
   hazardTags?: HazardTagRead[];
+  pStatements?: PStatementRead[];
   groupId: string;
 }
 
@@ -46,8 +43,10 @@ export function ChemicalInfoBox({
   containers,
   ghsCodes = [],
   hazardTags = [],
+  pStatements = [],
   groupId,
 }: Props) {
+  const [hpOpen, setHpOpen] = useState(false);
   // Total stock grouped by unit so we don't mix L + mL
   const totals = containers.reduce<Record<string, number>>((acc, cont) => {
     acc[cont.unit] = (acc[cont.unit] ?? 0) + cont.amount;
@@ -329,7 +328,39 @@ export function ChemicalInfoBox({
             No SDS uploaded
           </Typography>
         )}
+        {ghsCodes.length > 0 || pStatements.length > 0 ? (
+          <Stack
+            direction="row"
+            spacing={0.5}
+            sx={{ alignItems: "center", mt: 0.5 }}
+          >
+            <WarningAmberIcon sx={{ fontSize: 12, color: "warning.main" }} />
+            <MuiLink
+              component="button"
+              type="button"
+              onClick={() => setHpOpen(true)}
+              sx={{ fontSize: 11 }}
+            >
+              H + P statements ({ghsCodes.length}·H {pStatements.length}·P)
+            </MuiLink>
+          </Stack>
+        ) : (
+          <Typography
+            variant="caption"
+            color="text.disabled"
+            sx={{ display: "block", mt: 0.5 }}
+          >
+            No H/P statements
+          </Typography>
+        )}
       </Box>
+      <HazardStatementsDialog
+        open={hpOpen}
+        onClose={() => setHpOpen(false)}
+        chemicalName={chemical.name}
+        ghsCodes={ghsCodes}
+        pStatements={pStatements}
+      />
     </Box>
   );
 }

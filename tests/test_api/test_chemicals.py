@@ -59,6 +59,33 @@ async def test_get_chemical_detail(client, session, group, membership, user):
     assert isinstance(detail.hazard_tags, list)
 
 
+async def test_chemical_detail_includes_precautionary_codes(
+    client, session, group, membership, user
+):
+    from chaima.services.seed import seed_p_statements
+    from chaima.services.chemicals import (
+        _resolve_p_codes_by_code,
+        create_chemical,
+        replace_p_codes,
+    )
+
+    await seed_p_statements(session)
+    chem = await create_chemical(
+        session, group_id=group.id, created_by=user.id, name="Acetone-PTest"
+    )
+    ids = await _resolve_p_codes_by_code(session, ["P280"])
+    await replace_p_codes(session, chem.id, ids)
+    await session.commit()
+
+    resp = await client.get(f"/api/v1/groups/{group.id}/chemicals/{chem.id}")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert "precautionary_codes" in body
+    codes = [p["code"] for p in body["precautionary_codes"]]
+    assert "P280" in codes
+    assert body["precautionary_codes"][0]["description"].strip()
+
+
 async def test_replace_synonyms(client, session, group, membership, user):
     chem = Chemical(group_id=group.id, name="Ethanol", created_by=user.id)
     session.add(chem)

@@ -114,6 +114,7 @@ export interface SynonymRead {
 export interface ChemicalDetail extends ChemicalRead {
   synonyms: SynonymRead[];
   ghs_codes: GHSCodeRead[];
+  precautionary_codes: PStatementRead[];
   hazard_tags: HazardTagRead[];
 }
 
@@ -161,6 +162,12 @@ export interface GHSCodeRead {
   description: string;
   pictogram: string | null;
   signal_word: string | null;
+}
+
+export interface PStatementRead {
+  id: string;
+  code: string;
+  description: string;
 }
 
 export interface GHSCodeCreate {
@@ -348,6 +355,7 @@ export interface PubChemLookupResult {
   smiles: string | null;
   synonyms: string[];
   ghs_codes: PubChemGHSHit[];
+  precautionary_codes: string[];
 }
 
 export interface PreviousImport {

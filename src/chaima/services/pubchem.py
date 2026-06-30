@@ -30,6 +30,8 @@ _SYNONYM_CAP = 20
 _CAS_RE = re.compile(r"^\d{2,7}-\d{2}-\d$")
 _HAZARD_CODE_RE = re.compile(r"^(H\d{3}|EUH\d{3})\b")
 _PICTOGRAM_RE = re.compile(r"GHS\d{2}")
+# A single P-code or a combination like "P305+P351+P338".
+_P_CODE_RE = re.compile(r"^P\d{3}(?:\+P\d{3})*$")
 
 # Simple TTL cache: {key: (result, expiry_timestamp)}
 _CACHE_TTL = 86400  # 24 hours — PubChem data barely changes
@@ -128,6 +130,27 @@ async def lookup_synonyms(cid: str) -> list[str]:
     return result
 
 
+async def _lookup_ghs_body(cid: str) -> dict[str, Any]:
+    """Fetch + cache the raw PUG-View GHS Classification body for a CID.
+
+    Cached 24h under ``ghsbody:{cid}``. Returns ``{}`` on any failure so
+    callers degrade to empty results without handling errors.
+    """
+    cache_key = f"ghsbody:{cid}"
+    cached = _cache_get(cache_key)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
+    timeout = httpx.Timeout(_GHS_TIMEOUT, connect=_PER_REQUEST_TIMEOUT)
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            body = await _fetch_ghs(client, int(cid))
+    except (PubChemUpstreamError, Exception) as exc:
+        logger.warning("GHS body fetch failed for CID %s: %s", cid, exc)
+        return {}
+    _cache_set(cache_key, body)
+    return body
+
+
 async def lookup_ghs(cid: str) -> list[PubChemGHSHit]:
     """Fetch GHS hazard codes for a CID (the slow part).
 
@@ -138,18 +161,27 @@ async def lookup_ghs(cid: str) -> list[PubChemGHSHit]:
     cached = _cache_get(cache_key)
     if cached is not None:
         return cached  # type: ignore[return-value]
-
-    timeout = httpx.Timeout(_GHS_TIMEOUT, connect=_PER_REQUEST_TIMEOUT)
-    try:
-        async with httpx.AsyncClient(timeout=timeout) as client:
-            ghs_raw = await _fetch_ghs(client, int(cid))
-    except (PubChemUpstreamError, Exception) as exc:
-        logger.warning("GHS fetch failed for CID %s: %s", cid, exc)
+    body = await _lookup_ghs_body(cid)
+    if not body:
         return []
-
-    result = parse_ghs_classification(ghs_raw)
+    result = parse_ghs_classification(body)
     _cache_set(cache_key, result)
     return result
+
+
+async def lookup_precautionary(cid: str) -> list[str]:
+    """Fetch GHS precautionary (P) codes for a CID.
+
+    Shares the raw GHS body cache with ``lookup_ghs`` (``ghsbody:{cid}``):
+    once that body is cached, this adds no extra network round-trip. On a
+    cold cache, a concurrent ``lookup_ghs`` + ``lookup_precautionary`` may
+    each fetch once before the body lands in the cache. Returns an empty
+    list on failure.
+    """
+    body = await _lookup_ghs_body(cid)
+    if not body:
+        return []
+    return parse_precautionary_codes(body)
 
 
 def _safe_json(resp: httpx.Response) -> Any:
@@ -274,6 +306,15 @@ def _to_float(value: Any) -> float | None:
         return None
 
 
+def _majority_threshold(bucket_count: int) -> int:
+    """Number of source buckets a code must appear in to be kept.
+
+    With fewer than three buckets the sample is too small to vote, so a
+    single appearance suffices; otherwise require a strict majority.
+    """
+    return 1 if bucket_count < 3 else bucket_count // 2 + 1
+
+
 def parse_ghs_classification(data: dict[str, Any]) -> list[PubChemGHSHit]:
     """Extract H-code hits from a PubChem PUG-View GHS Classification body.
 
@@ -349,7 +390,7 @@ def parse_ghs_classification(data: dict[str, Any]) -> list[PubChemGHSHit]:
 
     if bucket_count == 0:
         return []
-    threshold = 1 if bucket_count < 3 else bucket_count // 2 + 1
+    threshold = _majority_threshold(bucket_count)
     kept = [
         first_hit[code]
         for code, count in code_counts.items()
@@ -358,6 +399,67 @@ def parse_ghs_classification(data: dict[str, Any]) -> list[PubChemGHSHit]:
     # Sort by support descending, then code ascending for deterministic order.
     kept.sort(key=lambda h: (-code_counts[h.code], h.code))
     return kept
+
+
+def parse_precautionary_codes(data: dict[str, Any]) -> list[str]:
+    """Extract P-codes from a PubChem PUG-View GHS Classification body.
+
+    PubChem reports precautionary codes as one comma-separated string per
+    source bucket (e.g. ``"P210, P233, ..., and P501"``), including
+    combination codes (``P305+P351+P338``). We split that string, normalize
+    each token, and keep a code only when it appears in a strict majority of
+    source buckets — mirroring ``parse_ghs_classification``. With fewer than
+    three buckets every observed code is kept.
+    """
+    sections = list(_iter_ghs_sections(data))
+    if not sections:
+        return []
+
+    code_counts: dict[str, int] = defaultdict(int)
+    first_seen: dict[str, int] = {}
+    order = 0
+    bucket_count = 0
+
+    for section in sections:
+        buckets: dict[Any, list[dict[str, Any]]] = defaultdict(list)
+        for info in section.get("Information") or []:
+            buckets[info.get("ReferenceNumber")].append(info)
+
+        for items in buckets.values():
+            bucket_count += 1
+            codes_in_bucket: set[str] = set()
+            for info in items:
+                if info.get("Name") != "Precautionary Statement Codes":
+                    continue
+                for raw in _value_strings(info.get("Value") or {}):
+                    for token in _split_precautionary_string(raw):
+                        if _P_CODE_RE.match(token):
+                            codes_in_bucket.add(token)
+            for code in codes_in_bucket:
+                code_counts[code] += 1
+                if code not in first_seen:
+                    first_seen[code] = order
+                    order += 1
+
+    if bucket_count == 0:
+        return []
+    threshold = _majority_threshold(bucket_count)
+    kept = [c for c, n in code_counts.items() if n >= threshold]
+    kept.sort(key=lambda c: (-code_counts[c], first_seen[c]))
+    return kept
+
+
+def _split_precautionary_string(text: str) -> list[str]:
+    """Split a 'P210, P233, ..., and P501' string into normalized codes."""
+    out: list[str] = []
+    for part in text.split(","):
+        token = part.strip()
+        if token.lower().startswith("and "):
+            token = token[4:].strip()
+        token = token.rstrip(".")
+        if token:
+            out.append(token)
+    return out
 
 
 def _iter_ghs_sections(node: Any):

@@ -28,6 +28,7 @@ function ExpandedBody({ groupId, chemical }: ExpandedBodyProps) {
         groupId={groupId}
         ghsCodes={detail?.ghs_codes ?? []}
         hazardTags={detail?.hazard_tags ?? []}
+        pStatements={detail?.precautionary_codes ?? []}
       />
       <ContainerGrid
         groupId={groupId}

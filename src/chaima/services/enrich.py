@@ -7,15 +7,19 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from chaima.models.chemical import Chemical, ChemicalSynonym
 from chaima.models.ghs import ChemicalGHS, GHSCode
+from chaima.models.pstatement import ChemicalPStatement, PStatement
 from chaima.services.chemicals import (
     _resolve_ghs_codes_by_code,
+    _resolve_p_codes_by_code,
     replace_ghs_codes,
+    replace_p_codes,
     replace_synonyms,
 )
 from chaima.services.pubchem import (
     PubChemNotFound,
     lookup as pubchem_lookup,
     lookup_ghs as pubchem_lookup_ghs,
+    lookup_precautionary as pubchem_lookup_precautionary,
     lookup_synonyms as pubchem_lookup_synonyms,
 )
 from chaima.services.events import _persist_event
@@ -113,19 +117,22 @@ async def enrich_group_chemicals(
 async def refetch_ghs_one(
     session: AsyncSession, chemical: Chemical
 ) -> RefetchGHSStatus:
-    """Pull GHS hazards and synonyms from PubChem and merge into the chemical.
+    """Pull GHS hazards, precautionary codes, and synonyms from PubChem and
+    merge them into the chemical.
 
-    Both sets are merged with what the chemical already has (case-insensitive
-    for synonyms, code equality for GHS); manual additions are preserved.
-    Never raises — upstream errors map to ``"error"``.
+    All three sets are merged with what the chemical already has
+    (case-insensitive for synonyms, code equality for GHS and precautionary
+    codes); manual additions are preserved. Never raises — upstream errors
+    map to ``"error"``.
     """
     if not chemical.cid:
         return "skipped"
 
     try:
-        hits, new_synonyms = await asyncio.gather(
+        hits, new_synonyms, new_p_codes = await asyncio.gather(
             pubchem_lookup_ghs(chemical.cid),
             pubchem_lookup_synonyms(chemical.cid),
+            pubchem_lookup_precautionary(chemical.cid),
         )
     except Exception:
         return "error"
@@ -150,6 +157,29 @@ async def refetch_ghs_one(
         if merged_codes != existing_codes:
             merged_ids = await _resolve_ghs_codes_by_code(session, list(merged_codes))
             await replace_ghs_codes(session, chemical.id, merged_ids)
+            changed = True
+
+    # ---- Precautionary-code merge ----------------------------------------
+    if new_p_codes:
+        existing_p_link_ids = (
+            await session.exec(
+                select(ChemicalPStatement.p_statement_id).where(
+                    ChemicalPStatement.chemical_id == chemical.id
+                )
+            )
+        ).all()
+        existing_p_codes_result = await session.exec(
+            select(PStatement.code).where(
+                PStatement.id.in_(set(existing_p_link_ids))  # type: ignore[union-attr]
+            )
+        )
+        existing_p_codes = set(existing_p_codes_result.all())
+        merged_p_codes = existing_p_codes | set(new_p_codes)
+        if merged_p_codes != existing_p_codes:
+            merged_p_ids = await _resolve_p_codes_by_code(
+                session, list(merged_p_codes)
+            )
+            await replace_p_codes(session, chemical.id, merged_p_ids)
             changed = True
 
     # ---- Synonym merge ---------------------------------------------------
