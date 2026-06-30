@@ -162,7 +162,9 @@ async def lookup_ghs(cid: str) -> list[PubChemGHSHit]:
     if cached is not None:
         return cached  # type: ignore[return-value]
     body = await _lookup_ghs_body(cid)
-    result = parse_ghs_classification(body) if body else []
+    if not body:
+        return []
+    result = parse_ghs_classification(body)
     _cache_set(cache_key, result)
     return result
 
@@ -301,6 +303,15 @@ def _to_float(value: Any) -> float | None:
         return None
 
 
+def _majority_threshold(bucket_count: int) -> int:
+    """Number of source buckets a code must appear in to be kept.
+
+    With fewer than three buckets the sample is too small to vote, so a
+    single appearance suffices; otherwise require a strict majority.
+    """
+    return 1 if bucket_count < 3 else bucket_count // 2 + 1
+
+
 def parse_ghs_classification(data: dict[str, Any]) -> list[PubChemGHSHit]:
     """Extract H-code hits from a PubChem PUG-View GHS Classification body.
 
@@ -376,7 +387,7 @@ def parse_ghs_classification(data: dict[str, Any]) -> list[PubChemGHSHit]:
 
     if bucket_count == 0:
         return []
-    threshold = 1 if bucket_count < 3 else bucket_count // 2 + 1
+    threshold = _majority_threshold(bucket_count)
     kept = [
         first_hit[code]
         for code, count in code_counts.items()
@@ -429,7 +440,7 @@ def parse_precautionary_codes(data: dict[str, Any]) -> list[str]:
 
     if bucket_count == 0:
         return []
-    threshold = 1 if bucket_count < 3 else bucket_count // 2 + 1
+    threshold = _majority_threshold(bucket_count)
     kept = [c for c, n in code_counts.items() if n >= threshold]
     kept.sort(key=lambda c: (-code_counts[c], first_seen[c]))
     return kept

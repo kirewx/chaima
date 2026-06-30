@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from chaima.services.pubchem import parse_precautionary_codes
+from chaima.services.pubchem import _P_CODE_RE, parse_precautionary_codes
 
 _CATALOG = (
     Path(__file__).resolve().parents[1]
@@ -35,7 +35,9 @@ def test_catalog_covers_acetone_fixture_codes():
 
 
 def test_parse_precautionary_codes_from_acetone_fixture():
-    data = json.loads((_FIXTURES / "pubchem_acetone_ghs.json").read_text())
+    data = json.loads(
+        (_FIXTURES / "pubchem_acetone_ghs.json").read_text(encoding="utf-8")
+    )
     codes = parse_precautionary_codes(data)
     # Single + combination codes are extracted; "and " prefix on the last
     # item is stripped; majority voting across the 3 buckets applies.
@@ -44,7 +46,7 @@ def test_parse_precautionary_codes_from_acetone_fixture():
     assert "P305+P351+P338" in codes
     assert "P501" in codes
     # No stray "and"-prefixed or empty tokens.
-    assert all(c.startswith("P") and "+" not in c.strip("P0123456789+") for c in codes)
+    assert all(_P_CODE_RE.match(c) for c in codes)
     assert "" not in codes
 
 
