@@ -117,11 +117,13 @@ async def enrich_group_chemicals(
 async def refetch_ghs_one(
     session: AsyncSession, chemical: Chemical
 ) -> RefetchGHSStatus:
-    """Pull GHS hazards and synonyms from PubChem and merge into the chemical.
+    """Pull GHS hazards, precautionary codes, and synonyms from PubChem and
+    merge them into the chemical.
 
-    Both sets are merged with what the chemical already has (case-insensitive
-    for synonyms, code equality for GHS); manual additions are preserved.
-    Never raises — upstream errors map to ``"error"``.
+    All three sets are merged with what the chemical already has
+    (case-insensitive for synonyms, code equality for GHS and precautionary
+    codes); manual additions are preserved. Never raises — upstream errors
+    map to ``"error"``.
     """
     if not chemical.cid:
         return "skipped"
