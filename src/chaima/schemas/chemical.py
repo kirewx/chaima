@@ -167,6 +167,26 @@ class GHSCodeReadNested(BaseModel):
     signal_word: str | None
 
 
+class PStatementReadNested(BaseModel):
+    """Nested precautionary-statement schema used inside ChemicalDetail.
+
+    Parameters
+    ----------
+    id : UUID
+        P-statement catalog ID.
+    code : str
+        P-code string (e.g. ``"P280"`` or ``"P305+P351+P338"``).
+    description : str
+        Human-readable precautionary statement.
+    """
+
+    model_config = {"from_attributes": True}
+
+    id: UUID
+    code: str
+    description: str
+
+
 class HazardTagReadNested(BaseModel):
     """Nested hazard tag schema used inside ChemicalDetail.
 
@@ -272,10 +292,13 @@ class ChemicalDetail(ChemicalRead):
         All synonyms for this chemical.
     ghs_codes : list[GHSCodeReadNested]
         GHS codes assigned to this chemical.
+    precautionary_codes : list[PStatementReadNested]
+        Precautionary (P) codes assigned to this chemical.
     hazard_tags : list[HazardTagReadNested]
         Hazard tags assigned to this chemical.
     """
 
     synonyms: list[SynonymRead]
     ghs_codes: list[GHSCodeReadNested]
+    precautionary_codes: list[PStatementReadNested]
     hazard_tags: list[HazardTagReadNested]

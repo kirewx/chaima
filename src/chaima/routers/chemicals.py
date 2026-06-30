@@ -21,6 +21,7 @@ from chaima.schemas.chemical import (
     GHSCodeReadNested,
     HazardTagBulkUpdate,
     HazardTagReadNested,
+    PStatementReadNested,
     SynonymBulkUpdate,
     SynonymRead,
 )
@@ -330,6 +331,10 @@ async def get_chemical(
         ghs_codes=[
             GHSCodeReadNested.model_validate(link.ghs_code, from_attributes=True)
             for link in chem.ghs_links
+        ],
+        precautionary_codes=[
+            PStatementReadNested.model_validate(link.p_statement, from_attributes=True)
+            for link in chem.pstatement_links
         ],
         hazard_tags=[
             HazardTagReadNested.model_validate(link.hazard_tag, from_attributes=True)
