@@ -12,6 +12,7 @@ from chaima.models.import_log import ImportLog
 from chaima.models.invite import Invite
 from chaima.models.order import Order, OrderStatus
 from chaima.models.project import Project
+from chaima.models.pstatement import ChemicalPStatement, PStatement
 from chaima.models.storage import StorageLocation, StorageLocationGroup
 from chaima.models.supplier import Supplier
 from chaima.models.user import User
@@ -21,6 +22,7 @@ __all__ = [
     "Chemical",
     "ChemicalGHS",
     "ChemicalHazardTag",
+    "ChemicalPStatement",
     "ChemicalSynonym",
     "Container",
     "Event",
@@ -35,6 +37,7 @@ __all__ = [
     "Order",
     "OrderStatus",
     "Project",
+    "PStatement",
     "SlowRequest",
     "StorageLocation",
     "StorageLocationGroup",

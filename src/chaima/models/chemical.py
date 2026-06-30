@@ -45,6 +45,7 @@ class Chemical(SQLModel, table=True):
     )
     synonyms: list["ChemicalSynonym"] = Relationship(back_populates="chemical")
     ghs_links: list["ChemicalGHS"] = Relationship(back_populates="chemical")
+    pstatement_links: list["ChemicalPStatement"] = Relationship(back_populates="chemical")
     hazard_tag_links: list["ChemicalHazardTag"] = Relationship(back_populates="chemical")
     containers: list["Container"] = Relationship(back_populates="chemical")
 
