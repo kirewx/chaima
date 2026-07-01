@@ -42,6 +42,7 @@ async def _load_chemicals_with_containers(
         search=filters.get("search"),
         hazard_tag_id=filters.get("hazard_tag_id"),
         ghs_code_id=filters.get("ghs_code_id"),
+        pictograms=filters.get("pictograms"),
         has_containers=filters.get("has_containers"),
         my_secrets=filters.get("my_secrets", False),
         location_id=filters.get("location_id"),

@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import client from "../client";
 import type { GroupRead, GroupCreate, GroupUpdate, MemberRead, MemberAdd, MemberUpdate, PaginatedResponse } from "../../types";
+import { useCurrentUser } from "./useAuth";
 
 export function useGroups() {
   return useQuery<GroupRead[]>({
@@ -72,6 +73,19 @@ export function useGroupMembers(groupId: string) {
     queryFn: () => client.get(`/groups/${groupId}/members`).then((r) => r.data),
     enabled: !!groupId,
   });
+}
+
+/**
+ * Whether the current user may act as admin of the group. Mirrors the backend
+ * `GroupAdminDep`: superusers are always admins, otherwise the user's group
+ * membership must have `is_admin`.
+ */
+export function useIsGroupAdmin(groupId: string): boolean {
+  const { data: user } = useCurrentUser();
+  const { data: members } = useGroupMembers(groupId);
+  if (user?.is_superuser) return true;
+  if (!user || !members) return false;
+  return members.some((m) => m.user_id === user.id && m.is_admin);
 }
 
 export function useAddMember(groupId: string) {

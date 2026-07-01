@@ -107,6 +107,41 @@ async def test_list_chemicals_search(session, group, user):
     assert items[0].name == "Ethanol"
 
 
+async def test_list_chemicals_filter_by_pictogram(session, group, user):
+    await seed_ghs_catalog(session)
+    await session.commit()
+    # H225 -> pictogram GHS02 (flammable); H300 -> GHS06 (acute toxicity)
+    flammable = await chemical_service.create_chemical(
+        session, group_id=group.id, created_by=user.id, name="Ethanol", ghs_codes=["H225"]
+    )
+    toxic = await chemical_service.create_chemical(
+        session, group_id=group.id, created_by=user.id, name="Sodium cyanide", ghs_codes=["H300"]
+    )
+    await chemical_service.create_chemical(
+        session, group_id=group.id, created_by=user.id, name="Water"
+    )
+    await session.commit()
+
+    items, total = await chemical_service.list_chemicals(
+        session, group_id=group.id, viewer=user, pictograms=["GHS02"]
+    )
+    assert total == 1
+    assert items[0].id == flammable.id
+
+    # Multiple pictograms are OR-combined; no duplicate rows.
+    items, total = await chemical_service.list_chemicals(
+        session, group_id=group.id, viewer=user, pictograms=["GHS02", "GHS06"]
+    )
+    assert total == 2
+    assert {i.id for i in items} == {flammable.id, toxic.id}
+
+    # A pictogram nobody carries yields nothing.
+    _, total_none = await chemical_service.list_chemicals(
+        session, group_id=group.id, viewer=user, pictograms=["GHS01"]
+    )
+    assert total_none == 0
+
+
 async def test_get_chemical_detail(session, group, user):
     chem = await chemical_service.create_chemical(
         session, group_id=group.id, created_by=user.id, name="Ethanol"

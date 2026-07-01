@@ -280,6 +280,7 @@ async def list_chemicals(
     search: str | None = None,
     hazard_tag_id: UUID | None = None,
     ghs_code_id: UUID | None = None,
+    pictograms: list[str] | None = None,
     has_containers: bool | None = None,
     my_secrets: bool = False,
     location_id: UUID | None = None,
@@ -303,6 +304,10 @@ async def list_chemicals(
         Filter to chemicals with this hazard tag assigned.
     ghs_code_id : UUID or None, optional
         Filter to chemicals with this GHS code assigned.
+    pictograms : list[str] or None, optional
+        Filter to chemicals carrying at least one GHS code whose pictogram is
+        in this list (e.g. ``["GHS05", "GHS02"]``). Multiple pictograms are
+        OR-combined.
     has_containers : bool or None, optional
         Filter to chemicals with (True) or without (False) active containers.
     sort : str, optional
@@ -355,6 +360,19 @@ async def list_chemicals(
 
     if ghs_code_id:
         query = query.join(ChemicalGHS).where(ChemicalGHS.ghs_id == ghs_code_id)
+
+    if pictograms:
+        pictogram_match = (
+            select(ChemicalGHS.chemical_id)
+            .join(GHSCode, ChemicalGHS.ghs_id == GHSCode.id)
+            .where(
+                ChemicalGHS.chemical_id == Chemical.id,
+                GHSCode.pictogram.in_(pictograms),  # type: ignore[union-attr]
+            )
+            .correlate(Chemical)
+            .exists()
+        )
+        query = query.where(pictogram_match)
 
     if has_containers is not None:
         container_exists = (
