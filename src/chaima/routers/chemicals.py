@@ -6,7 +6,7 @@ from typing import Literal
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, File, HTTPException, Query, Response, UploadFile, status
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 from sqlalchemy.exc import IntegrityError
 
@@ -72,6 +72,7 @@ async def list_chemicals(
     search: str | None = Query(None),
     hazard_tag_id: UUID | None = Query(None),
     ghs_code_id: UUID | None = Query(None),
+    pictograms: list[str] | None = Query(None),
     has_containers: bool | None = Query(None),
     my_secrets: bool = Query(False),
     location_id: UUID | None = Query(None),
@@ -88,6 +89,7 @@ async def list_chemicals(
         search=search,
         hazard_tag_id=hazard_tag_id,
         ghs_code_id=ghs_code_id,
+        pictograms=pictograms,
         has_containers=has_containers,
         my_secrets=my_secrets,
         location_id=location_id,
@@ -251,6 +253,7 @@ async def export_chemicals_endpoint(
     search: str | None = Query(None),
     hazard_tag_id: UUID | None = Query(None),
     ghs_code_id: UUID | None = Query(None),
+    pictograms: list[str] | None = Query(None),
     has_containers: bool | None = Query(None),
     my_secrets: bool = Query(False),
     location_id: UUID | None = Query(None),
@@ -266,6 +269,7 @@ async def export_chemicals_endpoint(
                 "search": search,
                 "hazard_tag_id": hazard_tag_id,
                 "ghs_code_id": ghs_code_id,
+                "pictograms": pictograms,
                 "has_containers": has_containers,
                 "my_secrets": my_secrets,
                 "location_id": location_id,
@@ -705,7 +709,7 @@ async def upload_sds(
     group_id: UUID,
     chemical_id: UUID,
     session: SessionDep,
-    member: GroupMemberDep,
+    admin: GroupAdminDep,
     file: UploadFile = File(...),
 ) -> ChemicalRead:
     if file.content_type != "application/pdf":
@@ -720,6 +724,37 @@ async def upload_sds(
     await session.commit()
     await session.refresh(chem)
     return ChemicalRead.model_validate(chem)
+
+
+@router.get("/{chemical_id}/sds")
+async def view_sds(
+    group_id: UUID,
+    chemical_id: UUID,
+    session: SessionDep,
+    member: GroupMemberDep,
+) -> FileResponse:
+    """Stream the chemical's SDS PDF for inline display in the browser.
+
+    Any group member may view. Served with ``Content-Disposition: inline`` so
+    the browser renders the PDF rather than downloading it.
+    """
+    chem = await session.get(Chemical, chemical_id)
+    if chem is None:
+        raise HTTPException(status_code=404, detail="Chemical not found")
+    if chem.group_id != group_id:
+        raise HTTPException(status_code=404, detail="Chemical not found")
+    if not chem.sds_path:
+        raise HTTPException(status_code=404, detail="No SDS uploaded")
+    full_path = (files_service.UPLOADS_ROOT / chem.sds_path).resolve()
+    root = files_service.UPLOADS_ROOT.resolve()
+    if root not in full_path.parents or not full_path.is_file():
+        raise HTTPException(status_code=404, detail="SDS file missing")
+    return FileResponse(
+        full_path,
+        media_type="application/pdf",
+        content_disposition_type="inline",
+        filename=f"{chem.name}-SDS.pdf",
+    )
 
 
 class EnrichBody(BaseModel):

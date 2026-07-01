@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Alert, Box, Button, Chip, Stack, Typography, Link as MuiLink } from "@mui/material";
 import LinkIcon from "@mui/icons-material/Link";
 import DescriptionIcon from "@mui/icons-material/Description";
+import UploadFileIcon from "@mui/icons-material/UploadFile";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import type {
   ChemicalRead,
@@ -16,6 +17,8 @@ import { HazardTagChips } from "./HazardTagChips";
 import { HazardStatementsDialog } from "./HazardStatementsDialog";
 import { worstSignalWord } from "../utils/hazardSignal";
 import { useChemicalStructureSvg } from "../api/hooks/useChemicalStructureSvg";
+import { useUploadSDS } from "../api/hooks/useChemicals";
+import { useIsGroupAdmin } from "../api/hooks/useGroups";
 import { useDrawer } from "./drawer/DrawerContext";
 import { useOrders } from "../api/hooks/useOrders";
 import { RoleGate } from "./RoleGate";
@@ -47,6 +50,28 @@ export function ChemicalInfoBox({
   groupId,
 }: Props) {
   const [hpOpen, setHpOpen] = useState(false);
+  const sdsInputRef = useRef<HTMLInputElement | null>(null);
+  const uploadSds = useUploadSDS(groupId, chemical.id);
+  const [sdsError, setSdsError] = useState<string | null>(null);
+  const isAdmin = useIsGroupAdmin(groupId);
+
+  const onSdsSelected = async (file: File) => {
+    setSdsError(null);
+    if (file.type !== "application/pdf") {
+      setSdsError("SDS muss eine PDF-Datei sein.");
+      return;
+    }
+    try {
+      await uploadSds.mutateAsync(file);
+    } catch (e) {
+      const status = (e as { response?: { status?: number } }).response?.status;
+      setSdsError(
+        status === 415
+          ? "SDS muss eine PDF-Datei sein."
+          : "Upload fehlgeschlagen — bitte erneut versuchen.",
+      );
+    }
+  };
   // Total stock grouped by unit so we don't mix L + mL
   const totals = containers.reduce<Record<string, number>>((acc, cont) => {
     acc[cont.unit] = (acc[cont.unit] ?? 0) + cont.amount;
@@ -312,21 +337,63 @@ export function ChemicalInfoBox({
           </Typography>
         )}
         {chemical.sds_path ? (
-          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center" }}>
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", flexWrap: "wrap" }}>
             <DescriptionIcon sx={{ fontSize: 12, color: "primary.main" }} />
             <MuiLink
-              href={`/uploads/${chemical.sds_path}`}
+              href={`/api/v1/groups/${groupId}/chemicals/${chemical.id}/sds`}
               target="_blank"
               rel="noopener"
               sx={{ fontSize: 11 }}
             >
               Safety data sheet
             </MuiLink>
+            {isAdmin && (
+              <MuiLink
+                component="button"
+                type="button"
+                disabled={uploadSds.isPending}
+                onClick={() => sdsInputRef.current?.click()}
+                sx={{ fontSize: 11, display: "inline-flex", alignItems: "center", gap: 0.25 }}
+              >
+                <UploadFileIcon sx={{ fontSize: 12 }} />
+                {uploadSds.isPending ? "Uploading…" : "Replace"}
+              </MuiLink>
+            )}
           </Stack>
-        ) : (
-          <Typography variant="caption" color="text.disabled" sx={{ display: "block" }}>
-            No SDS uploaded
-          </Typography>
+        ) : isAdmin ? (
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+            <Typography variant="caption" color="text.disabled">
+              No SDS uploaded
+            </Typography>
+            <MuiLink
+              component="button"
+              type="button"
+              disabled={uploadSds.isPending}
+              onClick={() => sdsInputRef.current?.click()}
+              sx={{ fontSize: 11, display: "inline-flex", alignItems: "center", gap: 0.25 }}
+            >
+              <UploadFileIcon sx={{ fontSize: 12 }} />
+              {uploadSds.isPending ? "Uploading…" : "Upload SDS"}
+            </MuiLink>
+          </Stack>
+        ) : null}
+        {isAdmin && (
+          <input
+            ref={sdsInputRef}
+            type="file"
+            accept="application/pdf"
+            hidden
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) void onSdsSelected(f);
+              e.target.value = "";
+            }}
+          />
+        )}
+        {sdsError && (
+          <Alert severity="warning" sx={{ mt: 0.5, py: 0 }} onClose={() => setSdsError(null)}>
+            {sdsError}
+          </Alert>
         )}
         {ghsCodes.length > 0 || pStatements.length > 0 ? (
           <Stack

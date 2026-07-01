@@ -121,14 +121,6 @@ export function ContainerForm({ chemicalId, containerId, prefill, photoFile: ini
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [suppliersPage, prefill?.supplier_name]);
 
-  if (containerId && existing.isLoading) {
-    return (
-      <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
-        <CircularProgress size={20} />
-      </Box>
-    );
-  }
-
   const saving = create.isPending || update.isPending;
   const rawErr = create.error || update.error;
   const errMsg =
@@ -149,6 +141,14 @@ export function ContainerForm({ chemicalId, containerId, prefill, photoFile: ini
 
   const canSubmit =
     !!identifier.trim() && amount !== "" && !!unit.trim() && !!locationId;
+
+  if (containerId && existing.isLoading) {
+    return (
+      <Box sx={{ display: "flex", justifyContent: "center", p: 4 }}>
+        <CircularProgress size={20} />
+      </Box>
+    );
+  }
 
   const onSubmit = async () => {
     setImageUploadError(null);

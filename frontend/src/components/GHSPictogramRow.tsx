@@ -1,7 +1,7 @@
 import { Box, Tooltip } from "@mui/material";
 import type { GHSCodeRead } from "../types";
 
-const HAZARD_LABELS: Record<string, string> = {
+export const HAZARD_LABELS: Record<string, string> = {
   GHS01: "Explosive",
   GHS02: "Flammable",
   GHS03: "Oxidizer",

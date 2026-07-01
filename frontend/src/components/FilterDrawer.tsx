@@ -1,11 +1,15 @@
 import { useState } from "react";
 import {
   SwipeableDrawer, Drawer, Box, Typography, Switch, FormControlLabel,
-  Chip, Stack, Button, Divider, TextField, MenuItem,
+  Chip, Stack, Button, Divider, TextField, MenuItem, Collapse,
   useMediaQuery, useTheme,
 } from "@mui/material";
+import ExpandMoreIcon from "@mui/icons-material/ExpandMore";
 import type { GroupRead, StorageLocationNode } from "../types";
 import LocationPicker from "./LocationPicker";
+import { HAZARD_LABELS } from "./GHSPictogramRow";
+
+const PICTOGRAM_CODES = Object.keys(HAZARD_LABELS);
 
 export interface FilterState {
   includeArchived: boolean;
@@ -13,6 +17,7 @@ export interface FilterState {
   mySecrets: boolean;
   locationId: string | undefined;
   locationName: string | undefined;
+  pictograms: string[];
   selectedGroupIds: string[];
   sort: string;
   order: "asc" | "desc";
@@ -34,9 +39,18 @@ export default function FilterDrawer({
   const theme = useTheme();
   const isDesktop = useMediaQuery(theme.breakpoints.up("md"));
   const [pickerOpen, setPickerOpen] = useState(false);
+  const [hazardsOpen, setHazardsOpen] = useState(false);
 
   const handleChange = (patch: Partial<FilterState>) => {
     onApply({ ...filters, ...patch });
+  };
+
+  const togglePictogram = (code: string) => {
+    const current = filters.pictograms;
+    const updated = current.includes(code)
+      ? current.filter((c) => c !== code)
+      : [...current, code];
+    handleChange({ pictograms: updated });
   };
 
   const toggleGroup = (groupId: string) => {
@@ -134,6 +148,89 @@ export default function FilterDrawer({
           </Stack>
         </>
       )}
+
+      <Divider sx={{ my: 2 }} />
+
+      {/* GHS hazard pictograms — collapsed by default; used irregularly, so it
+          stays out of the way until expanded. */}
+      <Box
+        component="button"
+        type="button"
+        onClick={() => setHazardsOpen((o) => !o)}
+        aria-expanded={hazardsOpen}
+        sx={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          width: "100%",
+          p: 0,
+          border: 0,
+          bgcolor: "transparent",
+          cursor: "pointer",
+        }}
+      >
+        <Typography variant="body2" color="text.secondary">
+          Hazard pictograms
+          {filters.pictograms.length ? ` (${filters.pictograms.length})` : ""}
+        </Typography>
+        <ExpandMoreIcon
+          fontSize="small"
+          sx={{
+            color: "text.secondary",
+            transform: hazardsOpen ? "rotate(180deg)" : "none",
+            transition: "transform 150ms",
+          }}
+        />
+      </Box>
+      <Collapse in={hazardsOpen} unmountOnExit>
+        <Box sx={{ display: "flex", flexWrap: "wrap", gap: 1, mt: 1.5 }}>
+          {PICTOGRAM_CODES.map((code) => {
+            const selected = filters.pictograms.includes(code);
+            const label = HAZARD_LABELS[code];
+            return (
+              <Box
+                key={code}
+                component="button"
+                type="button"
+                onClick={() => togglePictogram(code)}
+                aria-pressed={selected}
+                title={`${code} — ${label}`}
+                sx={{
+                  width: 88,
+                  display: "flex",
+                  flexDirection: "column",
+                  alignItems: "center",
+                  gap: 0.5,
+                  p: 0.75,
+                  cursor: "pointer",
+                  border: "2px solid",
+                  borderColor: selected ? "primary.main" : "transparent",
+                  borderRadius: 1,
+                  bgcolor: selected ? "action.selected" : "transparent",
+                  opacity: selected ? 1 : 0.7,
+                  transition: "opacity 120ms, border-color 120ms",
+                  "&:hover": { opacity: 1 },
+                }}
+              >
+                <Box
+                  component="img"
+                  src={`/ghs/${code}.svg`}
+                  alt=""
+                  sx={{ width: 40, height: 40, display: "block" }}
+                />
+                <Box sx={{ textAlign: "center", lineHeight: 1.2 }}>
+                  <Typography sx={{ fontSize: 10, fontWeight: 700, display: "block" }}>
+                    {code}
+                  </Typography>
+                  <Typography sx={{ fontSize: 10, color: "text.secondary", display: "block" }}>
+                    {label}
+                  </Typography>
+                </Box>
+              </Box>
+            );
+          })}
+        </Box>
+      </Collapse>
 
       <Divider sx={{ my: 2 }} />
 

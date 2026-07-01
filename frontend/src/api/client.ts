@@ -3,6 +3,9 @@ import axios from "axios";
 const client = axios.create({
   baseURL: "/api/v1",
   withCredentials: true,
+  // Serialize array params as repeated keys (?pictograms=GHS05&pictograms=GHS02)
+  // to match FastAPI's list[str] query parsing, instead of the default `key[]=`.
+  paramsSerializer: { indexes: null },
 });
 
 client.interceptors.response.use(

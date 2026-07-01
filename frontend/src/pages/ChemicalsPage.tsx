@@ -25,6 +25,7 @@ export default function ChemicalsPage() {
     mySecrets: false,
     locationId: undefined,
     locationName: undefined,
+    pictograms: [],
     selectedGroupIds: groupId ? [groupId] : [],
     sort: "name",
     order: "asc",
@@ -45,6 +46,7 @@ export default function ChemicalsPage() {
     has_containers: filters.hasContainers,
     my_secrets: filters.mySecrets || undefined,
     location_id: filters.locationId,
+    pictograms: filters.pictograms.length ? filters.pictograms : undefined,
     sort: filters.sort as ChemicalSearchParams["sort"],
     order: filters.order,
   };
@@ -104,6 +106,14 @@ export default function ChemicalsPage() {
       onRemove: () => setFilters((f) => ({ ...f, locationId: undefined, locationName: undefined })),
     });
   }
+  filters.pictograms.forEach((code) => {
+    activeFilters.push({
+      key: `pictogram-${code}`,
+      label: code,
+      onRemove: () =>
+        setFilters((f) => ({ ...f, pictograms: f.pictograms.filter((c) => c !== code) })),
+    });
+  });
   if (!groupId) {
     return <Box sx={{ color: "text.secondary" }}>No group selected.</Box>;
   }

@@ -299,6 +299,7 @@ export interface ChemicalSearchParams {
   search?: string;
   hazard_tag_id?: string;
   ghs_code_id?: string;
+  pictograms?: string[];
   has_containers?: boolean;
   my_secrets?: boolean;
   location_id?: string;
