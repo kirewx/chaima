@@ -13,8 +13,9 @@ from chaima.models.container import Container
 from chaima.models.ghs import ChemicalGHS
 from chaima.models.hazard import ChemicalHazardTag
 from chaima.schemas.compatibility import ConflictRead
-from chaima.services.chemicals import apply_secret_filter
+from chaima.services.chemicals import apply_secret_filter, can_view_chemical
 from chaima.services.hazard_compatibility import (
+    HIDDEN_CHEMICAL_LABEL,
     location_conflicts as svc_location_conflicts,
     pair_conflicts_async,
 )
@@ -103,7 +104,9 @@ async def check_compatibility(
             ),
         )
     )
-    stored_stmt = apply_secret_filter(stored_stmt, user)
+    # No secret filter here: a hidden chemical must not hide a real safety
+    # conflict. Rules run on the real names (the acid/base heuristic needs
+    # them); names the viewer may not see are redacted from the output.
     rows = (await session.execute(stored_stmt)).scalars().unique().all()
 
     out: list[ConflictRead] = []
@@ -118,5 +121,8 @@ async def check_compatibility(
             a_codes=cand_codes, a_tags=cand_tags, a_name=candidate.name,
             b_codes=other_codes, b_tags=other_tags, b_name=other.name,
         )
+        if not can_view_chemical(other, user):
+            for c in conflicts:
+                c.chem_b_name = HIDDEN_CHEMICAL_LABEL
         out.extend(_to_read(c) for c in conflicts)
     return out

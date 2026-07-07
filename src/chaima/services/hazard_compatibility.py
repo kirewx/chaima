@@ -18,6 +18,11 @@ from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 
+# Display name for a secret chemical the viewer may not see. Safety wins over
+# secrecy: the conflict is surfaced, but the chemical's identity is withheld.
+HIDDEN_CHEMICAL_LABEL = "Hidden chemical"
+
+
 @dataclass
 class Conflict:
     chem_a_name: str
@@ -206,8 +211,10 @@ async def location_conflicts(
     """Pairwise conflicts among all chemicals stored under this location subtree.
 
     Scoped to ``group_id``: the location must be linked to the group, only
-    chemicals belonging to the group are considered, archived containers are
-    excluded, and secret chemicals the ``viewer`` may not see are filtered out.
+    chemicals belonging to the group are considered, and archived containers
+    are excluded. Secret chemicals the ``viewer`` may not see still take part
+    in the check — a hidden chemical must not hide a real safety conflict —
+    but they surface under ``HIDDEN_CHEMICAL_LABEL`` instead of their name.
     """
     from fastapi import HTTPException
     from sqlalchemy.orm import selectinload
@@ -217,7 +224,7 @@ async def location_conflicts(
     from chaima.models.ghs import ChemicalGHS
     from chaima.models.hazard import ChemicalHazardTag
     from chaima.models.storage import StorageLocation
-    from chaima.services.chemicals import apply_secret_filter
+    from chaima.services.chemicals import can_view_chemical
     from chaima.services.orders import _validate_location_in_group
 
     # Location must be linked to the caller's group.
@@ -248,26 +255,31 @@ async def location_conflicts(
             ),
         )
     )
-    stmt = apply_secret_filter(stmt, viewer)
     rows = (await session.execute(stmt)).scalars().unique().all()
 
     chemicals = []
     for chem in rows:
         chem_codes = [link.ghs_code for link in chem.ghs_links]
         chem_tags = [link.hazard_tag for link in chem.hazard_tag_links]
-        chemicals.append((chem, chem_codes, chem_tags))
+        chemicals.append((chem, chem_codes, chem_tags, can_view_chemical(chem, viewer)))
 
     out: list[Conflict] = []
     for i in range(len(chemicals)):
         for j in range(i + 1, len(chemicals)):
-            ca, codes_a, tags_a = chemicals[i]
-            cb, codes_b, tags_b = chemicals[j]
-            out.extend(
-                await pair_conflicts_async(
-                    session=session,
-                    group_id=group_id,
-                    a_codes=codes_a, a_tags=tags_a, a_name=ca.name,
-                    b_codes=codes_b, b_tags=tags_b, b_name=cb.name,
-                )
+            ca, codes_a, tags_a, view_a = chemicals[i]
+            cb, codes_b, tags_b, view_b = chemicals[j]
+            # Rules run on the real names (the acid/base heuristic needs
+            # them); hidden names are redacted from the output below.
+            pair = await pair_conflicts_async(
+                session=session,
+                group_id=group_id,
+                a_codes=codes_a, a_tags=tags_a, a_name=ca.name,
+                b_codes=codes_b, b_tags=tags_b, b_name=cb.name,
             )
+            for c in pair:
+                if not view_a:
+                    c.chem_a_name = HIDDEN_CHEMICAL_LABEL
+                if not view_b:
+                    c.chem_b_name = HIDDEN_CHEMICAL_LABEL
+            out.extend(pair)
     return out
