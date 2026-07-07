@@ -39,6 +39,17 @@ from chaima.services.structure import InvalidSmilesError, render_structure_svg
 router = APIRouter(prefix="/api/v1/groups/{group_id}/chemicals", tags=["chemicals"])
 
 
+def _hides_secret(exc, user) -> bool:
+    """True when a duplicate collides with a secret chemical the user can't see.
+
+    In that case the 409 body must not disclose the colliding chemical's id,
+    name, or archive status (only its owner or a superuser may learn those).
+    """
+    return bool(getattr(exc, "is_secret", False)) and not (
+        user.is_superuser or getattr(exc, "created_by", None) == user.id
+    )
+
+
 @router.get("/check-exists")
 async def check_chemical_exists(
     group_id: UUID,
@@ -168,6 +179,11 @@ async def create_chemical(
             ghs_codes=body.ghs_codes,
         )
     except chemical_service.DuplicateNameError as exc:
+        if _hides_secret(exc, user):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A chemical with this name already exists in the group",
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -177,6 +193,11 @@ async def create_chemical(
             },
         )
     except chemical_service.DuplicateCasError as exc:
+        if _hides_secret(exc, user):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"A chemical with CAS '{body.cas}' already exists in the group",
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -469,6 +490,11 @@ async def update_chemical(
             session, chem, **body.model_dump(exclude_unset=True)
         )
     except chemical_service.DuplicateNameError as exc:
+        if _hides_secret(exc, user):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A chemical with this name already exists in the group",
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -478,6 +504,11 @@ async def update_chemical(
             },
         )
     except chemical_service.DuplicateCasError as exc:
+        if _hides_secret(exc, user):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"A chemical with CAS '{body.cas}' already exists in the group",
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={

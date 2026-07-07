@@ -4,6 +4,7 @@ import datetime
 from uuid import UUID
 
 from fastapi_users.password import PasswordHelper
+from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -133,7 +134,12 @@ async def accept_invite_new_user(
     """
     _validate_invite(invite)
 
-    existing = await session.exec(select(User).where(User.email == email))
+    # Case-insensitive: fastapi-users normalizes email, so a differently-cased
+    # invite email must still match an existing account (else the INSERT below
+    # would hit the unique constraint and surface as a 500 instead of a 400).
+    existing = await session.exec(
+        select(User).where(func.lower(User.email) == email.lower())
+    )
     if existing.first() is not None:
         raise EmailAlreadyRegisteredError(
             "An account with this email already exists; log in to accept the invite"

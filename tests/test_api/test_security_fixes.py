@@ -96,6 +96,28 @@ async def test_compatibility_does_not_leak_other_group(client, session, user, me
 
 
 @pytest.mark.asyncio
+async def test_duplicate_name_409_does_not_leak_secret(
+    other_client, session, user, other_membership, group
+):
+    """A name collision with another user's secret must not disclose its id."""
+    secret = Chemical(
+        group_id=group.id, name="Foo", created_by=user.id, is_secret=True
+    )
+    session.add(secret)
+    await session.flush()
+
+    # other_user (not the owner) tries to create a chemical with the same name.
+    r = await other_client.post(
+        f"/api/v1/groups/{group.id}/chemicals",
+        json={"name": "Foo"},
+    )
+    assert r.status_code == 409, r.text
+    # The secret's id/archive status must not appear in the error body.
+    assert "existing_chemical_id" not in r.text
+    assert str(secret.id) not in r.text
+
+
+@pytest.mark.asyncio
 async def test_cross_group_sds_upload_is_rejected(client, session, user, admin_membership, group):
     """An admin of group A cannot overwrite the SDS of group B's chemical."""
     other_group = Group(name="Lab Beta")

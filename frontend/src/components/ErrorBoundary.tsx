@@ -3,6 +3,12 @@ import { Alert, Box, Button, Typography } from "@mui/material";
 
 interface Props {
   children: ReactNode;
+  /**
+   * When this value changes, a currently-shown error is cleared so the
+   * children re-render. Pass the route path so navigating away from a broken
+   * page recovers instead of leaving the fallback stuck until a full reload.
+   */
+  resetKey?: unknown;
 }
 
 interface State {
@@ -22,6 +28,12 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, info: ErrorInfo) {
     console.error("Unhandled render error:", error, info);
+  }
+
+  componentDidUpdate(prevProps: Props) {
+    if (this.state.error && prevProps.resetKey !== this.props.resetKey) {
+      this.setState({ error: null });
+    }
   }
 
   render() {

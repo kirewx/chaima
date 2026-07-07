@@ -28,12 +28,22 @@ EXPORT_ROW_CAP = 10_000
 _FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
 
 
+def _is_numeric(value: str) -> bool:
+    """True if the cell is a plain number (so a leading '-'/'+' is not a formula)."""
+    try:
+        float(value)
+        return True
+    except ValueError:
+        return False
+
+
 def _sanitize_cell(value: str) -> str:
     """Neutralize spreadsheet formula injection in a user-controlled cell.
 
     Prefixing a single quote is the standard mitigation: Excel/LibreOffice
-    treat the cell as literal text and hide the quote."""
-    if value and value.startswith(_FORMULA_PREFIXES):
+    treat the cell as literal text and hide the quote. Plain numbers (e.g. a
+    negative amount) are left untouched so they stay numeric in the sheet."""
+    if value and value.startswith(_FORMULA_PREFIXES) and not _is_numeric(value):
         return "'" + value
     return value
 

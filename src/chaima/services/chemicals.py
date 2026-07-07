@@ -26,10 +26,22 @@ class CrossGroupError(Exception):
 class DuplicateNameError(Exception):
     """Raised when a chemical name already exists within the same group."""
 
-    def __init__(self, message: str, *, chemical_id: UUID | None = None, is_archived: bool = False):
+    def __init__(
+        self,
+        message: str,
+        *,
+        chemical_id: UUID | None = None,
+        is_archived: bool = False,
+        is_secret: bool = False,
+        created_by: UUID | None = None,
+    ):
         super().__init__(message)
         self.chemical_id = chemical_id
         self.is_archived = is_archived
+        # Populated so callers can withhold the colliding chemical's identity
+        # when it is a secret the requester is not allowed to see.
+        self.is_secret = is_secret
+        self.created_by = created_by
 
 
 class DuplicateCasError(Exception):
@@ -42,11 +54,15 @@ class DuplicateCasError(Exception):
         chemical_id: UUID | None = None,
         chemical_name: str | None = None,
         is_archived: bool = False,
+        is_secret: bool = False,
+        created_by: UUID | None = None,
     ):
         super().__init__(message)
         self.chemical_id = chemical_id
         self.chemical_name = chemical_name
         self.is_archived = is_archived
+        self.is_secret = is_secret
+        self.created_by = created_by
 
 
 class ChemicalNotFound(LookupError):
@@ -241,6 +257,8 @@ async def create_chemical(
             f"Chemical '{name}' already exists in this group",
             chemical_id=existing.id,
             is_archived=existing.is_archived,
+            is_secret=existing.is_secret,
+            created_by=existing.created_by,
         )
 
     cas = _normalize_cas(cas)
@@ -253,6 +271,8 @@ async def create_chemical(
                 chemical_id=existing_by_cas.id,
                 chemical_name=existing_by_cas.name,
                 is_archived=existing_by_cas.is_archived,
+                is_secret=existing_by_cas.is_secret,
+                created_by=existing_by_cas.created_by,
             )
 
     chem = Chemical(
@@ -538,6 +558,8 @@ async def update_chemical(
                     chemical_id=existing_by_cas.id,
                     chemical_name=existing_by_cas.name,
                     is_archived=existing_by_cas.is_archived,
+                    is_secret=existing_by_cas.is_secret,
+                    created_by=existing_by_cas.created_by,
                 )
         kwargs["cas"] = new_cas
 
@@ -557,6 +579,8 @@ async def update_chemical(
                 f"Chemical '{new_name}' already exists in this group",
                 chemical_id=existing_by_name.id,
                 is_archived=existing_by_name.is_archived,
+                is_secret=existing_by_name.is_secret,
+                created_by=existing_by_name.created_by,
             )
 
     non_nullable = {"name", "is_secret"}
