@@ -191,13 +191,17 @@ async def test_chemical_not_found(client, session, group, membership):
     assert resp.status_code == 404
 
 
-async def test_delete_chemical(client, session, group, membership, user):
+async def test_hard_delete_is_not_exposed(client, session, group, membership, user):
+    """Chemicals are removed via archive (soft delete); no hard-delete endpoint."""
     chem = Chemical(group_id=group.id, name="Ethanol", created_by=user.id)
     session.add(chem)
     await session.commit()
 
     resp = await client.delete(f"/api/v1/groups/{group.id}/chemicals/{chem.id}")
-    assert resp.status_code == 204
+    assert resp.status_code == 405  # Method Not Allowed
+
+    # The chemical still exists and can instead be archived.
+    assert await session.get(Chemical, chem.id) is not None
 
 
 async def test_list_excludes_secret_from_non_creator(

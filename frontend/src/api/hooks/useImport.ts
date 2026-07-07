@@ -1,4 +1,4 @@
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import client from "../client";
 import type {
   ImportPreviewResponse,
@@ -22,8 +22,15 @@ export function useImportPreview(groupId: string) {
 }
 
 export function useImportCommit(groupId: string) {
+  const queryClient = useQueryClient();
   return useMutation<ImportCommitResponse, unknown, ImportCommitBody>({
     mutationFn: (body) =>
       client.post(`/groups/${groupId}/import/commit`, body).then((r) => r.data),
+    onSuccess: () => {
+      // The import creates chemicals, containers and storage locations.
+      queryClient.invalidateQueries({ queryKey: ["chemicals", groupId] });
+      queryClient.invalidateQueries({ queryKey: ["containers", groupId] });
+      queryClient.invalidateQueries({ queryKey: ["storageLocations", groupId] });
+    },
   });
 }

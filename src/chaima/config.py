@@ -1,10 +1,15 @@
 from pydantic import SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+# Shipped defaults, exported so startup checks can detect when they are
+# still in use (see ``chaima.app``). Never deploy with these values.
+DEFAULT_SECRET_KEY = "CHANGE-ME-IN-PRODUCTION"
+DEFAULT_ADMIN_PASSWORD = "changeme"
+
 
 class Settings(BaseSettings):
     database_url: str = "sqlite+aiosqlite:///./chaima.db"
-    secret_key: SecretStr = SecretStr("CHANGE-ME-IN-PRODUCTION")
+    secret_key: SecretStr = SecretStr(DEFAULT_SECRET_KEY)
     # Marks auth cookies as `Secure` (HTTPS-only). Defaults to True for
     # production safety; set CHAIMA_COOKIE_SECURE=false when testing over
     # plain HTTP on a LAN, otherwise browsers reject the cookie and login
@@ -14,6 +19,10 @@ class Settings(BaseSettings):
     # When None, the frontend falls back to `window.location.origin`, which
     # leaks `localhost` if an admin generates the link from the dev machine.
     public_base_url: str | None = None
+    # When True, refuse to start while shipped default secrets are still in
+    # use (secret_key / admin password). Keeps local dev frictionless while
+    # letting container deploys hard-fail via CHAIMA_REQUIRE_SECURE_CONFIG=true.
+    require_secure_config: bool = False
 
     model_config = SettingsConfigDict(env_prefix="CHAIMA_")
 
@@ -37,7 +46,7 @@ class AdminSettings(BaseSettings):
     """
 
     admin_email: str = "admin@chaima.dev"
-    admin_password: SecretStr = SecretStr("changeme")
+    admin_password: SecretStr = SecretStr(DEFAULT_ADMIN_PASSWORD)
     admin_group_name: str = "Admin"
     invite_ttl_hours: int = 48
 

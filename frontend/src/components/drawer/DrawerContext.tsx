@@ -3,14 +3,15 @@ import type { ContainerPrefill, StorageKind } from "../../types";
 
 export type DrawerConfig =
   | { kind: "chemical-new" }
-  | { kind: "chemical-edit"; chemicalId: string }
+  | { kind: "chemical-edit"; chemicalId: string; groupId?: string }
   | {
       kind: "container-new";
       chemicalId: string;
+      groupId?: string;
       prefill?: ContainerPrefill;
       photoFile?: File;
     }
-  | { kind: "container-edit"; containerId: string }
+  | { kind: "container-edit"; containerId: string; groupId?: string }
   | { kind: "storage-new"; childKind: StorageKind; parentId: string | null }
   | { kind: "storage-edit"; locationId: string }
   | { kind: "new-order"; groupId: string; chemicalId?: string; wishlistItemId?: string }

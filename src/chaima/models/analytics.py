@@ -5,7 +5,7 @@ import datetime
 import enum
 import uuid as uuid_pkg
 
-from sqlalchemy import JSON, Column, DateTime, Index, func
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Uuid, func
 from sqlmodel import Field, SQLModel
 
 
@@ -56,13 +56,27 @@ class Event(SQLModel, table=True):
 
 
 class EventDaily(SQLModel, table=True):
-    """Per-day aggregate row written by the nightly compaction job."""
+    """Per-day aggregate row written by the nightly compaction job.
+
+    Keyed on ``(day, user_id, type, group_id)`` so same-day activity in two
+    groups stays separate. ``user_id``/``group_id`` are nullable PK members
+    (allowed on SQLite) so anonymous events — e.g. ``login_failure`` — and
+    group-less events survive compaction. SQLite does not enforce PK
+    uniqueness across NULLs, so the compaction upsert deduplicates with an
+    explicit NULL-safe UPDATE-then-INSERT instead of relying on the constraint.
+    """
     __tablename__ = "event_daily"
 
     day: datetime.date = Field(primary_key=True)
-    user_id: uuid_pkg.UUID = Field(primary_key=True, foreign_key="user.id")
+    user_id: uuid_pkg.UUID | None = Field(
+        default=None,
+        sa_column=Column(Uuid(), ForeignKey("user.id"), primary_key=True, nullable=True),
+    )
     type: str = Field(primary_key=True)
-    group_id: uuid_pkg.UUID | None = Field(default=None, foreign_key="group.id")
+    group_id: uuid_pkg.UUID | None = Field(
+        default=None,
+        sa_column=Column(Uuid(), ForeignKey("group.id"), primary_key=True, nullable=True),
+    )
     count: int = Field(default=0, nullable=False)
 
 

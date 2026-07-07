@@ -9,7 +9,9 @@ from chaima.models import *  # noqa: F401, F403
 from chaima.config import settings
 
 config = context.config
-config.set_main_option("sqlalchemy.url", settings.database_url)
+# Escape "%" so configparser interpolation cannot choke on URL-encoded
+# characters (e.g. a DB password containing "%").
+config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)

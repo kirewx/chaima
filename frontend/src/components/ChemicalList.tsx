@@ -10,6 +10,9 @@ import { useContainersForChemical } from "../api/hooks/useContainers";
 import { useChemicalDetail } from "../api/hooks/useChemicals";
 import { useDrawer } from "./drawer/DrawerContext";
 
+/** A chemical list row tagged with the group it was fetched from. */
+export type ChemicalListItem = ChemicalRead & { group_id?: string };
+
 interface ExpandedBodyProps {
   groupId: string;
   chemical: ChemicalRead;
@@ -33,15 +36,16 @@ function ExpandedBody({ groupId, chemical }: ExpandedBodyProps) {
       <ContainerGrid
         groupId={groupId}
         containers={active}
-        onAdd={() => drawer.open({ kind: "container-new", chemicalId: chemical.id })}
+        onAdd={() => drawer.open({ kind: "container-new", chemicalId: chemical.id, groupId })}
       />
     </>
   );
 }
 
 interface Props {
-  items: ChemicalRead[];
+  items: ChemicalListItem[];
   loading: boolean;
+  /** Fallback group id for items that don't carry their own group_id. */
   groupId: string;
   /** When set, a "+ Load N more" button appears at the end of the list. Omit in multi-group mode. */
   onLoadMore?: () => void;
@@ -122,7 +126,7 @@ export function ChemicalList({
           >
             <ChemicalRow
               chemical={c}
-              groupId={groupId}
+              groupId={c.group_id ?? groupId}
               expanded={openIds.has(c.id)}
               onToggle={() => toggle(c.id)}
             />
@@ -135,7 +139,7 @@ export function ChemicalList({
                   pb: 0.5,
                 }}
               >
-                <ExpandedBody groupId={groupId} chemical={c} />
+                <ExpandedBody groupId={c.group_id ?? groupId} chemical={c} />
               </Box>
             </Collapse>
           </Box>

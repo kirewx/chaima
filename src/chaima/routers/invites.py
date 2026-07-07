@@ -13,7 +13,12 @@ from chaima.models.invite import Invite
 from chaima.models.user import User
 from chaima.schemas.invite import InviteAccept, InviteInfo, InviteRead
 from chaima.services import invites as invite_service
-from chaima.services.invites import InviteExpiredError, InviteUsedError
+from chaima.services.invites import (
+    AlreadyMemberError,
+    EmailAlreadyRegisteredError,
+    InviteExpiredError,
+    InviteUsedError,
+)
 
 router = APIRouter(tags=["invites"])
 
@@ -115,6 +120,10 @@ async def get_invite_info(
             status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found"
         )
     group = await session.get(Group, invite.group_id)
+    if group is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Invite not found"
+        )
     is_valid = (
         invite.used_by is None
         and invite.expires_at > datetime.datetime.now(datetime.UTC).replace(tzinfo=None)
@@ -186,6 +195,16 @@ async def accept_invite(
     except InviteUsedError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST, detail="Invite has already been used"
+        )
+    except AlreadyMemberError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="You are already a member of this group",
+        )
+    except EmailAlreadyRegisteredError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="An account with this email already exists; log in to accept the invite",
         )
 
 

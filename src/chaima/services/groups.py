@@ -2,6 +2,7 @@
 
 from uuid import UUID
 
+from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -20,6 +21,23 @@ class MemberExistsError(Exception):
 
 class MemberNotFoundError(Exception):
     """Raised when the target membership does not exist."""
+
+
+class LastAdminError(Exception):
+    """Raised when demoting or removing the last admin of a group."""
+
+
+async def _count_admins(session: AsyncSession, group_id: UUID) -> int:
+    """Count the admins of a group."""
+    result = await session.exec(
+        select(func.count())
+        .select_from(UserGroupLink)
+        .where(
+            UserGroupLink.group_id == group_id,
+            UserGroupLink.is_admin == True,  # noqa: E712
+        )
+    )
+    return result.one()
 
 
 async def create_group(
@@ -229,6 +247,8 @@ async def remove_member(
     ------
     MemberNotFoundError
         If the user is not a member of the group.
+    LastAdminError
+        If the user is the last admin of the group.
     """
     result = await session.exec(
         select(UserGroupLink).where(
@@ -240,6 +260,10 @@ async def remove_member(
     if link is None:
         raise MemberNotFoundError(
             f"User {user_id} is not a member of group {group_id}"
+        )
+    if link.is_admin and await _count_admins(session, group_id) <= 1:
+        raise LastAdminError(
+            f"User {user_id} is the last admin of group {group_id}"
         )
     await session.delete(link)
     await session.flush()
@@ -274,6 +298,8 @@ async def update_member_role(
     ------
     MemberNotFoundError
         If the user is not a member of the group.
+    LastAdminError
+        If demoting the user would leave the group without an admin.
     """
     result = await session.exec(
         select(UserGroupLink).where(
@@ -285,6 +311,10 @@ async def update_member_role(
     if link is None:
         raise MemberNotFoundError(
             f"User {user_id} is not a member of group {group_id}"
+        )
+    if link.is_admin and not is_admin and await _count_admins(session, group_id) <= 1:
+        raise LastAdminError(
+            f"User {user_id} is the last admin of group {group_id}"
         )
     link.is_admin = is_admin
     session.add(link)

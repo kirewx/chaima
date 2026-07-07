@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Box,
   Stack,
@@ -20,6 +20,7 @@ import {
   useCreateGroup,
   useUpdateGroup,
 } from "../../api/hooks/useGroups";
+import { errorMessage } from "../../utils/errorMessage";
 import type { GroupRead } from "../../types";
 
 type DialogState =
@@ -142,14 +143,27 @@ function GroupDialog({
     setLastKey("");
   }
 
+  // Reset stale mutation errors when the dialog (re)opens.
+  useEffect(() => {
+    if (open) {
+      create.reset();
+      update.reset();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, key]);
+
   const saving = create.isPending || update.isPending;
   const err = create.error || update.error;
 
   const submit = async () => {
-    if (state.mode === "create") {
-      await create.mutateAsync({ name, description: description || undefined });
-    } else if (state.mode === "edit") {
-      await update.mutateAsync({ name, description: description || null });
+    try {
+      if (state.mode === "create") {
+        await create.mutateAsync({ name, description: description || undefined });
+      } else if (state.mode === "edit") {
+        await update.mutateAsync({ name, description: description || null });
+      }
+    } catch {
+      return; // surfaced via the error alert below
     }
     onClose();
   };
@@ -159,7 +173,7 @@ function GroupDialog({
       <DialogTitle>{state.mode === "edit" ? "Edit group" : "New group"}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
-          {err instanceof Error && <Alert severity="error">{err.message}</Alert>}
+          {err != null && <Alert severity="error">{errorMessage(err)}</Alert>}
           <TextField
             label="Name"
             size="small"

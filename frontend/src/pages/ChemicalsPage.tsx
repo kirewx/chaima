@@ -68,9 +68,21 @@ export default function ChemicalsPage() {
     searchParams,
   );
 
-  const singleItems = singleGroup.data?.pages.flatMap((p) => p.items) ?? [];
-  const multiItems = multiGroup
-    .flatMap((q) => q.data?.items ?? []);
+  // Tag every list item with the group it was fetched from, so detail /
+  // container / mutation hooks further down hit the right group's endpoints
+  // (in multi-group mode a chemical may live in a group other than the
+  // user's main group).
+  const singleGroupId = filters.selectedGroupIds[0] ?? groupId ?? "";
+  const singleItems =
+    singleGroup.data?.pages.flatMap((p) =>
+      p.items.map((item) => ({ ...item, group_id: singleGroupId })),
+    ) ?? [];
+  const multiItems = multiGroup.flatMap((q, i) =>
+    (q.data?.items ?? []).map((item) => ({
+      ...item,
+      group_id: filters.selectedGroupIds[i],
+    })),
+  );
   const items = isMultiGroup ? multiItems : singleItems;
   const isLoading = isMultiGroup
     ? multiGroup.some((q) => q.isLoading)

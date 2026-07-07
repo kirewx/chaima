@@ -49,7 +49,7 @@ async def lookup_ghs(
 
 
 @router.get("/vendors/{cid}", response_model=PubChemVendorList)
-async def get_pubchem_vendors(cid: str) -> PubChemVendorList:
+async def get_pubchem_vendors(user: CurrentUserDep, cid: str) -> PubChemVendorList:
     """PubChem 'Chemical Vendors' for a CID. Returns empty list on upstream failure."""
     vendors = await pubchem_service.lookup_vendors(cid)
     return PubChemVendorList(cid=cid, vendors=vendors)

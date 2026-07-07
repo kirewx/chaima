@@ -2,7 +2,7 @@
 import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class ChemicalCreate(BaseModel):
@@ -32,13 +32,13 @@ class ChemicalCreate(BaseModel):
         Free-text comment.
     """
 
-    name: str
+    name: str = Field(min_length=1)
     cas: str | None = None
     smiles: str | None = None
     cid: str | None = None
     structure: str | None = None
-    molar_mass: float | None = None
-    density: float | None = None
+    molar_mass: float | None = Field(default=None, ge=0)
+    density: float | None = Field(default=None, ge=0)
     melting_point: float | None = None
     boiling_point: float | None = None
     comment: str | None = None
@@ -54,13 +54,13 @@ class ChemicalUpdate(BaseModel):
     All fields are optional.
     """
 
-    name: str | None = None
+    name: str | None = Field(default=None, min_length=1)
     cas: str | None = None
     smiles: str | None = None
     cid: str | None = None
     structure: str | None = None
-    molar_mass: float | None = None
-    density: float | None = None
+    molar_mass: float | None = Field(default=None, ge=0)
+    density: float | None = Field(default=None, ge=0)
     melting_point: float | None = None
     boiling_point: float | None = None
     comment: str | None = None

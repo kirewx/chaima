@@ -65,6 +65,10 @@ async def test_create_chemical_emits_chemical_created(
 async def test_create_container_emits_container_created(
     client, group, membership, chemical, storage_location, session, patch_events_session_maker
 ):
+    from chaima.models.storage import StorageLocationGroup
+
+    session.add(StorageLocationGroup(location_id=storage_location.id, group_id=group.id))
+    await session.flush()
     r = await client.post(
         f"/api/v1/groups/{group.id}/chemicals/{chemical.id}/containers",
         json={"identifier": "C-001", "amount": 100, "unit": "mL", "location_id": str(storage_location.id)},

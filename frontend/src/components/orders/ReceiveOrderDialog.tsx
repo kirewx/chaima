@@ -14,6 +14,7 @@ import { useState } from "react";
 import { useReceiveOrder } from "../../api/hooks/useOrders";
 import { useStorageTree } from "../../api/hooks/useStorageLocations";
 import LocationPicker from "../LocationPicker";
+import { errorMessage } from "../../utils/errorMessage";
 import type { OrderRead } from "../../types";
 
 interface Props {
@@ -47,13 +48,17 @@ export function ReceiveOrderDialog({ open, order, onDone }: Props) {
   };
 
   const submit = async () => {
-    await receive.mutateAsync({
-      containers: rows.map((r) => ({
-        identifier: r.identifier,
-        storage_location_id: r.storage_location_id!,
-        purity_override: r.purity_override || null,
-      })),
-    });
+    try {
+      await receive.mutateAsync({
+        containers: rows.map((r) => ({
+          identifier: r.identifier,
+          storage_location_id: r.storage_location_id!,
+          purity_override: r.purity_override || null,
+        })),
+      });
+    } catch {
+      return; // surfaced via receive.error below
+    }
     onDone();
   };
 
@@ -101,11 +106,8 @@ export function ReceiveOrderDialog({ open, order, onDone }: Props) {
               />
             </Stack>
           ))}
-          {receive.error instanceof Error && (
-            <Alert severity="error">
-              {(receive.error as any).response?.data?.detail ??
-                receive.error.message}
-            </Alert>
+          {receive.error != null && (
+            <Alert severity="error">{errorMessage(receive.error)}</Alert>
           )}
         </Stack>
         <LocationPicker

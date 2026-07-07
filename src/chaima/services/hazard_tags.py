@@ -1,7 +1,7 @@
 # src/chaima/services/hazard_tags.py
 from uuid import UUID
 
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -18,6 +18,11 @@ class CrossGroupError(Exception):
 
 class DuplicateIncompatibilityError(Exception):
     """Raised when an incompatibility pair already exists."""
+
+
+# Column names that the list endpoint may sort by. Anything else (including
+# relationship/method names reachable via getattr) falls back to ``name``.
+_SORTABLE_COLUMNS = {"name", "description"}
 
 
 async def create_hazard_tag(
@@ -104,7 +109,7 @@ async def list_hazard_tags(
     count_query = select(func.count()).select_from(query.subquery())
     total = (await session.exec(count_query)).one()
 
-    sort_col = getattr(HazardTag, sort, HazardTag.name)
+    sort_col = getattr(HazardTag, sort) if sort in _SORTABLE_COLUMNS else HazardTag.name
     query = query.order_by(sort_col.desc() if order == "desc" else sort_col.asc())
     query = query.offset(offset).limit(limit)
 
@@ -165,7 +170,7 @@ async def update_hazard_tag(
 
 
 async def delete_hazard_tag(session: AsyncSession, tag: HazardTag) -> None:
-    """Delete a hazard tag.
+    """Delete a hazard tag, its chemical links, and incompatibility rules.
 
     Parameters
     ----------
@@ -174,6 +179,18 @@ async def delete_hazard_tag(session: AsyncSession, tag: HazardTag) -> None:
     tag : HazardTag
         The hazard tag to delete.
     """
+    # Incompatibility rules have no cascade relationship to the tag, so
+    # delete any rule referencing this tag explicitly to avoid orphans.
+    result = await session.exec(
+        select(HazardTagIncompatibility).where(
+            or_(
+                HazardTagIncompatibility.tag_a_id == tag.id,
+                HazardTagIncompatibility.tag_b_id == tag.id,
+            )
+        )
+    )
+    for rule in result.all():
+        await session.delete(rule)
     await session.delete(tag)
     await session.flush()
 

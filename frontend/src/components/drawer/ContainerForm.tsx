@@ -20,11 +20,27 @@ import {
 import { useSuppliers, useCreateSupplier } from "../../api/hooks/useSuppliers";
 import { useExtractFromPhoto } from "../../api/hooks/useExtractFromPhoto";
 import client from "../../api/client";
-import type { ContainerPrefill, SupplierRead } from "../../types";
+import { errorMessage } from "../../utils/errorMessage";
+import type { ContainerPrefill, StorageLocationNode, SupplierRead } from "../../types";
 import { useCurrentUser } from "../../api/hooks/useAuth";
 import { useStorageTree } from "../../api/hooks/useStorageLocations";
 import { useCompatibilityCheck } from "../../api/hooks/useCompatibility";
 import LocationPicker from "../LocationPicker";
+
+/** Resolve the readable "Building > Room > Shelf" path for a location id. */
+function findLocationPath(
+  nodes: StorageLocationNode[],
+  targetId: string,
+  trail: string[] = [],
+): string | null {
+  for (const n of nodes) {
+    const next = [...trail, n.name];
+    if (n.id === targetId) return next.join(" > ");
+    const found = findLocationPath(n.children, targetId, next);
+    if (found) return found;
+  }
+  return null;
+}
 
 function todayIsoDate(): string {
   const d = new Date();
@@ -41,18 +57,25 @@ const supplierFilter = createFilterOptions<SupplierOption>();
 interface Props {
   chemicalId?: string;
   containerId?: string;
+  /** Group the container belongs to. Falls back to the user's main group. */
+  groupId?: string;
   prefill?: ContainerPrefill;
   photoFile?: File;
   onDone: () => void;
 }
 
-export function ContainerForm({ chemicalId, containerId, prefill, photoFile: initialPhotoFile, onDone }: Props) {
+export function ContainerForm({ chemicalId, containerId, groupId: groupIdProp, prefill, photoFile: initialPhotoFile, onDone }: Props) {
   const { data: user } = useCurrentUser();
-  const groupId = user?.main_group_id ?? "";
+  const groupId = groupIdProp ?? user?.main_group_id ?? "";
+
+  // In create mode, once the container is created but a follow-up step (photo
+  // upload) fails, we keep its id so a retry updates it instead of creating a
+  // duplicate (which would 409 on the identifier).
+  const [createdContainerId, setCreatedContainerId] = useState<string | null>(null);
 
   const existing = useContainer(groupId, containerId ?? "");
   const create = useCreateContainer(groupId, chemicalId ?? "");
-  const update = useUpdateContainer(groupId, containerId ?? "");
+  const update = useUpdateContainer(groupId, containerId ?? createdContainerId ?? "");
 
   const { data: suppliersPage } = useSuppliers(groupId);
   const suppliers = suppliersPage?.items ?? [];
@@ -107,6 +130,16 @@ export function ContainerForm({ chemicalId, containerId, prefill, photoFile: ini
     }
   }, [existing.data]);
 
+  // Edit mode: show the readable location path instead of the raw UUID once
+  // the storage tree is loaded (only while the location is still the
+  // container's original one — a user-picked location already has a path).
+  useEffect(() => {
+    if (!existing.data || locationPath) return;
+    if (locationId !== existing.data.location_id) return;
+    const path = findLocationPath(locationTree, existing.data.location_id);
+    if (path) setLocationPath(path);
+  }, [existing.data, locationTree, locationId, locationPath]);
+
   // If prefill carries a supplier_name, match it to an existing supplier or create one.
   useEffect(() => {
     if (!prefill?.supplier_name || supplierId) return;
@@ -123,24 +156,25 @@ export function ContainerForm({ chemicalId, containerId, prefill, photoFile: ini
 
   const saving = create.isPending || update.isPending;
   const rawErr = create.error || update.error;
-  const errMsg =
-    rawErr instanceof Error
-      ? ((rawErr as any).response?.data?.detail ?? rawErr.message)
-      : null;
+  const errMsg = rawErr != null ? errorMessage(rawErr) : null;
   const identifierErr =
-    typeof errMsg === "string" && errMsg.toLowerCase().includes("identifier")
-      ? errMsg
-      : undefined;
+    errMsg && errMsg.toLowerCase().includes("identifier") ? errMsg : undefined;
   const otherErr = errMsg && !identifierErr ? errMsg : undefined;
 
+  // In edit mode the chemical id comes from the loaded container, so the
+  // storage-compatibility warning also runs when moving an existing container.
   const conflicts = useCompatibilityCheck(
     groupId,
-    chemicalId ?? null,
+    chemicalId ?? existing.data?.chemical_id ?? null,
     locationId ?? null,
   );
 
   const canSubmit =
-    !!identifier.trim() && amount !== "" && !!unit.trim() && !!locationId;
+    !!identifier.trim() &&
+    amount !== "" &&
+    Number(amount) >= 0 &&
+    !!unit.trim() &&
+    !!locationId;
 
   if (containerId && existing.isLoading) {
     return (
@@ -163,26 +197,45 @@ export function ContainerForm({ chemicalId, containerId, prefill, photoFile: ini
     };
 
     if (containerId) {
-      await update.mutateAsync(payload);
+      try {
+        await update.mutateAsync(payload);
+      } catch {
+        return; // surfaced via errMsg above
+      }
       onDone();
       return;
     }
 
-    const created = await create.mutateAsync(payload);
+    // Create — or, when a previous save already created the container but
+    // the photo upload failed, update that container instead of re-creating
+    // it (a second create would 409 on the duplicate identifier).
+    let targetId = createdContainerId;
+    try {
+      if (targetId) {
+        await update.mutateAsync(payload);
+      } else {
+        const created = await create.mutateAsync(payload);
+        targetId = created.id;
+        setCreatedContainerId(created.id);
+      }
+    } catch {
+      return; // surfaced via errMsg above
+    }
+
     if (photoFile) {
       try {
         const form = new FormData();
         form.append("file", photoFile);
         await client.post(
-          `/groups/${groupId}/containers/${created.id}/image`,
+          `/groups/${groupId}/containers/${targetId}/image`,
           form,
           { headers: { "Content-Type": "multipart/form-data" } },
         );
       } catch {
         setImageUploadError(
-          "Container wurde angelegt, aber das Foto konnte nicht hochgeladen werden.",
+          "Container wurde angelegt, aber das Foto konnte nicht hochgeladen werden. Erneut speichern, um den Upload zu wiederholen.",
         );
-        return; // keep drawer open so user can retry by re-saving
+        return; // keep drawer open so user can retry
       }
     }
     onDone();
@@ -299,18 +352,15 @@ export function ContainerForm({ chemicalId, containerId, prefill, photoFile: ini
       {imageUploadError && (
         <Alert
           severity="warning"
+          onClose={() => setImageUploadError(null)}
           action={
             <Button
               color="inherit"
               size="small"
-              onClick={async () => {
-                if (!photoFile) return;
-                // We don't have the just-created container id in state by now;
-                // the user can manually re-save (form is still open).
-                setImageUploadError(null);
-              }}
+              disabled={saving}
+              onClick={() => void onSubmit()}
             >
-              Schließen
+              Erneut versuchen
             </Button>
           }
         >
@@ -365,6 +415,7 @@ export function ContainerForm({ chemicalId, containerId, prefill, photoFile: ini
             ? { flex: 1, "& .MuiOutlinedInput-root": { backgroundColor: "rgba(67, 56, 202, 0.06)" } }
             : { flex: 1 }}
           slotProps={{
+            htmlInput: { min: 0, step: "any" },
             input: extractedFields.has("amount")
               ? {
                   startAdornment: (
@@ -375,6 +426,12 @@ export function ContainerForm({ chemicalId, containerId, prefill, photoFile: ini
                 }
               : undefined,
           }}
+          error={amount !== "" && Number(amount) < 0}
+          helperText={
+            amount !== "" && Number(amount) < 0
+              ? "Amount cannot be negative"
+              : undefined
+          }
         />
         <TextField
           label="Unit"
@@ -514,9 +571,8 @@ export function ContainerForm({ chemicalId, containerId, prefill, photoFile: ini
         }}
         renderInput={(params) => {
           const createErr =
-            createSupplier.error instanceof Error
-              ? ((createSupplier.error as any).response?.data?.detail ??
-                createSupplier.error.message)
+            createSupplier.error != null
+              ? errorMessage(createSupplier.error)
               : undefined;
           return (
             <TextField

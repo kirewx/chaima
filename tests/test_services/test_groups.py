@@ -204,6 +204,19 @@ async def test_update_member_role_demotes_from_admin(session, user, group):
     """update_member_role should demote an admin to regular member."""
     admin_link = UserGroupLink(user_id=user.id, group_id=group.id, is_admin=True)
     session.add(admin_link)
+    # A second admin must remain, otherwise last-admin protection blocks the demotion.
+    other_admin = User(
+        email="second-admin@example.com",
+        hashed_password="fakehash",
+        is_active=True,
+        is_superuser=False,
+        is_verified=True,
+    )
+    session.add(other_admin)
+    await session.flush()
+    session.add(
+        UserGroupLink(user_id=other_admin.id, group_id=group.id, is_admin=True)
+    )
     await session.flush()
 
     updated_link = await update_member_role(

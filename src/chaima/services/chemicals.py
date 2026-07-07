@@ -100,6 +100,17 @@ async def find_existing(
     return result.first()
 
 
+def can_view_chemical(chemical: Chemical, viewer: User) -> bool:
+    """Whether the viewer may see this chemical.
+
+    A secret chemical is only visible to its creator (and superusers);
+    non-secret chemicals are visible to any group member.
+    """
+    if not chemical.is_secret:
+        return True
+    return viewer.is_superuser or chemical.created_by == viewer.id
+
+
 def apply_secret_filter(stmt, viewer: User):
     """Exclude secret chemicals the viewer is not allowed to see.
 
@@ -220,7 +231,8 @@ async def create_chemical(
     existing = (
         await session.exec(
             select(Chemical).where(
-                Chemical.group_id == group_id, Chemical.name == name
+                Chemical.group_id == group_id,
+                func.lower(Chemical.name) == name.lower(),
             )
         )
     ).first()
@@ -270,6 +282,21 @@ async def create_chemical(
         if ghs_ids:
             await replace_ghs_codes(session, chem.id, ghs_ids)
     return chem
+
+
+# Column names that the list endpoint may sort by. Anything else (including
+# relationship/method names reachable via getattr) falls back to ``name``.
+_SORTABLE_COLUMNS = {
+    "name",
+    "cas",
+    "molar_mass",
+    "density",
+    "melting_point",
+    "boiling_point",
+    "created_at",
+    "updated_at",
+    "is_archived",
+}
 
 
 async def list_chemicals(
@@ -410,7 +437,7 @@ async def list_chemicals(
     count_query = select(func.count()).select_from(query.subquery())
     total = (await session.exec(count_query)).one()
 
-    sort_col = getattr(Chemical, sort, Chemical.name)
+    sort_col = getattr(Chemical, sort) if sort in _SORTABLE_COLUMNS else Chemical.name
     query = query.order_by(sort_col.desc() if order == "desc" else sort_col.asc())
     query = query.offset(offset).limit(limit)
     query = query.options(selectinload(Chemical.synonyms))  # type: ignore[arg-type]
@@ -484,7 +511,10 @@ async def update_chemical(
     chemical : Chemical
         The chemical instance to update.
     **kwargs : object
-        Field name/value pairs to update. None values are skipped.
+        Field name/value pairs to update. Callers should only pass fields
+        that were explicitly provided (e.g. ``model_dump(exclude_unset=True)``);
+        an explicit None clears the field, except for non-nullable fields
+        where None is ignored.
 
     Returns
     -------
@@ -511,9 +541,29 @@ async def update_chemical(
                 )
         kwargs["cas"] = new_cas
 
+    new_name = kwargs.get("name")
+    if isinstance(new_name, str) and new_name.lower() != chemical.name.lower():
+        existing_by_name = (
+            await session.exec(
+                select(Chemical).where(
+                    Chemical.group_id == chemical.group_id,
+                    func.lower(Chemical.name) == new_name.lower(),
+                    Chemical.id != chemical.id,
+                )
+            )
+        ).first()
+        if existing_by_name is not None:
+            raise DuplicateNameError(
+                f"Chemical '{new_name}' already exists in this group",
+                chemical_id=existing_by_name.id,
+                is_archived=existing_by_name.is_archived,
+            )
+
+    non_nullable = {"name", "is_secret"}
     for key, value in kwargs.items():
-        if value is not None:
-            setattr(chemical, key, value)
+        if value is None and key in non_nullable:
+            continue
+        setattr(chemical, key, value)
     session.add(chemical)
     await session.flush()
 
@@ -528,20 +578,6 @@ async def update_chemical(
         await replace_ghs_codes(session, chemical.id, ghs_ids)
 
     return chemical
-
-
-async def delete_chemical(session: AsyncSession, chemical: Chemical) -> None:
-    """Delete a chemical.
-
-    Parameters
-    ----------
-    session : AsyncSession
-        The database session.
-    chemical : Chemical
-        The chemical to delete.
-    """
-    await session.delete(chemical)
-    await session.flush()
 
 
 async def replace_synonyms(

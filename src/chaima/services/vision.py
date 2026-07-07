@@ -3,12 +3,19 @@ from __future__ import annotations
 import datetime
 import json
 import os
+import re
 from typing import Literal
 
 from fastapi import HTTPException, status
 from pydantic import BaseModel, ValidationError
 
 DEFAULT_MODEL = "gemini-2.5-flash"
+
+# Model output is derived from photographed labels — i.e. attacker-controllable
+# text. Bound it before it reaches chemical creation and exports.
+_MAX_FIELD_LEN = 200
+_CONTROL_CHARS_RE = re.compile(r"[\x00-\x1f\x7f]")
+_STRING_FIELDS = ("cas", "name", "unit", "supplier_name", "identifier", "purity")
 
 _PROMPT = (
     "Extrahiere die folgenden Felder vom abgebildeten Chemikalien-Etikett. "
@@ -29,6 +36,22 @@ class ExtractedLabel(BaseModel):
     purity: str | None = None
     purchased_at: datetime.date | None = None
     confidence: Literal["high", "medium", "low"] = "low"
+
+
+def _clean_field(value: str | None) -> str | None:
+    """Strip control characters, trim whitespace, cap length."""
+    if value is None:
+        return None
+    cleaned = _CONTROL_CHARS_RE.sub("", value).strip()
+    if not cleaned:
+        return None
+    return cleaned[:_MAX_FIELD_LEN]
+
+
+def _sanitize_label(label: ExtractedLabel) -> ExtractedLabel:
+    for field in _STRING_FIELDS:
+        setattr(label, field, _clean_field(getattr(label, field)))
+    return label
 
 
 def _get_client():
@@ -76,7 +99,7 @@ def extract_from_image(image_bytes: bytes, mime: str) -> ExtractedLabel:
         return ExtractedLabel()
     try:
         data = json.loads(text)
-        return ExtractedLabel.model_validate(data)
+        return _sanitize_label(ExtractedLabel.model_validate(data))
     except (json.JSONDecodeError, ValidationError):
         raise HTTPException(
             status_code=status.HTTP_502_BAD_GATEWAY,

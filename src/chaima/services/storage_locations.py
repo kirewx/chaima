@@ -36,6 +36,10 @@ class LocationHasContainersError(Exception):
     """Raised when trying to delete a location that has containers."""
 
 
+class LocationHasChildrenError(Exception):
+    """Raised when trying to delete a location that has sublocations."""
+
+
 async def create_location(
     session: AsyncSession,
     *,
@@ -206,12 +210,36 @@ async def update_location(
     -------
     StorageLocation
         The updated storage location.
+
+    Raises
+    ------
+    InvalidHierarchy
+        If the new parent does not exist, violates the kind hierarchy,
+        or would create a cycle.
     """
     if name is not None:
         location.name = name
     if description is not None:
         location.description = description
-    if parent_id is not None:
+    if parent_id is not None and parent_id != location.parent_id:
+        if parent_id == location.id:
+            raise InvalidHierarchy("A location cannot be its own parent")
+        parent = await session.get(StorageLocation, parent_id)
+        if parent is None:
+            raise InvalidHierarchy(f"Parent {parent_id} does not exist")
+        validate_kind_hierarchy(child=location.kind, parent=parent.kind)
+        # Walk up the ancestor chain to reject cycles (a node cannot
+        # become a descendant of itself).
+        ancestor = parent
+        while ancestor is not None:
+            if ancestor.id == location.id:
+                raise InvalidHierarchy(
+                    "Moving a location under one of its own descendants "
+                    "would create a cycle"
+                )
+            if ancestor.parent_id is None:
+                break
+            ancestor = await session.get(StorageLocation, ancestor.parent_id)
         location.parent_id = parent_id
     if color is not None:
         location.color = color or None
@@ -221,7 +249,7 @@ async def update_location(
 
 
 async def delete_location(session: AsyncSession, location: StorageLocation) -> None:
-    """Delete a storage location. Fails if it has containers.
+    """Delete a storage location. Fails if it has sublocations or containers.
 
     Parameters
     ----------
@@ -232,9 +260,21 @@ async def delete_location(session: AsyncSession, location: StorageLocation) -> N
 
     Raises
     ------
+    LocationHasChildrenError
+        If the location has child locations (which would be orphaned,
+        along with any containers in the subtree).
     LocationHasContainersError
         If the location has associated containers.
     """
+    child_result = await session.exec(
+        select(StorageLocation)
+        .where(StorageLocation.parent_id == location.id)
+        .limit(1)
+    )
+    if child_result.first() is not None:
+        raise LocationHasChildrenError(
+            f"Storage location {location.id} has sublocations and cannot be deleted"
+        )
     result = await session.exec(
         select(Container).where(Container.location_id == location.id).limit(1)
     )

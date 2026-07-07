@@ -25,6 +25,7 @@ import {
   useArchiveProject,
 } from "../../api/hooks/useProjects";
 import { SectionHeader } from "./SectionHeader";
+import { errorMessage } from "../../utils/errorMessage";
 import type { ProjectRead } from "../../types";
 
 interface Props {
@@ -46,13 +47,24 @@ export function ProjectsAdminSection({ groupId }: Props) {
   const archive = useArchiveProject(groupId);
   const [dialog, setDialog] = useState<DialogState>({ mode: "closed" });
   const [name, setName] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const submit = async () => {
-    if (dialog.mode === "create") {
-      await create.mutateAsync({ name });
-    } else if (dialog.mode === "edit") {
-      await client.patch(`/groups/${groupId}/projects/${dialog.project.id}`, { name });
-      qc.invalidateQueries({ queryKey: ["projects", groupId] });
+    setSaving(true);
+    setSaveError(null);
+    try {
+      if (dialog.mode === "create") {
+        await create.mutateAsync({ name });
+      } else if (dialog.mode === "edit") {
+        await client.patch(`/groups/${groupId}/projects/${dialog.project.id}`, { name });
+        qc.invalidateQueries({ queryKey: ["projects", groupId] });
+      }
+    } catch (e) {
+      setSaveError(errorMessage(e, "Could not save the project."));
+      return;
+    } finally {
+      setSaving(false);
     }
     setDialog({ mode: "closed" });
     setName("");
@@ -78,6 +90,7 @@ export function ProjectsAdminSection({ groupId }: Props) {
               startIcon={<AddIcon />}
               onClick={() => {
                 setName("");
+                setSaveError(null);
                 setDialog({ mode: "create" });
               }}
             >
@@ -132,6 +145,7 @@ export function ProjectsAdminSection({ groupId }: Props) {
                 size="small"
                 onClick={() => {
                   setName(p.name);
+                  setSaveError(null);
                   setDialog({ mode: "edit", project: p });
                 }}
               >
@@ -168,16 +182,22 @@ export function ProjectsAdminSection({ groupId }: Props) {
             value={name}
             onChange={(e) => setName(e.target.value)}
           />
-          {create.error instanceof Error && (
+          {saveError && (
             <Alert severity="error" sx={{ mt: 1 }}>
-              {create.error.message}
+              {saveError}
             </Alert>
           )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialog({ mode: "closed" })}>Cancel</Button>
-          <Button onClick={submit} variant="contained" disabled={!name.trim()}>
-            Save
+          <Button onClick={() => setDialog({ mode: "closed" })} disabled={saving}>
+            Cancel
+          </Button>
+          <Button
+            onClick={submit}
+            variant="contained"
+            disabled={!name.trim() || saving}
+          >
+            {saving ? "Saving…" : "Save"}
           </Button>
         </DialogActions>
       </Dialog>

@@ -324,6 +324,7 @@ async def commit_import(
     payload: CommitPayload,
 ) -> ImportSummary:
     from chaima.models.chemical import Chemical
+    from chaima.models.container import Container
     from chaima.models.storage import StorageKind, StorageLocation, StorageLocationGroup
     from chaima.services import containers as container_service
 
@@ -418,6 +419,17 @@ async def commit_import(
     default_location_id: uuid_pkg.UUID | None = None
     created_suppliers = 0
 
+    # Identifiers already taken in this group (archived included, to be safe)
+    # plus everything created during this import. Auto-generated identifier
+    # counters are per-import state, not module-global, so concurrent imports
+    # cannot race each other.
+    used_identifiers: set[str] = set((await session.exec(
+        select(Container.identifier)
+        .join(Chemical, Chemical.id == Container.chemical_id)
+        .where(Chemical.group_id == group_id)
+    )).all())
+    identifier_counters: dict[str, int] = {}
+
     created_containers = 0
     for row in parsed:
         chem_id = row_to_chemical.get(row.index)
@@ -451,30 +463,26 @@ async def commit_import(
                 supplier_id = new_sup.id
                 created_suppliers += 1
 
-        identifier = row.identifier or _next_identifier(row.name or "X")
-        try:
-            container = await container_service.create_container(
-                session,
-                chemical_id=chem_id,
-                location_id=loc_id,
-                identifier=identifier,
-                amount=row.quantity if row.quantity is not None else 0.0,
-                unit=row.unit or "",
-                created_by=viewer_id,
-                supplier_id=supplier_id,
-            )
-        except container_service.DuplicateIdentifier:
-            identifier = f"{identifier}-{row.index}"
-            container = await container_service.create_container(
-                session,
-                chemical_id=chem_id,
-                location_id=loc_id,
-                identifier=identifier,
-                amount=row.quantity if row.quantity is not None else 0.0,
-                unit=row.unit or "",
-                created_by=viewer_id,
-                supplier_id=supplier_id,
-            )
+        identifier = row.identifier or _next_identifier(row.name or "X", identifier_counters)
+        identifier = _uniquify_identifier(identifier, row.index, used_identifiers)
+        while True:
+            try:
+                container = await container_service.create_container(
+                    session,
+                    chemical_id=chem_id,
+                    location_id=loc_id,
+                    identifier=identifier,
+                    amount=row.quantity if row.quantity is not None else 0.0,
+                    unit=row.unit or "",
+                    created_by=viewer_id,
+                    supplier_id=supplier_id,
+                )
+                break
+            except container_service.DuplicateIdentifier:
+                # Defensive: keep suffixing until the identifier is free.
+                used_identifiers.add(identifier)
+                identifier = _uniquify_identifier(identifier, row.index, used_identifiers)
+        used_identifiers.add(identifier)
         if row.ordered_by:
             container.ordered_by_name = row.ordered_by
         if row.purity:
@@ -491,13 +499,26 @@ async def commit_import(
     )
 
 
-_identifier_counters: dict[str, int] = {}
-
-
-def _next_identifier(chem_name: str) -> str:
+def _next_identifier(chem_name: str, counters: dict[str, int]) -> str:
+    """Generate an auto identifier using per-import ``counters`` state."""
     key = chem_name[:1].upper() if chem_name else "X"
-    _identifier_counters[key] = _identifier_counters.get(key, 0) + 1
-    return f"{key}-IMP-{_identifier_counters[key]:04d}"
+    counters[key] = counters.get(key, 0) + 1
+    return f"{key}-IMP-{counters[key]:04d}"
+
+
+def _uniquify_identifier(identifier: str, row_index: int, used: set[str]) -> str:
+    """Return ``identifier`` (or a suffixed variant) not present in ``used``.
+
+    ``used`` holds the group's existing container identifiers plus everything
+    already created during this import, so the result is genuinely unique."""
+    if identifier not in used:
+        return identifier
+    suffix = row_index
+    candidate = f"{identifier}-{suffix}"
+    while candidate in used:
+        suffix += 1
+        candidate = f"{identifier}-{suffix}"
+    return candidate
 
 
 async def find_previous_import(

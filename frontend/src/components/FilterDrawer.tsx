@@ -96,6 +96,19 @@ export default function FilterDrawer({
         />
       </Stack>
 
+      {/* Archived chemicals are hidden by default; this is the only way to
+          reach (and then unarchive) them. */}
+      <FormControlLabel
+        control={
+          <Switch
+            checked={filters.includeArchived}
+            onChange={(_, checked) => handleChange({ includeArchived: checked })}
+          />
+        }
+        label={<Typography variant="body2">Include archived</Typography>}
+        sx={{ m: 0, mb: 1 }}
+      />
+
       <Divider sx={{ my: 2 }} />
 
       {/* Storage location */}

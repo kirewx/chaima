@@ -7,6 +7,7 @@ export function useStorageTree(groupId: string) {
   return useQuery<StorageLocationNode[]>({
     queryKey: ["storageLocations", groupId, "tree"],
     queryFn: () => client.get(`/groups/${groupId}/storage-locations`).then((r) => r.data),
+    enabled: !!groupId,
   });
 }
 

@@ -23,6 +23,20 @@ EXPORT_COLUMNS = [
 
 EXPORT_ROW_CAP = 10_000
 
+# Characters that make spreadsheet applications interpret a cell as a formula
+# (or splice into adjacent cells). See OWASP "CSV Injection".
+_FORMULA_PREFIXES = ("=", "+", "-", "@", "\t", "\r")
+
+
+def _sanitize_cell(value: str) -> str:
+    """Neutralize spreadsheet formula injection in a user-controlled cell.
+
+    Prefixing a single quote is the standard mitigation: Excel/LibreOffice
+    treat the cell as literal text and hide the quote."""
+    if value and value.startswith(_FORMULA_PREFIXES):
+        return "'" + value
+    return value
+
 
 class ExportTooLargeError(Exception):
     """Raised when the filtered export would exceed EXPORT_ROW_CAP."""
@@ -102,7 +116,9 @@ def _build_rows(chemicals: list[Chemical]) -> list[list[str]]:
         else:
             for container in chem.containers:
                 rows.append(_row_for_container(chem, container))
-    return rows
+    # All cells are user-controlled strings; neutralize formula injection for
+    # both the CSV and XLSX writers.
+    return [[_sanitize_cell(cell) for cell in row] for row in rows]
 
 
 async def export_chemicals(

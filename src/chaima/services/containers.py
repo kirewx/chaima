@@ -51,6 +51,7 @@ async def create_container(
     created_by: UUID,
     supplier_id: UUID | None = None,
     purchased_at: datetime.date | None = None,
+    ordered_by_name: str | None = None,
 ) -> Container:
     """Create a new container for a chemical.
 
@@ -74,6 +75,8 @@ async def create_container(
         The supplier this container came from.
     purchased_at : datetime.date or None, optional
         Purchase date.
+    ordered_by_name : str or None, optional
+        Name of the person who ordered this container.
 
     Returns
     -------
@@ -89,6 +92,7 @@ async def create_container(
         unit=unit,
         created_by=created_by,
         purchased_at=purchased_at,
+        ordered_by_name=ordered_by_name,
     )
     session.add(container)
     await session.flush()
@@ -163,7 +167,16 @@ async def list_containers(
     count_query = select(func.count()).select_from(query.subquery())
     total = (await session.exec(count_query)).one()
 
-    sort_col = getattr(Container, sort, Container.identifier)
+    allowed_sorts = {
+        "identifier",
+        "amount",
+        "unit",
+        "purchased_at",
+        "ordered_by_name",
+        "created_at",
+        "updated_at",
+    }
+    sort_col = getattr(Container, sort) if sort in allowed_sorts else Container.identifier
     query = query.order_by(sort_col.desc() if order == "desc" else sort_col.asc())
     query = query.offset(offset).limit(limit)
 
@@ -203,16 +216,24 @@ async def update_container(
     container : Container
         The container instance to update.
     **kwargs : object
-        Field name/value pairs to update. None values are skipped.
+        Field name/value pairs to update. Callers should only pass fields
+        that were explicitly provided (e.g. ``model_dump(exclude_unset=True)``);
+        an explicit None clears the field, except for non-nullable fields
+        where None is ignored.
 
     Returns
     -------
     Container
         The updated container.
     """
+    non_nullable = {
+        "chemical_id", "location_id", "identifier", "amount", "unit",
+        "created_by", "is_archived",
+    }
     for key, value in kwargs.items():
-        if value is not None:
-            setattr(container, key, value)
+        if value is None and key in non_nullable:
+            continue
+        setattr(container, key, value)
     session.add(container)
     await session.flush()
     return container

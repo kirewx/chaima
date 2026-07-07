@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Box,
   Stack,
@@ -29,6 +29,7 @@ import {
   useCreateIncompatibility,
   useDeleteIncompatibility,
 } from "../../api/hooks/useHazardTagIncompatibilities";
+import { errorMessage } from "../../utils/errorMessage";
 import type { HazardTagRead } from "../../types";
 
 interface Props {
@@ -189,14 +190,27 @@ function HazardTagDialog({
     setLastKey("");
   }
 
+  // Reset stale mutation errors when the dialog (re)opens.
+  useEffect(() => {
+    if (open) {
+      create.reset();
+      update.reset();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, key]);
+
   const saving = create.isPending || update.isPending;
   const err = create.error || update.error;
 
   const submit = async () => {
-    if (state.mode === "create") {
-      await create.mutateAsync({ name, description: description || undefined });
-    } else if (state.mode === "edit") {
-      await update.mutateAsync({ name, description: description || null });
+    try {
+      if (state.mode === "create") {
+        await create.mutateAsync({ name, description: description || undefined });
+      } else if (state.mode === "edit") {
+        await update.mutateAsync({ name, description: description || null });
+      }
+    } catch {
+      return; // surfaced via the error alert below
     }
     onClose();
   };
@@ -206,7 +220,7 @@ function HazardTagDialog({
       <DialogTitle>{state.mode === "edit" ? "Edit hazard tag" : "New hazard tag"}</DialogTitle>
       <DialogContent>
         <Stack spacing={2} sx={{ mt: 1 }}>
-          {err instanceof Error && <Alert severity="error">{err.message}</Alert>}
+          {err != null && <Alert severity="error">{errorMessage(err)}</Alert>}
           <TextField
             label="Name"
             size="small"

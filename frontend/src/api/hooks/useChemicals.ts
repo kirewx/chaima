@@ -45,15 +45,6 @@ export function useUpdateChemical(groupId: string, chemicalId: string) {
   });
 }
 
-export function useDeleteChemical(groupId: string) {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: (chemicalId: string) =>
-      client.delete(`/groups/${groupId}/chemicals/${chemicalId}`),
-    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["chemicals", groupId] }); },
-  });
-}
-
 export function useReplaceHazardTags(groupId: string, chemicalId: string) {
   const queryClient = useQueryClient();
   return useMutation({

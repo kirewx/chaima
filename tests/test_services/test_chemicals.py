@@ -231,17 +231,6 @@ async def test_replace_hazard_tags_cross_group(session, group, user):
         )
 
 
-async def test_delete_chemical(session, group, user):
-    chem = await chemical_service.create_chemical(
-        session, group_id=group.id, created_by=user.id, name="Ethanol"
-    )
-    await session.commit()
-    await chemical_service.delete_chemical(session, chem)
-    await session.commit()
-    result = await chemical_service.get_chemical(session, chem.id)
-    assert result is None
-
-
 async def test_create_chemical_with_pubchem_payload(session, group, user):
     await seed_ghs_catalog(session)
     await session.commit()

@@ -275,5 +275,16 @@ async def delete_incompatibility(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Incompatibility not found"
         )
+    tag_a = await hazard_service.get_hazard_tag(session, incompat.tag_a_id)
+    tag_b = await hazard_service.get_hazard_tag(session, incompat.tag_b_id)
+    if (
+        tag_a is None
+        or tag_b is None
+        or tag_a.group_id != group_id
+        or tag_b.group_id != group_id
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Incompatibility not found"
+        )
     await hazard_service.delete_incompatibility(session, incompat)
     await session.commit()

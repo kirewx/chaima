@@ -17,6 +17,7 @@ import { IMPORT_TARGETS } from "../../types";
 import { useStorageTree } from "../../api/hooks/useStorageLocations";
 import LocationPicker from "../LocationPicker";
 import client from "../../api/client";
+import { errorMessage } from "../../utils/errorMessage";
 import type { AxiosError } from "axios";
 
 function formatImportError(err: unknown): string {
@@ -30,14 +31,18 @@ function formatImportError(err: unknown): string {
     return lines.join("\n");
   }
   if (detail?.message) return detail.message;
-  return err instanceof Error ? err.message : "Import failed";
+  return errorMessage(err, "Import failed");
 }
 
 type WizardState =
   | { step: "upload" }
-  | { step: "columns"; preview: ImportPreviewResponse; file: File }
+  | { step: "columns"; preview: ImportPreviewResponse; file: File;
+      // Preserved user work when navigating Back from later steps.
+      columnMapping?: Record<string, string>; quCombined?: string | null;
+      locations?: ImportLocationMapping[] }
   | { step: "locations"; preview: ImportPreviewResponse; file: File;
-      columnMapping: Record<string, string>; quCombined: string | null }
+      columnMapping: Record<string, string>; quCombined: string | null;
+      locations?: ImportLocationMapping[] }
   | { step: "review"; preview: ImportPreviewResponse; file: File;
       columnMapping: Record<string, string>; quCombined: string | null;
       locations: ImportLocationMapping[] }
@@ -125,6 +130,7 @@ export function ImportSection({ groupId }: Props) {
       {state.step === "columns" && (
         <ColumnMappingStep
           preview={state.preview}
+          initialMapping={state.columnMapping}
           onBack={() => setState({ step: "upload" })}
           onNext={(mapping, qu) => {
             setState({
@@ -133,6 +139,7 @@ export function ImportSection({ groupId }: Props) {
               file: state.file,
               columnMapping: mapping,
               quCombined: qu,
+              locations: state.locations,
             });
           }}
         />
@@ -141,8 +148,16 @@ export function ImportSection({ groupId }: Props) {
         <LocationMappingStep
           groupId={groupId}
           distinct={distinctLocations(state.preview.rows, state.preview.columns, state.columnMapping)}
+          initial={state.locations}
           onBack={() =>
-            setState({ step: "columns", preview: state.preview, file: state.file })
+            setState({
+              step: "columns",
+              preview: state.preview,
+              file: state.file,
+              columnMapping: state.columnMapping,
+              quCombined: state.quCombined,
+              locations: state.locations,
+            })
           }
           onNext={(mappings) => {
             setState({
@@ -171,6 +186,7 @@ export function ImportSection({ groupId }: Props) {
               file: state.file,
               columnMapping: state.columnMapping,
               quCombined: state.quCombined,
+              locations: state.locations,
             })}
           onDone={(summary) => setState({ step: "done", summary })}
         />
@@ -244,6 +260,8 @@ function UploadStep({
           onChange={(e) => {
             const f = e.target.files?.[0];
             if (f) onPicked(f);
+            // Reset so re-picking the same file fires onChange again.
+            e.target.value = "";
           }}
         />
       </Button>
@@ -256,14 +274,19 @@ function UploadStep({
 
 function ColumnMappingStep({
   preview,
+  initialMapping,
   onBack,
   onNext,
 }: {
   preview: ImportPreviewResponse;
+  /** Previously chosen mapping (when navigating Back), else auto-detected. */
+  initialMapping?: Record<string, string>;
   onBack: () => void;
   onNext: (mapping: Record<string, string>, qu: string | null) => void;
 }) {
-  const [mapping, setMapping] = useState<Record<string, string>>(preview.detected_mapping);
+  const [mapping, setMapping] = useState<Record<string, string>>(
+    initialMapping ?? preview.detected_mapping,
+  );
 
   const quCombined = Object.entries(mapping).find(([, t]) => t === "quantity_unit_combined")?.[0] ?? null;
 
@@ -342,18 +365,34 @@ function distinctLocations(rows: string[][], columns: string[], mapping: Record<
 function LocationMappingStep({
   groupId,
   distinct,
+  initial,
   onBack,
   onNext,
 }: {
   groupId: string;
   distinct: string[];
+  /** Previously chosen mappings (when navigating Back). */
+  initial?: ImportLocationMapping[];
   onBack: () => void;
   onNext: (mappings: ImportLocationMapping[]) => void;
 }) {
   const { data: tree = [] } = useStorageTree(groupId);
   const [rows, setRows] = useState<Record<string, { mode: "existing" | "new"; location_id?: string; new_name?: string; parent_id?: string | null }>>(() => {
-    const init: Record<string, { mode: "new"; new_name: string }> = {};
+    const init: Record<string, { mode: "existing" | "new"; location_id?: string; new_name?: string; parent_id?: string | null }> = {};
     for (const d of distinct) init[d] = { mode: "new", new_name: d };
+    // Restore previous choices when the user navigated Back here.
+    for (const m of initial ?? []) {
+      if (!(m.source_text in init)) continue;
+      if (m.location_id) {
+        init[m.source_text] = { mode: "existing", location_id: m.location_id };
+      } else if (m.new_location) {
+        init[m.source_text] = {
+          mode: "new",
+          new_name: m.new_location.name,
+          parent_id: m.new_location.parent_id,
+        };
+      }
+    }
     return init;
   });
   const [pickerFor, setPickerFor] = useState<string | null>(null);

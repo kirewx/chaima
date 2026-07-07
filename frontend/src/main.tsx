@@ -4,6 +4,7 @@ import { ThemeProvider, CssBaseline } from "@mui/material";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { BrowserRouter } from "react-router-dom";
 import { GroupProvider } from "./components/GroupContext";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 import { useAppTheme } from "./hooks/useTheme";
 import App from "./App";
 
@@ -18,7 +19,9 @@ function ThemedApp() {
       <CssBaseline />
       <BrowserRouter>
         <GroupProvider>
-          <App />
+          <ErrorBoundary>
+            <App />
+          </ErrorBoundary>
         </GroupProvider>
       </BrowserRouter>
     </ThemeProvider>

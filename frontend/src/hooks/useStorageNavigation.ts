@@ -2,7 +2,7 @@ import { useMemo } from "react";
 import { useParams } from "react-router-dom";
 import { useStorageTree } from "../api/hooks/useStorageLocations";
 import { useCurrentUser } from "../api/hooks/useAuth";
-import { useGroup } from "../components/GroupContext";
+import { useGroupOptional } from "../components/GroupContext";
 import type { StorageLocationNode } from "../types";
 
 export interface StorageNavigation {
@@ -49,10 +49,12 @@ const CHILD_KIND: Record<string, StorageNavigation["nextChildKind"]> = {
 };
 
 export function useStorageNavigation(): StorageNavigation {
-  const { groupId } = useGroup();
+  // Users without a main group must not crash the page — the tree query is
+  // disabled for an empty group id and StoragePage renders a friendly state.
+  const { groupId } = useGroupOptional();
   const { data: user } = useCurrentUser();
   const { locationId } = useParams<{ locationId?: string }>();
-  const tree = useStorageTree(groupId);
+  const tree = useStorageTree(groupId ?? "");
 
   return useMemo<StorageNavigation>(() => {
     const all = tree.data ?? [];

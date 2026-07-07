@@ -200,15 +200,31 @@ async def location_conflicts(
     session: AsyncSession,
     group_id: UUID,
     location_id: UUID,
+    *,
+    viewer,
 ) -> list[Conflict]:
-    """Pairwise conflicts among all chemicals stored under this location subtree."""
+    """Pairwise conflicts among all chemicals stored under this location subtree.
+
+    Scoped to ``group_id``: the location must be linked to the group, only
+    chemicals belonging to the group are considered, archived containers are
+    excluded, and secret chemicals the ``viewer`` may not see are filtered out.
+    """
+    from fastapi import HTTPException
+    from sqlalchemy.orm import selectinload
+
     from chaima.models.chemical import Chemical
     from chaima.models.container import Container
+    from chaima.models.ghs import ChemicalGHS
+    from chaima.models.hazard import ChemicalHazardTag
     from chaima.models.storage import StorageLocation
+    from chaima.services.chemicals import apply_secret_filter
+    from chaima.services.orders import _validate_location_in_group
 
-    # Walk subtree of locations under location_id (use a recursive CTE if the
-    # storage_location table is treelike; otherwise direct children only — verify
-    # against the existing models during implementation).
+    # Location must be linked to the caller's group.
+    if not await _validate_location_in_group(session, group_id, location_id):
+        raise HTTPException(status_code=404, detail="Location not found")
+
+    # Walk the location's direct children only (one level; H10 known limitation).
     sub_ids: list[UUID] = [location_id]
     children = (
         await session.execute(
@@ -217,22 +233,26 @@ async def location_conflicts(
     ).scalars().all()
     sub_ids.extend(children)
 
-    rows = (
-        await session.execute(
-            select(Container, Chemical)
-            .join(Chemical, Container.chemical_id == Chemical.id)
-            .where(Container.location_id.in_(sub_ids))
+    stmt = (
+        select(Chemical)
+        .join(Container, Container.chemical_id == Chemical.id)
+        .where(
+            Container.location_id.in_(sub_ids),
+            Container.is_archived == False,  # noqa: E712
+            Chemical.group_id == group_id,
         )
-    ).all()
+        .options(
+            selectinload(Chemical.ghs_links).selectinload(ChemicalGHS.ghs_code),
+            selectinload(Chemical.hazard_tag_links).selectinload(
+                ChemicalHazardTag.hazard_tag
+            ),
+        )
+    )
+    stmt = apply_secret_filter(stmt, viewer)
+    rows = (await session.execute(stmt)).scalars().unique().all()
 
     chemicals = []
-    seen_chem_ids: set[UUID] = set()
-    for container, chem in rows:
-        if chem.id in seen_chem_ids:
-            continue
-        seen_chem_ids.add(chem.id)
-        # Eager-load relationships needed for rules.
-        await session.refresh(chem, attribute_names=["ghs_links", "hazard_tag_links"])
+    for chem in rows:
         chem_codes = [link.ghs_code for link in chem.ghs_links]
         chem_tags = [link.hazard_tag for link in chem.hazard_tag_links]
         chemicals.append((chem, chem_codes, chem_tags))

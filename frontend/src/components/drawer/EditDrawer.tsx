@@ -49,6 +49,7 @@ export function EditDrawer() {
         {(config.kind === "chemical-new" || config.kind === "chemical-edit") && (
           <ChemicalForm
             chemicalId={config.kind === "chemical-edit" ? config.chemicalId : undefined}
+            groupId={config.kind === "chemical-edit" ? config.groupId : undefined}
             onDone={close}
           />
         )}
@@ -58,6 +59,7 @@ export function EditDrawer() {
             containerId={
               config.kind === "container-edit" ? config.containerId : undefined
             }
+            groupId={config.groupId}
             prefill={config.kind === "container-new" ? config.prefill : undefined}
             photoFile={config.kind === "container-new" ? config.photoFile : undefined}
             onDone={close}

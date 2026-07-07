@@ -2,7 +2,7 @@
 import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class ContainerCreate(BaseModel):
@@ -28,8 +28,8 @@ class ContainerCreate(BaseModel):
 
     location_id: UUID
     supplier_id: UUID | None = None
-    identifier: str
-    amount: float
+    identifier: str = Field(min_length=1)
+    amount: float = Field(ge=0)
     unit: str
     purchased_at: datetime.date | None = None
     ordered_by_name: str | None = None
@@ -62,8 +62,8 @@ class ContainerUpdate(BaseModel):
 
     location_id: UUID | None = None
     supplier_id: UUID | None = None
-    identifier: str | None = None
-    amount: float | None = None
+    identifier: str | None = Field(default=None, min_length=1)
+    amount: float | None = Field(default=None, ge=0)
     unit: str | None = None
     purchased_at: datetime.date | None = None
     ordered_by_name: str | None = None

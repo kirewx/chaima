@@ -30,6 +30,9 @@ def _set_sqlite_pragmas(dbapi_conn, _connection_record):
     try:
         cursor.execute("PRAGMA journal_mode=WAL")
         cursor.execute("PRAGMA synchronous=NORMAL")
+        # SQLite ships with FK enforcement OFF per connection; without this,
+        # every FOREIGN KEY constraint in the schema is silently ignored.
+        cursor.execute("PRAGMA foreign_keys=ON")
     finally:
         cursor.close()
 
