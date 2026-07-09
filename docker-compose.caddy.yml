@@ -1,0 +1,28 @@
+# Overlay for the public demo: adds Caddy with automatic HTTPS.
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.caddy.yml up -d
+# Requires CHAIMA_DOMAIN set in .env and ports 80/443 reachable from the
+# internet with DNS pointing at this host.
+services:
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    depends_on:
+      - chaima
+    env_file: .env
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+
+  chaima:
+    # Caddy fronts the app; stop publishing 8000 to the host.
+    # (!reset requires Docker Compose v2.24+.)
+    ports: !reset []
+
+volumes:
+  caddy-data:
+  caddy-config:
