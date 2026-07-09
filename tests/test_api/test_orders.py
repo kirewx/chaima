@@ -117,11 +117,22 @@ async def test_cancel_forbidden_for_other_non_admin_member(
     client, session, group, chemical, supplier, membership
 ):
     """A non-admin member who didn't create the order cannot cancel it."""
-    from uuid import UUID, uuid4
+    from uuid import UUID
     from chaima.models.order import Order
+    from chaima.models.user import User
 
     project = await _make_project(client, group.id)
-    other_user_id = uuid4()
+    # A real user row: ordered_by_user_id FK-references user.id, which SQLite
+    # enforces. The point of the test is that this user is *not* the caller.
+    other = User(
+        email="carol@example.com",
+        hashed_password="fakehash",
+        is_active=True,
+        is_verified=True,
+        main_group_id=group.id,
+    )
+    session.add(other)
+    await session.flush()
     order = Order(
         group_id=group.id,
         chemical_id=chemical.id,
@@ -130,7 +141,7 @@ async def test_cancel_forbidden_for_other_non_admin_member(
         amount_per_package=1.0,
         unit="g",
         package_count=1,
-        ordered_by_user_id=other_user_id,
+        ordered_by_user_id=other.id,
     )
     session.add(order)
     await session.commit()

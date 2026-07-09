@@ -282,6 +282,17 @@ async def delete_location(session: AsyncSession, location: StorageLocation) -> N
         raise LocationHasContainersError(
             f"Storage location {location.id} has containers and cannot be deleted"
         )
+    # Remove the group link rows first: they FK-reference this location, and
+    # with SQLite FK enforcement on, deleting the location before its links
+    # raises IntegrityError. (There are no containers/children at this point.)
+    links = await session.exec(
+        select(StorageLocationGroup).where(
+            StorageLocationGroup.location_id == location.id
+        )
+    )
+    for link in links.all():
+        await session.delete(link)
+    await session.flush()
     await session.delete(location)
     await session.flush()
 
