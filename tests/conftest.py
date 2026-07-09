@@ -6,7 +6,11 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 @pytest_asyncio.fixture
 async def engine():
+    from sqlalchemy import event as sa_event
+    from chaima.db import _set_sqlite_pragmas
+
     test_engine = create_async_engine("sqlite+aiosqlite://", echo=False)
+    sa_event.listen(test_engine.sync_engine, "connect", _set_sqlite_pragmas)
     async with test_engine.begin() as conn:
         await conn.run_sync(SQLModel.metadata.create_all)
     yield test_engine

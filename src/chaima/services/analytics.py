@@ -196,20 +196,26 @@ async def compact(
     """Roll events older than 30 days into ``event_daily`` and prune.
 
     Steps (each in its own commit):
-    1. For each ``(day, user_id, type)`` in ``event`` with ``created_at < now - 30d``,
-       upsert ``event_daily`` with count and group_id. Then DELETE those events.
+    1. For each ``(day, user_id, type, group_id)`` in ``event`` with
+       ``created_at < now - 30d`` — including anonymous events with
+       ``user_id IS NULL`` (e.g. login_failure) — upsert ``event_daily``
+       with the count. Then DELETE those events.
     2. DELETE ``event_daily`` rows with ``day < (now - 365d).date()``.
     3. DELETE ``slow_request`` rows with ``created_at < now - 30d``.
 
     Returns counts for each step.
     """
-    from sqlalchemy import delete
+    from sqlalchemy import delete, update
     from chaima.models.analytics import EventDaily
 
     cutoff_30d = now - dt.timedelta(days=30)
     cutoff_365d = (now - dt.timedelta(days=365)).date()
 
     # --- Step 1: aggregate then delete ---
+    # The DELETE below reuses the exact same cutoff. Event.created_at is
+    # server-assigned (func.now()), so a row committed between the SELECT and
+    # the DELETE gets a ~current timestamp and cannot fall under a 30-day-old
+    # cutoff — both statements therefore cover the same set of rows.
     agg_rows = (await session.exec(
         select(
             func.date(Event.created_at).label("day"),
@@ -217,7 +223,6 @@ async def compact(
             func.count(Event.id).label("count"),
         ).where(
             Event.created_at < cutoff_30d,
-            Event.user_id.is_not(None),
         ).group_by(
             func.date(Event.created_at), Event.user_id, Event.type, Event.group_id,
         )
@@ -229,15 +234,24 @@ async def compact(
             day_v = dt.date.fromisoformat(day_s)
         else:
             day_v = day_s
-        existing = await session.get(EventDaily, (day_v, user_id, type_))
-        if existing is None:
+        # NULL-safe upsert: user_id/group_id may be NULL (SQLite treats NULL
+        # PK members as distinct, and the ORM refuses to UPDATE rows keyed on
+        # NULL), so try a core UPDATE first, then INSERT if nothing matched.
+        updated = await session.exec(
+            update(EventDaily).where(
+                EventDaily.day == day_v,
+                EventDaily.type == type_,
+                (EventDaily.user_id == user_id) if user_id is not None
+                else EventDaily.user_id.is_(None),
+                (EventDaily.group_id == group_id) if group_id is not None
+                else EventDaily.group_id.is_(None),
+            ).values(count=EventDaily.count + count)
+        )
+        if (updated.rowcount or 0) == 0:
             session.add(EventDaily(
                 day=day_v, user_id=user_id, type=type_,
                 group_id=group_id, count=count,
             ))
-        else:
-            existing.count += count
-            session.add(existing)
         events_aggregated += count
 
     events_deleted_result = await session.exec(

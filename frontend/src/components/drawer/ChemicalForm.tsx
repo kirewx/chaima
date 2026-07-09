@@ -27,10 +27,13 @@ import { usePubChemLookup, fetchPubChemGHS } from "../../api/hooks/usePubChem";
 import { useExtractFromPhoto } from "../../api/hooks/useExtractFromPhoto";
 import { useDrawer } from "./DrawerContext";
 import client from "../../api/client";
+import { errorMessage } from "../../utils/errorMessage";
 import type { ContainerPrefill } from "../../types";
 
 interface Props {
   chemicalId?: string;
+  /** Group the chemical belongs to. Falls back to the user's main group. */
+  groupId?: string;
   onDone: () => void;
 }
 
@@ -72,9 +75,9 @@ function mergeSynonyms(existing: string[], incoming: string[]): string[] {
   return out;
 }
 
-export function ChemicalForm({ chemicalId, onDone }: Props) {
+export function ChemicalForm({ chemicalId, groupId: groupIdProp, onDone }: Props) {
   const { data: user } = useCurrentUser();
-  const groupId = user?.main_group_id ?? "";
+  const groupId = groupIdProp ?? user?.main_group_id ?? "";
   const drawer = useDrawer();
   const existing = useChemicalDetail(groupId, chemicalId ?? "");
   const create = useCreateChemical(groupId);
@@ -150,8 +153,11 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
         })
       : null;
 
-  const onFetch = async () => {
-    const q = query.trim();
+  // `queryOverride` lets callers fetch a value that was just set via
+  // setQuery (state updates are async, so reading `query` here would be
+  // stale — e.g. the auto-fetch right after photo extraction).
+  const onFetch = async (queryOverride?: string) => {
+    const q = (queryOverride ?? query).trim();
     if (!q) return;
     const isEditing = chemicalId != null;
     setLookupError(null);
@@ -253,8 +259,22 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
 
   const onClearLookup = () => {
     setQuery("");
-    setExtras(EMPTY_EXTRAS);
     setLookupError(null);
+    if (chemicalId) {
+      // Edit mode: clearing the search box must NOT wipe the chemical's
+      // existing synonyms/GHS codes on save — restore the persisted extras.
+      const e = existing.data;
+      if (e) {
+        setExtras({
+          cid: e.cid ?? null,
+          smiles: e.smiles ?? null,
+          synonyms: (e.synonyms ?? []).map((s) => s.name),
+          ghs_codes: (e.ghs_codes ?? []).map((g) => g.code),
+        });
+      }
+    } else {
+      setExtras(EMPTY_EXTRAS);
+    }
   };
 
   const onSubmit = async () => {
@@ -286,7 +306,11 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
     };
 
     if (isEditing) {
-      await update.mutateAsync(payload);
+      try {
+        await update.mutateAsync(payload);
+      } catch {
+        return; // surfaced via `err` below
+      }
 
       // If a re-fetch is still loading GHS at submit time, merge the
       // arriving codes into the chemical's set when they show up.
@@ -303,7 +327,12 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
         });
       }
     } else {
-      const created = await create.mutateAsync(payload);
+      let created;
+      try {
+        created = await create.mutateAsync(payload);
+      } catch {
+        return; // surfaced via `err` / conflictDetail below
+      }
 
       if (!ghsReady && ghsPromiseRef.current) {
         const createdId = created.id;
@@ -325,6 +354,7 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
         drawer.open({
           kind: "container-new",
           chemicalId: created.id,
+          groupId,
           prefill: extractedContainerPrefill ?? undefined,
           photoFile: photoFile ?? undefined,
         });
@@ -364,11 +394,12 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
         purchased_at: result.purchased_at ?? undefined,
       });
 
-      // Auto-trigger PubChem fetch when we got a CAS or name.
+      // Auto-trigger PubChem fetch when we got a CAS or name. Pass the seed
+      // explicitly — the `query` state is not updated yet at this point.
       const seed = result.cas || result.name;
       if (seed) {
         setQuery(seed);
-        void onFetch();
+        void onFetch(seed);
       }
     } catch (e) {
       const axiosErr = e as { response?: { status?: number; data?: { detail?: string } } };
@@ -467,6 +498,7 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
             drawer.open({
               kind: "container-new",
               chemicalId: chemId,
+              groupId,
               prefill: extractedContainerPrefill ?? undefined,
               photoFile: photoFile ?? undefined,
             });
@@ -499,6 +531,7 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
                     drawer.open({
                       kind: "container-new",
                       chemicalId: chemId!,
+                      groupId,
                       prefill: extractedContainerPrefill ?? undefined,
                       photoFile: photoFile ?? undefined,
                     })
@@ -511,8 +544,8 @@ export function ChemicalForm({ chemicalId, onDone }: Props) {
           </Alert>
         );
       })()}
-      {!duplicate?.exists && err instanceof Error && !conflictDetail && (
-        <Alert severity="error">{err.message}</Alert>
+      {!duplicate?.exists && err != null && !conflictDetail && (
+        <Alert severity="error">{errorMessage(err)}</Alert>
       )}
       {lookupError && <Alert severity="warning">{lookupError}</Alert>}
 

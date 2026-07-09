@@ -19,6 +19,7 @@ import {
   usePromoteWishlist,
 } from "../../api/hooks/useWishlist";
 import { useDrawer } from "../drawer/DrawerContext";
+import { errorMessage } from "../../utils/errorMessage";
 import { WishlistForm } from "./WishlistForm";
 
 interface Props {
@@ -46,11 +47,8 @@ export function WishlistList({ groupId }: Props) {
         wishlistItemId: result.wishlist_item_id,
       });
     } catch (err) {
-      const detail = (err as any).response?.data?.detail;
       setPromoteError(
-        typeof detail === "object"
-          ? detail.message
-          : detail ?? "Could not resolve chemical via PubChem.",
+        errorMessage(err, "Could not resolve chemical via PubChem."),
       );
     }
   };

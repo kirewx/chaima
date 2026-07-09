@@ -5,21 +5,35 @@ import { StorageChildList } from "../components/StorageChildList";
 import { ContainerCard } from "../components/ContainerCard";
 import { useShelfContainers } from "../api/hooks/useStorageLocations";
 import { useLocationConflicts } from "../api/hooks/useCompatibility";
-import { useGroup } from "../components/GroupContext";
+import { useGroupOptional } from "../components/GroupContext";
 import { RoleGate } from "../components/RoleGate";
 import { useDrawer } from "../components/drawer/DrawerContext";
 
 export default function StoragePage() {
-  const { groupId } = useGroup();
+  const { groupId } = useGroupOptional();
   const nav = useStorageNavigation();
   const { open } = useDrawer();
 
   const containers = useShelfContainers(
-    groupId,
+    groupId ?? "",
     nav.isLeaf && nav.current ? nav.current.id : null,
   );
 
-  const conflicts = useLocationConflicts(groupId, nav.current?.id ?? null);
+  const conflicts = useLocationConflicts(groupId ?? "", nav.current?.id ?? null);
+
+  if (!groupId) {
+    return (
+      <Box sx={{ p: 4, textAlign: "center" }}>
+        <Typography variant="h5" sx={{ mb: 1 }}>
+          No group selected
+        </Typography>
+        <Typography color="text.secondary" sx={{ fontSize: 13 }}>
+          You are not a member of a group yet. Ask a group admin for an invite
+          to see its storage locations.
+        </Typography>
+      </Box>
+    );
+  }
 
   if (nav.loading) {
     return (

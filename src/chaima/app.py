@@ -1,14 +1,21 @@
+import asyncio
+import logging
 from contextlib import asynccontextmanager
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 from starlette.staticfiles import StaticFiles
 
 from chaima.auth import auth_backend, fastapi_users
-from chaima.config import admin_settings
+from chaima.config import (
+    DEFAULT_ADMIN_PASSWORD,
+    DEFAULT_SECRET_KEY,
+    admin_settings,
+    settings,
+)
 from chaima.db import async_session_maker, create_db_and_tables
 from chaima.models.group import Group, UserGroupLink
 from chaima.models.user import User
@@ -32,6 +39,65 @@ from chaima.schemas import UserRead, UserUpdate
 from chaima.middleware.slow_request import SlowRequestMiddleware
 from chaima.services.seed import run_seeds
 
+logger = logging.getLogger(__name__)
+
+
+def _check_secure_config() -> None:
+    """Warn loudly when shipped default secrets are still in use.
+
+    Raises
+    ------
+    RuntimeError
+        If ``CHAIMA_REQUIRE_SECURE_CONFIG`` is enabled while a default
+        secret is still active, refusing to start.
+    """
+    insecure: list[str] = []
+    if settings.secret_key.get_secret_value() == DEFAULT_SECRET_KEY:
+        insecure.append("CHAIMA_SECRET_KEY")
+    if admin_settings.admin_password.get_secret_value() == DEFAULT_ADMIN_PASSWORD:
+        insecure.append("CHAIMA_ADMIN_PASSWORD")
+    if not insecure:
+        return
+    message = (
+        "SECURITY: default values still in use for %s — set these environment "
+        "variables before exposing this instance to a network."
+    )
+    logger.warning(message, ", ".join(insecure))
+    if settings.require_secure_config:
+        raise RuntimeError(
+            "Refusing to start: CHAIMA_REQUIRE_SECURE_CONFIG is enabled but "
+            f"default values are still in use for {', '.join(insecure)}."
+        )
+
+
+def _run_migrations() -> None:
+    """Run ``alembic upgrade head`` programmatically.
+
+    Called via ``asyncio.to_thread`` because ``alembic/env.py`` starts its
+    own event loop (``asyncio.run``), which must not nest inside ours.
+    Falls back to ``create_all`` when the migration scripts are not present
+    (e.g. installed as a wheel without the repo checkout).
+    """
+    from alembic import command
+    from alembic.config import Config as AlembicConfig
+
+    script_location = Path(__file__).resolve().parents[2] / "alembic"
+    if not (script_location / "env.py").is_file():
+        logger.warning(
+            "Alembic scripts not found at %s — falling back to create_all "
+            "(schema will not be version-stamped).",
+            script_location,
+        )
+        asyncio.run(create_db_and_tables())
+        return
+
+    # A bare Config (no ini file) skips env.py's fileConfig() call, which
+    # would otherwise clobber uvicorn's logging setup; env.py supplies the
+    # database URL itself from chaima.config.settings.
+    cfg = AlembicConfig()
+    cfg.set_main_option("script_location", str(script_location))
+    command.upgrade(cfg, "head")
+
 
 async def seed_admin(session: AsyncSession) -> None:
     """Create the initial superuser and group if no superuser exists.
@@ -47,9 +113,16 @@ async def seed_admin(session: AsyncSession) -> None:
     if result.first() is not None:
         return
 
-    group = Group(name=admin_settings.admin_group_name)
-    session.add(group)
-    await session.flush()
+    # Reuse an existing group of the same name (e.g. left over from a
+    # previous install) instead of crashing on the unique constraint.
+    result = await session.exec(
+        select(Group).where(Group.name == admin_settings.admin_group_name)
+    )
+    group = result.first()
+    if group is None:
+        group = Group(name=admin_settings.admin_group_name)
+        session.add(group)
+        await session.flush()
 
     ph = PasswordHelper()
     user = User(
@@ -70,7 +143,8 @@ async def seed_admin(session: AsyncSession) -> None:
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
-    await create_db_and_tables()
+    _check_secure_config()
+    await asyncio.to_thread(_run_migrations)
     async with async_session_maker() as session:
         await seed_admin(session)
         await run_seeds(session)
@@ -117,7 +191,12 @@ from chaima.services.files import UPLOADS_ROOT
 
 if UPLOADS_ROOT.is_dir() or UPLOADS_ROOT.parent.is_dir():
     UPLOADS_ROOT.mkdir(parents=True, exist_ok=True)
+    # StaticFiles performs its own path-containment check, so traversal
+    # attempts against /uploads are rejected by Starlette itself.
     app.mount("/uploads", StaticFiles(directory=UPLOADS_ROOT))
+
+if _static_dir.is_dir():
+    _static_root = _static_dir.resolve()
 
     @app.get("/{path:path}", include_in_schema=False)
     async def _spa_catch_all(path: str) -> FileResponse:
@@ -134,8 +213,25 @@ if UPLOADS_ROOT.is_dir() or UPLOADS_ROOT.parent.is_dir():
             The matching file under ``_static_dir`` when it exists (e.g.
             ``/favicon.svg``, ``/icons.svg``), otherwise ``index.html`` so
             the SPA router can handle client-side routes.
+
+        Raises
+        ------
+        HTTPException
+            404 when no frontend build (``index.html``) is present.
         """
-        static_file = _static_dir / path
-        if static_file.is_file():
+        try:
+            static_file = (_static_root / path).resolve()
+        except (OSError, ValueError):
+            static_file = None
+        # Containment check: never serve anything that resolves outside the
+        # static dir (e.g. `GET /..%2f..%2fchaima.db` path traversal).
+        if (
+            static_file is not None
+            and static_file.is_relative_to(_static_root)
+            and static_file.is_file()
+        ):
             return FileResponse(static_file)
-        return FileResponse(_static_dir / "index.html")
+        index_file = _static_root / "index.html"
+        if not index_file.is_file():
+            raise HTTPException(status_code=404, detail="Not found")
+        return FileResponse(index_file)

@@ -258,6 +258,20 @@ async def receive_order(
             raise ValueError(f"Container row {i}: duplicate identifier '{row.identifier}'")
         seen.add(row.identifier)
 
+    # Reject identifiers already used by (non-archived) containers in the group.
+    existing = set((await session.exec(
+        select(Container.identifier)
+        .join(Chemical, Chemical.id == Container.chemical_id)
+        .where(Chemical.group_id == order.group_id)
+        .where(Container.identifier.in_(seen))
+        .where(Container.is_archived.is_(False))
+    )).all())
+    for i, row in enumerate(rows):
+        if row.identifier in existing:
+            raise ValueError(
+                f"Container row {i}: identifier '{row.identifier}' already in use in this group"
+            )
+
     # Spawn containers.
     spawned: list[Container] = []
     today = datetime.date.today()

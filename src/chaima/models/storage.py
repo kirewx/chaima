@@ -30,13 +30,10 @@ class StorageLocation(SQLModel, table=True):
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
     )
 
-    children: list["StorageLocation"] = Relationship(
-        back_populates="parent",
-        sa_relationship_kwargs={"remote_side": "StorageLocation.id"},
-    )
+    children: list["StorageLocation"] = Relationship(back_populates="parent")
     parent: Optional["StorageLocation"] = Relationship(
         back_populates="children",
-        sa_relationship_kwargs={"remote_side": "StorageLocation.parent_id"},
+        sa_relationship_kwargs={"remote_side": "StorageLocation.id"},
     )
     containers: list["Container"] = Relationship(back_populates="location")
 

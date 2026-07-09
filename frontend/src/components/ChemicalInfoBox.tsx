@@ -108,7 +108,7 @@ export function ChemicalInfoBox({
       }}
     >
       <Box sx={{ position: "absolute", bottom: 10, right: 10, zIndex: 2 }}>
-        <ChemicalMenu chemical={chemical} />
+        <ChemicalMenu chemical={chemical} groupId={groupId} />
       </Box>
       {/* Main area */}
       <Box sx={{ p: 2.5, display: "flex", gap: 2 }}>
@@ -287,7 +287,7 @@ export function ChemicalInfoBox({
                       size="small"
                       variant="text"
                       onClick={() =>
-                        drawer.open({ kind: "chemical-edit", chemicalId: chemical.id })
+                        drawer.open({ kind: "chemical-edit", chemicalId: chemical.id, groupId })
                       }
                       sx={{ alignSelf: "flex-start", px: 0 }}
                     >

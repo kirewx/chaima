@@ -1,4 +1,4 @@
-import { IconButton, Menu, MenuItem, ListItemIcon, ListItemText, Divider } from "@mui/material";
+import { Alert, IconButton, Menu, MenuItem, ListItemIcon, ListItemText, Divider, Snackbar } from "@mui/material";
 import MoreHorizIcon from "@mui/icons-material/MoreHoriz";
 import EditIcon from "@mui/icons-material/Edit";
 import ArchiveIcon from "@mui/icons-material/Archive";
@@ -15,16 +15,20 @@ import {
 import { useDrawer } from "./drawer/DrawerContext";
 import { RoleGate } from "./RoleGate";
 import { useCurrentUser } from "../api/hooks/useAuth";
+import { errorMessage } from "../utils/errorMessage";
 
 interface Props {
   chemical: ChemicalRead;
+  /** Group the chemical belongs to. Falls back to the user's main group. */
+  groupId?: string;
 }
 
-export function ChemicalMenu({ chemical }: Props) {
+export function ChemicalMenu({ chemical, groupId: groupIdProp }: Props) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const { open } = useDrawer();
   const { data: user } = useCurrentUser();
-  const groupId = user?.main_group_id ?? "";
+  const groupId = groupIdProp ?? user?.main_group_id ?? "";
   const archive = useArchiveChemical(groupId, chemical.id);
   const unarchive = useUnarchiveChemical(groupId, chemical.id);
   const update = useUpdateChemical(groupId, chemical.id);
@@ -37,18 +41,30 @@ export function ChemicalMenu({ chemical }: Props) {
 
   const onEdit = () => {
     close();
-    open({ kind: "chemical-edit", chemicalId: chemical.id });
+    open({ kind: "chemical-edit", chemicalId: chemical.id, groupId });
   };
   const onArchive = async () => {
-    await archive.mutateAsync();
+    try {
+      await archive.mutateAsync();
+    } catch (e) {
+      setError(errorMessage(e, "Could not archive the chemical."));
+    }
     close();
   };
   const onUnarchive = async () => {
-    await unarchive.mutateAsync();
+    try {
+      await unarchive.mutateAsync();
+    } catch (e) {
+      setError(errorMessage(e, "Could not unarchive the chemical."));
+    }
     close();
   };
   const onToggleSecret = async () => {
-    await update.mutateAsync({ is_secret: !chemical.is_secret });
+    try {
+      await update.mutateAsync({ is_secret: !chemical.is_secret });
+    } catch (e) {
+      setError(errorMessage(e, "Could not update the chemical."));
+    }
     close();
   };
 
@@ -98,6 +114,16 @@ export function ChemicalMenu({ chemical }: Props) {
           </ListItemText>
         </MenuItem>
       </Menu>
+      <Snackbar
+        open={!!error}
+        autoHideDuration={6000}
+        onClose={() => setError(null)}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <Alert severity="error" onClose={() => setError(null)}>
+          {error}
+        </Alert>
+      </Snackbar>
     </RoleGate>
   );
 }

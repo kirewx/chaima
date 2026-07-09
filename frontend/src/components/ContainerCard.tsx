@@ -8,6 +8,8 @@ import { DEFAULT_STORAGE_COLOR } from "./drawer/StorageForm";
 
 interface Props {
   container: ContainerRead;
+  /** Group the container belongs to (threaded into the menu's mutations). */
+  groupId?: string;
   locationName?: string;
   locationColor?: string | null;
   supplierName?: string;
@@ -33,6 +35,7 @@ function chipTextColor(hex: string): string {
 
 export function ContainerCard({
   container,
+  groupId,
   locationName,
   locationColor,
   supplierName,
@@ -52,7 +55,7 @@ export function ContainerCard({
       />
       {showMenu && (
         <Box sx={{ position: "absolute", top: 6, right: 6, zIndex: 2 }}>
-          <ContainerMenu container={container} />
+          <ContainerMenu container={container} groupId={groupId} />
         </Box>
       )}
       <Stack direction="row" spacing={1.5} sx={{ alignItems: "flex-start" }}>

@@ -24,7 +24,7 @@ from chaima.schemas.group import (
 )
 from chaima.schemas.pagination import PaginatedResponse
 from chaima.services import groups as group_service
-from chaima.services.groups import MemberExistsError, MemberNotFoundError
+from chaima.services.groups import LastAdminError, MemberExistsError, MemberNotFoundError
 
 router = APIRouter(prefix="/api/v1/groups", tags=["groups"])
 
@@ -283,6 +283,7 @@ async def remove_member(
     ------
     HTTPException
         404 if the user is not a member of the group.
+        409 if the user is the last admin of the group.
     """
     group, _link = member
     try:
@@ -291,6 +292,11 @@ async def remove_member(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User is not a member of this group",
+        )
+    except LastAdminError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot remove the last admin of a group",
         )
 
 
@@ -323,6 +329,7 @@ async def update_member_role(
     ------
     HTTPException
         404 if the user is not a member or does not exist.
+        409 if demoting the user would leave the group without an admin.
     """
     group, _link = member
     target_user = await session.get(User, user_id)
@@ -342,6 +349,11 @@ async def update_member_role(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="User is not a member of this group",
+        )
+    except LastAdminError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot demote the last admin of a group",
         )
     return MemberRead(
         user_id=link.user_id,

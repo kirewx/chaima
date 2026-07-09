@@ -165,6 +165,12 @@ async def commit(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(exc),
         )
+    except Exception:
+        # Any unexpected failure must not leave partial rows behind: the
+        # session dependency commits on teardown, so roll back before
+        # re-raising.
+        await session.rollback()
+        raise
     return CommitResponse(
         created_chemicals=summary.created_chemicals,
         created_containers=summary.created_containers,

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Alert,
   Autocomplete,
@@ -19,8 +19,8 @@ import AddIcon from "@mui/icons-material/Add";
 import EditIcon from "@mui/icons-material/Edit";
 import DeleteIcon from "@mui/icons-material/Delete";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { AxiosError } from "axios";
 import client from "../../api/client";
+import { errorMessage } from "../../utils/errorMessage";
 import {
   useSuppliers,
   useCreateSupplier,
@@ -172,20 +172,28 @@ function SupplierEditDialog({
     setLastKey("");
   }
 
+  // Reset stale mutation errors when the dialog (re)opens.
+  useEffect(() => {
+    if (open) {
+      create.reset();
+      update.reset();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, key]);
+
   const saving = create.isPending || update.isPending;
   const err = create.error || update.error;
-  const errMessage =
-    err instanceof AxiosError
-      ? (err.response?.data?.detail ?? err.message)
-      : err instanceof Error
-        ? err.message
-        : null;
+  const errMessage = err != null ? errorMessage(err) : null;
 
   const submit = async () => {
-    if (state.mode === "create") {
-      await create.mutateAsync({ name });
-    } else if (state.mode === "edit") {
-      await update.mutateAsync({ name });
+    try {
+      if (state.mode === "create") {
+        await create.mutateAsync({ name });
+      } else if (state.mode === "edit") {
+        await update.mutateAsync({ name });
+      }
+    } catch {
+      return; // surfaced via errMessage below
     }
     onClose();
   };
@@ -245,16 +253,15 @@ function SupplierDeleteDialog({
 
   const confirmDelete = async () => {
     if (!supplier) return;
-    await remove.mutateAsync(supplier.id);
+    try {
+      await remove.mutateAsync(supplier.id);
+    } catch {
+      return; // surfaced via removeErr below
+    }
     onClose();
   };
 
-  const removeErr =
-    remove.error instanceof AxiosError
-      ? (remove.error.response?.data?.detail?.message ??
-        remove.error.response?.data?.detail ??
-        remove.error.message)
-      : null;
+  const removeErr = remove.error != null ? errorMessage(remove.error) : null;
 
   const containerList = Array.isArray(containers) ? containers : [];
   const containerCount = Array.isArray(containers)

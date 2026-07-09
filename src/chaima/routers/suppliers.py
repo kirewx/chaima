@@ -266,4 +266,12 @@ async def delete_supplier(
                 "container_count": exc.container_count,
             },
         )
+    except supplier_service.SupplierHasOrdersError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "Supplier is still referenced by orders and cannot be deleted.",
+                "order_count": exc.order_count,
+            },
+        )
     await session.commit()

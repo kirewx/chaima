@@ -167,9 +167,21 @@ async def update_location(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Storage location not found"
         )
-    updated = await storage_service.update_location(
-        session, loc, name=body.name, description=body.description, parent_id=body.parent_id, color=body.color
-    )
+    if body.parent_id is not None and body.parent_id != loc.parent_id:
+        if not await storage_service.location_belongs_to_group(session, body.parent_id, group_id):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Parent location does not belong to this group",
+            )
+    try:
+        updated = await storage_service.update_location(
+            session, loc, name=body.name, description=body.description, parent_id=body.parent_id, color=body.color
+        )
+    except InvalidHierarchy as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid hierarchy: {e}",
+        )
     await session.commit()
     return StorageLocationRead.model_validate(updated, from_attributes=True)
 
@@ -181,7 +193,7 @@ async def delete_location(
     session: SessionDep,
     member: GroupMemberDep,
 ) -> None:
-    """Delete a storage location. Fails if it has containers.
+    """Delete a storage location. Fails if it has sublocations or containers.
 
     Parameters
     ----------
@@ -205,9 +217,14 @@ async def delete_location(
         )
     try:
         await storage_service.delete_location(session, loc)
+    except storage_service.LocationHasChildrenError:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Cannot delete location with sublocations; delete or move them first",
+        )
     except storage_service.LocationHasContainersError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
+            status_code=status.HTTP_409_CONFLICT,
             detail="Cannot delete location with containers",
         )
     await session.commit()

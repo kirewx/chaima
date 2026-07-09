@@ -27,6 +27,40 @@ flat = APIRouter(
 )
 
 
+async def _validate_container_refs(
+    session: SessionDep,
+    group_id: UUID,
+    *,
+    location_id: UUID | None = None,
+    supplier_id: UUID | None = None,
+) -> None:
+    """Ensure a referenced location/supplier exists and belongs to the group.
+
+    Raises
+    ------
+    HTTPException
+        404 if the location or supplier does not exist or belongs to a
+        different group.
+    """
+    if location_id is not None:
+        from chaima.services import storage_locations as storage_svc
+
+        if not await storage_svc.location_belongs_to_group(session, location_id, group_id):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Storage location not found",
+            )
+    if supplier_id is not None:
+        from chaima.services import suppliers as supplier_svc
+
+        supplier = await supplier_svc.get_supplier(session, supplier_id)
+        if supplier is None or supplier.group_id != group_id:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Supplier not found",
+            )
+
+
 @nested.get("", response_model=PaginatedResponse[ContainerRead])
 async def list_containers_for_chemical(
     group_id: UUID,
@@ -132,13 +166,24 @@ async def create_container(
     Raises
     ------
     HTTPException
-        404 if the chemical is not found or belongs to a different group.
+        404 if the chemical, location or supplier is not found or belongs
+        to a different group. 409 if the identifier is already in use.
     """
     from chaima.services import chemicals as chemical_svc
 
     chem = await chemical_svc.get_chemical(session, chemical_id)
     if chem is None or chem.group_id != group_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chemical not found")
+
+    await _validate_container_refs(
+        session, group_id, location_id=body.location_id, supplier_id=body.supplier_id
+    )
+    try:
+        await container_service.check_identifier_unique_in_group(
+            session, group_id, body.identifier
+        )
+    except container_service.DuplicateIdentifier as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
 
     container = await container_service.create_container(
         session,
@@ -150,6 +195,7 @@ async def create_container(
         unit=body.unit,
         created_by=user.id,
         purchased_at=body.purchased_at,
+        ordered_by_name=body.ordered_by_name,
     )
     await session.commit()
     log_event(
@@ -304,7 +350,8 @@ async def update_container(
     Raises
     ------
     HTTPException
-        404 if the container is not found or belongs to a different group.
+        404 if the container, location or supplier is not found or belongs
+        to a different group. 409 if the new identifier is already in use.
     """
     container = await container_service.get_container(session, container_id)
     if container is None:
@@ -314,9 +361,22 @@ async def update_container(
     chem = await chemical_svc.get_chemical(session, container.chemical_id)
     if chem is None or chem.group_id != group_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Container not found")
-    updated = await container_service.update_container(
-        session, container, **body.model_dump(exclude_unset=True)
+    payload = body.model_dump(exclude_unset=True)
+    await _validate_container_refs(
+        session,
+        group_id,
+        location_id=payload.get("location_id"),
+        supplier_id=payload.get("supplier_id"),
     )
+    new_identifier = payload.get("identifier")
+    if new_identifier is not None and new_identifier != container.identifier:
+        try:
+            await container_service.check_identifier_unique_in_group(
+                session, group_id, new_identifier, exclude_container_id=container.id
+            )
+        except container_service.DuplicateIdentifier as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    updated = await container_service.update_container(session, container, **payload)
     await session.commit()
     await session.refresh(updated)
     return ContainerRead.model_validate(updated, from_attributes=True)

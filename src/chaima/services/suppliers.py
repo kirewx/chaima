@@ -7,6 +7,7 @@ from sqlmodel.ext.asyncio.session import AsyncSession
 
 from chaima.models.chemical import Chemical
 from chaima.models.container import Container
+from chaima.models.order import Order
 from chaima.models.supplier import Supplier
 
 
@@ -16,6 +17,14 @@ class SupplierInUseError(Exception):
     def __init__(self, container_count: int) -> None:
         self.container_count = container_count
         super().__init__(f"Supplier has {container_count} container(s) and cannot be deleted")
+
+
+class SupplierHasOrdersError(Exception):
+    """Raised when attempting to delete a supplier referenced by orders."""
+
+    def __init__(self, order_count: int) -> None:
+        self.order_count = order_count
+        super().__init__(f"Supplier has {order_count} order(s) and cannot be deleted")
 
 
 async def create_supplier(
@@ -128,7 +137,8 @@ async def list_suppliers(
     count_query = select(func.count()).select_from(query.subquery())
     total = (await session.exec(count_query)).one()
 
-    sort_col = getattr(Supplier, sort, Supplier.name)
+    allowed_sorts = {"name", "created_at"}
+    sort_col = getattr(Supplier, sort) if sort in allowed_sorts else Supplier.name
     query = query.order_by(sort_col.desc() if order == "desc" else sort_col.asc())
     query = query.offset(offset).limit(limit)
 
@@ -181,16 +191,25 @@ async def update_supplier(
 
 
 async def delete_supplier(session: AsyncSession, supplier: Supplier) -> None:
-    """Delete a supplier. Fails if any container still references it.
+    """Delete a supplier. Fails if any container or order still references it.
 
     Raises
     ------
     SupplierInUseError
         If one or more containers reference this supplier.
+    SupplierHasOrdersError
+        If one or more orders reference this supplier.
     """
     counts = await count_supplier_containers(session, [supplier.id])
     count = counts.get(supplier.id, 0)
     if count > 0:
         raise SupplierInUseError(count)
+    order_count = (
+        await session.exec(
+            select(func.count()).select_from(Order).where(Order.supplier_id == supplier.id)
+        )
+    ).one()
+    if order_count > 0:
+        raise SupplierHasOrdersError(order_count)
     await session.delete(supplier)
     await session.flush()

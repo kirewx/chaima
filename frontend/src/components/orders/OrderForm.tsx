@@ -16,6 +16,7 @@ import { useSuppliers, useCreateSupplier } from "../../api/hooks/useSuppliers";
 import { useProjects, useCreateProject } from "../../api/hooks/useProjects";
 import { useChemicalDetail } from "../../api/hooks/useChemicals";
 import type { SupplierRead, ProjectRead } from "../../types";
+import { errorMessage } from "../../utils/errorMessage";
 import { PubChemVendorPanel } from "./PubChemVendorPanel";
 
 type SupplierOption = SupplierRead | { inputValue: string; name: string; id?: undefined };
@@ -67,7 +68,8 @@ export function OrderForm({ groupId, chemicalId, wishlistItemId, onDone }: Props
 
   const submit = async () => {
     if (!chemicalId || !supplierId || !projectId) return;
-    await create.mutateAsync({
+    try {
+      await create.mutateAsync({
       chemical_id: chemicalId,
       supplier_id: supplierId,
       project_id: projectId,
@@ -83,7 +85,10 @@ export function OrderForm({ groupId, chemicalId, wishlistItemId, onDone }: Props
       expected_arrival: expectedArrival || null,
       comment: comment || null,
       wishlist_item_id: wishlistItemId ?? null,
-    });
+      });
+    } catch {
+      return; // surfaced via create.error below
+    }
     onDone();
   };
 
@@ -121,7 +126,10 @@ export function OrderForm({ groupId, chemicalId, wishlistItemId, onDone }: Props
         }}
         filterOptions={(options, params) => {
           const filtered = supplierFilter(options, params);
-          if (params.inputValue && !filtered.some((o) => "name" in o && o.name === params.inputValue)) {
+          const exists = options.some(
+            (o) => "name" in o && o.name.toLowerCase() === params.inputValue.toLowerCase(),
+          );
+          if (params.inputValue.trim() && !exists) {
             filtered.push({ inputValue: params.inputValue, name: `Add "${params.inputValue}"` });
           }
           return filtered;
@@ -239,10 +247,8 @@ export function OrderForm({ groupId, chemicalId, wishlistItemId, onDone }: Props
         </Stack>
       </Collapse>
 
-      {create.error instanceof Error && (
-        <Alert severity="error">
-          {(create.error as any).response?.data?.detail ?? create.error.message}
-        </Alert>
+      {create.error != null && (
+        <Alert severity="error">{errorMessage(create.error)}</Alert>
       )}
 
       <Stack direction="row" spacing={1} sx={{ justifyContent: "flex-end" }}>
@@ -250,9 +256,16 @@ export function OrderForm({ groupId, chemicalId, wishlistItemId, onDone }: Props
         <Button
           variant="contained"
           onClick={submit}
-          disabled={!chemicalId || !supplierId || !projectId || amount === "" || !unit}
+          disabled={
+            create.isPending ||
+            !chemicalId ||
+            !supplierId ||
+            !projectId ||
+            amount === "" ||
+            !unit
+          }
         >
-          Place order
+          {create.isPending ? "Placing order…" : "Place order"}
         </Button>
       </Stack>
     </Stack>

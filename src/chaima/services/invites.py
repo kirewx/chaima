@@ -4,6 +4,7 @@ import datetime
 from uuid import UUID
 
 from fastapi_users.password import PasswordHelper
+from sqlalchemy import func
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
 
@@ -18,6 +19,14 @@ class InviteExpiredError(Exception):
 
 class InviteUsedError(Exception):
     """Raised when an invite has already been used."""
+
+
+class AlreadyMemberError(Exception):
+    """Raised when the accepting user is already a member of the group."""
+
+
+class EmailAlreadyRegisteredError(Exception):
+    """Raised when an account with the given email already exists."""
 
 
 password_helper = PasswordHelper()
@@ -120,8 +129,21 @@ async def accept_invite_new_user(
         If the invite has expired.
     InviteUsedError
         If the invite has already been used.
+    EmailAlreadyRegisteredError
+        If an account with this email already exists.
     """
     _validate_invite(invite)
+
+    # Case-insensitive: fastapi-users normalizes email, so a differently-cased
+    # invite email must still match an existing account (else the INSERT below
+    # would hit the unique constraint and surface as a 500 instead of a 400).
+    existing = await session.exec(
+        select(User).where(func.lower(User.email) == email.lower())
+    )
+    if existing.first() is not None:
+        raise EmailAlreadyRegisteredError(
+            "An account with this email already exists; log in to accept the invite"
+        )
 
     hashed = password_helper.hash(password)
     user = User(
@@ -169,8 +191,19 @@ async def accept_invite_existing_user(
         If the invite has expired.
     InviteUsedError
         If the invite has already been used.
+    AlreadyMemberError
+        If the user is already a member of the group.
     """
     _validate_invite(invite)
+
+    existing = await session.exec(
+        select(UserGroupLink).where(
+            UserGroupLink.user_id == user.id,
+            UserGroupLink.group_id == invite.group_id,
+        )
+    )
+    if existing.first() is not None:
+        raise AlreadyMemberError("You are already a member of this group")
 
     link = UserGroupLink(user_id=user.id, group_id=invite.group_id)
     session.add(link)

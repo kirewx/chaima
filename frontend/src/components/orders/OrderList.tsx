@@ -25,7 +25,14 @@ function formatPrice(o: OrderRead): string {
 
 function isOverdue(o: OrderRead): boolean {
   if (!o.expected_arrival || o.status !== "ordered") return false;
-  return new Date(o.expected_arrival) < new Date();
+  // Compare at day granularity in local time — an order is overdue only
+  // once the expected day has fully passed, not on the expected day itself.
+  const [y, m, d] = o.expected_arrival.split("-").map(Number);
+  if (!y || !m || !d) return false;
+  const expected = new Date(y, m - 1, d);
+  const now = new Date();
+  const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  return expected < todayStart;
 }
 
 export function OrderList({ groupId, status }: Props) {

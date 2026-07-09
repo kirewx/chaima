@@ -43,10 +43,22 @@ class Chemical(SQLModel, table=True):
     creator: "User" = Relationship(
         sa_relationship_kwargs={"foreign_keys": "Chemical.created_by"}
     )
-    synonyms: list["ChemicalSynonym"] = Relationship(back_populates="chemical")
-    ghs_links: list["ChemicalGHS"] = Relationship(back_populates="chemical")
-    pstatement_links: list["ChemicalPStatement"] = Relationship(back_populates="chemical")
-    hazard_tag_links: list["ChemicalHazardTag"] = Relationship(back_populates="chemical")
+    synonyms: list["ChemicalSynonym"] = Relationship(
+        back_populates="chemical",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
+    ghs_links: list["ChemicalGHS"] = Relationship(
+        back_populates="chemical",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
+    pstatement_links: list["ChemicalPStatement"] = Relationship(
+        back_populates="chemical",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
+    hazard_tag_links: list["ChemicalHazardTag"] = Relationship(
+        back_populates="chemical",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
     containers: list["Container"] = Relationship(back_populates="chemical")
 
 

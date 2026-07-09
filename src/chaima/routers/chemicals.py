@@ -39,11 +39,23 @@ from chaima.services.structure import InvalidSmilesError, render_structure_svg
 router = APIRouter(prefix="/api/v1/groups/{group_id}/chemicals", tags=["chemicals"])
 
 
+def _hides_secret(exc, user) -> bool:
+    """True when a duplicate collides with a secret chemical the user can't see.
+
+    In that case the 409 body must not disclose the colliding chemical's id,
+    name, or archive status (only its owner or a superuser may learn those).
+    """
+    return bool(getattr(exc, "is_secret", False)) and not (
+        user.is_superuser or getattr(exc, "created_by", None) == user.id
+    )
+
+
 @router.get("/check-exists")
 async def check_chemical_exists(
     group_id: UUID,
     session: SessionDep,
     member: GroupMemberDep,
+    user: CurrentUserDep,
     name: str | None = Query(None),
     cas: str | None = Query(None),
 ) -> dict:
@@ -52,7 +64,8 @@ async def check_chemical_exists(
     Returns the existing chemical's id and archived status, or null.
     """
     chem = await chemical_service.find_existing(session, group_id, name=name, cas=cas)
-    if chem is None:
+    if chem is None or not chemical_service.can_view_chemical(chem, user):
+        # Never reveal a secret chemical's id/name to non-owners.
         return {"exists": False}
     return {
         "exists": True,
@@ -166,6 +179,11 @@ async def create_chemical(
             ghs_codes=body.ghs_codes,
         )
     except chemical_service.DuplicateNameError as exc:
+        if _hides_secret(exc, user):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A chemical with this name already exists in the group",
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -175,6 +193,11 @@ async def create_chemical(
             },
         )
     except chemical_service.DuplicateCasError as exc:
+        if _hides_secret(exc, user):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"A chemical with CAS '{body.cas}' already exists in the group",
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -302,6 +325,7 @@ async def get_chemical(
     chemical_id: UUID,
     session: SessionDep,
     member: GroupMemberDep,
+    user: CurrentUserDep,
 ) -> ChemicalDetail:
     """Get chemical detail including synonyms, GHS codes, and hazard tags.
 
@@ -327,7 +351,11 @@ async def get_chemical(
         404 if the chemical is not found or belongs to a different group.
     """
     chem = await chemical_service.get_chemical_detail(session, chemical_id)
-    if chem is None or chem.group_id != group_id:
+    if (
+        chem is None
+        or chem.group_id != group_id
+        or not chemical_service.can_view_chemical(chem, user)
+    ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chemical not found")
     return ChemicalDetail(
         **ChemicalRead.model_validate(chem, from_attributes=True).model_dump(),
@@ -353,6 +381,7 @@ async def get_chemical_structure_svg(
     chemical_id: UUID,
     session: SessionDep,
     member: GroupMemberDep,
+    user: CurrentUserDep,
 ) -> Response:
     """Render the chemical's structure as an SVG from its SMILES via RDKit.
 
@@ -383,7 +412,11 @@ async def get_chemical_structure_svg(
         group, or has no SMILES. 422 if RDKit cannot parse the SMILES.
     """
     chem = await session.get(Chemical, chemical_id)
-    if chem is None or chem.group_id != group_id:
+    if (
+        chem is None
+        or chem.group_id != group_id
+        or not chemical_service.can_view_chemical(chem, user)
+    ):
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND, detail="Chemical not found"
         )
@@ -418,6 +451,7 @@ async def update_chemical(
     body: ChemicalUpdate,
     session: SessionDep,
     member: GroupMemberDep,
+    user: CurrentUserDep,
 ) -> ChemicalRead:
     """Update chemical scalar fields.
 
@@ -445,13 +479,36 @@ async def update_chemical(
         404 if the chemical is not found or belongs to a different group.
     """
     chem = await chemical_service.get_chemical(session, chemical_id)
-    if chem is None or chem.group_id != group_id:
+    if (
+        chem is None
+        or chem.group_id != group_id
+        or not chemical_service.can_view_chemical(chem, user)
+    ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chemical not found")
     try:
         updated = await chemical_service.update_chemical(
             session, chem, **body.model_dump(exclude_unset=True)
         )
+    except chemical_service.DuplicateNameError as exc:
+        if _hides_secret(exc, user):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A chemical with this name already exists in the group",
+            )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": "A chemical with this name already exists in the group",
+                "existing_chemical_id": str(exc.chemical_id),
+                "is_archived": exc.is_archived,
+            },
+        )
     except chemical_service.DuplicateCasError as exc:
+        if _hides_secret(exc, user):
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=f"A chemical with CAS '{body.cas}' already exists in the group",
+            )
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={
@@ -464,40 +521,20 @@ async def update_chemical(
                 "is_archived": exc.is_archived,
             },
         )
-    await session.commit()
+    try:
+        await session.commit()
+    except IntegrityError:
+        await session.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="A chemical with this name already exists in the group",
+        )
     return ChemicalRead.model_validate(updated, from_attributes=True)
 
 
-@router.delete("/{chemical_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_chemical(
-    group_id: UUID,
-    chemical_id: UUID,
-    session: SessionDep,
-    member: GroupMemberDep,
-) -> None:
-    """Delete a chemical.
-
-    Parameters
-    ----------
-    group_id : UUID
-        Group the chemical belongs to.
-    chemical_id : UUID
-        Chemical ID.
-    session : SessionDep
-        Database session.
-    member : GroupMemberDep
-        Verified group membership.
-
-    Raises
-    ------
-    HTTPException
-        404 if the chemical is not found or belongs to a different group.
-    """
-    chem = await chemical_service.get_chemical(session, chemical_id)
-    if chem is None or chem.group_id != group_id:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chemical not found")
-    await chemical_service.delete_chemical(session, chem)
-    await session.commit()
+# NOTE: There is intentionally no hard-delete endpoint for chemicals. Removal
+# is a soft delete via POST /{chemical_id}/archive so inventory history is
+# never lost; permanent purging is a deliberate DB-level operation.
 
 
 @router.put("/{chemical_id}/synonyms", response_model=list[SynonymRead])
@@ -507,6 +544,7 @@ async def replace_synonyms(
     body: SynonymBulkUpdate,
     session: SessionDep,
     member: GroupMemberDep,
+    user: CurrentUserDep,
 ) -> list[SynonymRead]:
     """Bulk-replace all synonyms for a chemical.
 
@@ -534,7 +572,11 @@ async def replace_synonyms(
         404 if the chemical is not found or belongs to a different group.
     """
     chem = await chemical_service.get_chemical(session, chemical_id)
-    if chem is None or chem.group_id != group_id:
+    if (
+        chem is None
+        or chem.group_id != group_id
+        or not chemical_service.can_view_chemical(chem, user)
+    ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chemical not found")
     synonyms = await chemical_service.replace_synonyms(
         session, chemical_id, [s.model_dump() for s in body.synonyms]
@@ -550,6 +592,7 @@ async def replace_ghs_codes(
     body: GHSCodeBulkUpdate,
     session: SessionDep,
     member: GroupMemberDep,
+    user: CurrentUserDep,
 ) -> list[GHSCodeReadNested]:
     """Bulk-replace GHS code assignments for a chemical.
 
@@ -578,7 +621,11 @@ async def replace_ghs_codes(
         404 if the chemical is not found.
     """
     chem = await chemical_service.get_chemical(session, chemical_id)
-    if chem is None or chem.group_id != group_id:
+    if (
+        chem is None
+        or chem.group_id != group_id
+        or not chemical_service.can_view_chemical(chem, user)
+    ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chemical not found")
     try:
         codes = await chemical_service.replace_ghs_codes(session, chemical_id, body.ghs_ids)
@@ -594,6 +641,7 @@ async def archive(
     chemical_id: UUID,
     session: SessionDep,
     member: GroupMemberDep,
+    user: CurrentUserDep,
 ) -> None:
     """Archive a chemical (hide from default listing).
 
@@ -607,12 +655,21 @@ async def archive(
         Database session.
     member : GroupMemberDep
         Verified group membership.
+    user : CurrentUserDep
+        Authenticated user (secret visibility check).
 
     Raises
     ------
     HTTPException
-        404 if the chemical is not found.
+        404 if the chemical is not found or belongs to a different group.
     """
+    chem = await chemical_service.get_chemical(session, chemical_id)
+    if (
+        chem is None
+        or chem.group_id != group_id
+        or not chemical_service.can_view_chemical(chem, user)
+    ):
+        raise HTTPException(status_code=404, detail="Chemical not found")
     try:
         await chemical_service.archive_chemical(session, chemical_id)
     except chemical_service.ChemicalNotFound:
@@ -625,6 +682,7 @@ async def unarchive(
     chemical_id: UUID,
     session: SessionDep,
     member: GroupMemberDep,
+    user: CurrentUserDep,
 ) -> None:
     """Restore an archived chemical back to the default listing.
 
@@ -638,12 +696,21 @@ async def unarchive(
         Database session.
     member : GroupMemberDep
         Verified group membership.
+    user : CurrentUserDep
+        Authenticated user (secret visibility check).
 
     Raises
     ------
     HTTPException
-        404 if the chemical is not found.
+        404 if the chemical is not found or belongs to a different group.
     """
+    chem = await chemical_service.get_chemical(session, chemical_id)
+    if (
+        chem is None
+        or chem.group_id != group_id
+        or not chemical_service.can_view_chemical(chem, user)
+    ):
+        raise HTTPException(status_code=404, detail="Chemical not found")
     try:
         await chemical_service.unarchive_chemical(session, chemical_id)
     except chemical_service.ChemicalNotFound:
@@ -657,6 +724,7 @@ async def replace_hazard_tags(
     body: HazardTagBulkUpdate,
     session: SessionDep,
     member: GroupMemberDep,
+    user: CurrentUserDep,
 ) -> list[HazardTagReadNested]:
     """Bulk-replace hazard tag assignments for a chemical.
 
@@ -687,7 +755,11 @@ async def replace_hazard_tags(
         404 if the chemical is not found.
     """
     chem = await chemical_service.get_chemical(session, chemical_id)
-    if chem is None or chem.group_id != group_id:
+    if (
+        chem is None
+        or chem.group_id != group_id
+        or not chemical_service.can_view_chemical(chem, user)
+    ):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Chemical not found")
     try:
         tags = await chemical_service.replace_hazard_tags(
@@ -710,15 +782,22 @@ async def upload_sds(
     chemical_id: UUID,
     session: SessionDep,
     admin: GroupAdminDep,
+    user: CurrentUserDep,
     file: UploadFile = File(...),
 ) -> ChemicalRead:
     if file.content_type != "application/pdf":
         raise HTTPException(status_code=415, detail="SDS must be a PDF")
+    # Ownership check BEFORE writing anything to disk, so a rejected request
+    # never leaves an orphaned upload behind.
+    chem = await session.get(Chemical, chemical_id)
+    if (
+        chem is None
+        or chem.group_id != group_id
+        or not chemical_service.can_view_chemical(chem, user)
+    ):
+        raise HTTPException(status_code=404, detail="Chemical not found")
     data = await file.read()
     path = files_service.save_upload(group_id, file.filename or "sds.pdf", data)
-    chem = await session.get(Chemical, chemical_id)
-    if chem is None:
-        raise HTTPException(status_code=404, detail="Chemical not found")
     chem.sds_path = path
     session.add(chem)
     await session.commit()
@@ -732,6 +811,7 @@ async def view_sds(
     chemical_id: UUID,
     session: SessionDep,
     member: GroupMemberDep,
+    user: CurrentUserDep,
 ) -> FileResponse:
     """Stream the chemical's SDS PDF for inline display in the browser.
 
@@ -739,9 +819,11 @@ async def view_sds(
     the browser renders the PDF rather than downloading it.
     """
     chem = await session.get(Chemical, chemical_id)
-    if chem is None:
-        raise HTTPException(status_code=404, detail="Chemical not found")
-    if chem.group_id != group_id:
+    if (
+        chem is None
+        or chem.group_id != group_id
+        or not chemical_service.can_view_chemical(chem, user)
+    ):
         raise HTTPException(status_code=404, detail="Chemical not found")
     if not chem.sds_path:
         raise HTTPException(status_code=404, detail="No SDS uploaded")

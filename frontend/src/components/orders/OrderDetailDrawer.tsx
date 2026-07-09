@@ -16,6 +16,7 @@ import { useOrder, useCancelOrder } from "../../api/hooks/useOrders";
 import { useCurrentUser } from "../../api/hooks/useAuth";
 import { useGroupMembers } from "../../api/hooks/useGroups";
 import { useDrawer } from "../drawer/DrawerContext";
+import { errorMessage } from "../../utils/errorMessage";
 import { ReceiveOrderDialog } from "./ReceiveOrderDialog";
 
 interface Props {
@@ -25,7 +26,7 @@ interface Props {
 }
 
 export function OrderDetailDrawer({ groupId, orderId, onDone }: Props) {
-  const { data: order, isLoading } = useOrder(groupId, orderId);
+  const { data: order, isLoading, isError, error } = useOrder(groupId, orderId);
   const cancel = useCancelOrder(groupId, orderId);
   const { data: user } = useCurrentUser();
   const { data: members = [] } = useGroupMembers(groupId);
@@ -33,10 +34,24 @@ export function OrderDetailDrawer({ groupId, orderId, onDone }: Props) {
   const [showReceive, setShowReceive] = useState(false);
   const [showCancel, setShowCancel] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
+  const [cancelError, setCancelError] = useState<string | null>(null);
 
   const isCreator = !!user && !!order && user.id === order.ordered_by_user_id;
   const isGroupAdmin = !!user && members.some((m) => m.user_id === user.id && m.is_admin);
   const canCancel = !!user && (isCreator || isGroupAdmin || user.is_superuser);
+
+  if (isError) {
+    return (
+      <Stack spacing={2} sx={{ p: 2 }}>
+        <Alert severity="error">
+          {errorMessage(error, "Could not load this order.")}
+        </Alert>
+        <Button onClick={onDone} sx={{ alignSelf: "flex-start" }}>
+          Close
+        </Button>
+      </Stack>
+    );
+  }
 
   if (isLoading || !order) {
     return (
@@ -126,7 +141,10 @@ export function OrderDetailDrawer({ groupId, orderId, onDone }: Props) {
           <Button
             variant="outlined"
             color="error"
-            onClick={() => setShowCancel(true)}
+            onClick={() => {
+              setCancelError(null);
+              setShowCancel(true);
+            }}
           >
             Cancel
           </Button>
@@ -161,15 +179,29 @@ export function OrderDetailDrawer({ groupId, orderId, onDone }: Props) {
             value={cancelReason}
             onChange={(e) => setCancelReason(e.target.value)}
           />
+          {cancelError && (
+            <Alert severity="error" sx={{ mt: 1 }}>
+              {cancelError}
+            </Alert>
+          )}
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowCancel(false)}>Back</Button>
+          <Button onClick={() => setShowCancel(false)} disabled={cancel.isPending}>
+            Back
+          </Button>
           <Button
             color="error"
+            disabled={cancel.isPending}
             onClick={async () => {
-              await cancel.mutateAsync({
-                cancellation_reason: cancelReason || null,
-              });
+              setCancelError(null);
+              try {
+                await cancel.mutateAsync({
+                  cancellation_reason: cancelReason || null,
+                });
+              } catch (e) {
+                setCancelError(errorMessage(e, "Could not cancel the order."));
+                return;
+              }
               setShowCancel(false);
               onDone();
             }}

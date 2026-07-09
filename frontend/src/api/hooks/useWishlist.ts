@@ -43,10 +43,16 @@ export function useDismissWishlist(groupId: string) {
 }
 
 export function usePromoteWishlist(groupId: string) {
+  const qc = useQueryClient();
   return useMutation({
     mutationFn: (wishlistId: string) =>
       client
         .post(`/groups/${groupId}/wishlist/${wishlistId}/promote`)
         .then((r) => r.data as WishlistPromoteResult),
+    onSuccess: () => {
+      // Promotion may resolve/create a chemical and changes the item status.
+      qc.invalidateQueries({ queryKey: ["wishlist", groupId] });
+      qc.invalidateQueries({ queryKey: ["chemicals", groupId] });
+    },
   });
 }

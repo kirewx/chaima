@@ -14,7 +14,10 @@ class HazardTag(SQLModel, table=True):
     description: str | None = Field(default=None)
 
     group: "Group" = Relationship(back_populates="hazard_tags")
-    chemical_links: list["ChemicalHazardTag"] = Relationship(back_populates="hazard_tag")
+    chemical_links: list["ChemicalHazardTag"] = Relationship(
+        back_populates="hazard_tag",
+        sa_relationship_kwargs={"cascade": "all, delete-orphan"},
+    )
 
 
 class ChemicalHazardTag(SQLModel, table=True):

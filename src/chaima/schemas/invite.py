@@ -1,7 +1,7 @@
 import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, EmailStr, Field
 
 
 class InviteCreate(BaseModel):
@@ -66,11 +66,11 @@ class InviteAccept(BaseModel):
 
     Attributes
     ----------
-    email : str
+    email : EmailStr
         Email for the new account.
     password : str
-        Password for the new account.
+        Password for the new account (minimum 8 characters).
     """
 
-    email: str
-    password: str
+    email: EmailStr
+    password: str = Field(min_length=8)

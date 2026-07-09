@@ -1,4 +1,5 @@
 import {
+  Alert,
   Button,
   Dialog,
   DialogActions,
@@ -8,8 +9,9 @@ import {
   TextField,
   Typography,
 } from "@mui/material";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useCreateWishlist } from "../../api/hooks/useWishlist";
+import { errorMessage } from "../../utils/errorMessage";
 
 interface Props {
   open: boolean;
@@ -23,12 +25,22 @@ export function WishlistForm({ open, groupId, onDone }: Props) {
   const [freeformCas, setFreeformCas] = useState("");
   const [comment, setComment] = useState("");
 
+  // Reset stale mutation errors when the dialog (re)opens.
+  useEffect(() => {
+    if (open) create.reset();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
   const submit = async () => {
-    await create.mutateAsync({
-      freeform_name: freeformName,
-      freeform_cas: freeformCas || null,
-      comment: comment || null,
-    });
+    try {
+      await create.mutateAsync({
+        freeform_name: freeformName.trim(),
+        freeform_cas: freeformCas.trim() || null,
+        comment: comment.trim() || null,
+      });
+    } catch {
+      return; // surfaced via create.error below
+    }
     onDone();
     setFreeformName("");
     setFreeformCas("");
@@ -64,6 +76,9 @@ export function WishlistForm({ open, groupId, onDone }: Props) {
           <Typography variant="caption" color="text.secondary">
             Promote a wishlist item later to convert it into a real order.
           </Typography>
+          {create.error != null && (
+            <Alert severity="error">{errorMessage(create.error)}</Alert>
+          )}
         </Stack>
       </DialogContent>
       <DialogActions>

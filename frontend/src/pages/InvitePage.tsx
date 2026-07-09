@@ -12,6 +12,7 @@ import {
 } from "@mui/material";
 import { useInviteInfo, useAcceptInviteNewUser, useAcceptInviteExistingUser } from "../api/hooks/useInvites";
 import { useCurrentUser, useLogin } from "../api/hooks/useAuth";
+import { errorMessage } from "../utils/errorMessage";
 
 export default function InvitePage() {
   const { token } = useParams<{ token: string }>();
@@ -62,8 +63,11 @@ export default function InvitePage() {
   }
 
   const handleAcceptLoggedIn = () => {
+    setLocalError(null);
     acceptExisting.mutate(undefined, {
       onSuccess: () => navigate("/"),
+      onError: (err) =>
+        setLocalError(errorMessage(err, "Could not accept the invite.")),
     });
   };
 
@@ -97,6 +101,8 @@ export default function InvitePage() {
         onSuccess: () => {
           acceptExisting.mutate(undefined, {
             onSuccess: () => navigate("/"),
+            onError: (err) =>
+              setLocalError(errorMessage(err, "Could not accept the invite.")),
           });
         },
         onError: () => setLocalError("Invalid email or password"),
@@ -104,7 +110,7 @@ export default function InvitePage() {
     );
   };
 
-  const errorMessage = localError ?? (acceptNew.isError ? "Failed to create account" : null);
+  const displayError = localError ?? (acceptNew.isError ? "Failed to create account" : null);
 
   return (
     <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh", p: 2 }}>
@@ -117,7 +123,7 @@ export default function InvitePage() {
           Accept to join this group.
         </Typography>
 
-        {errorMessage && <Alert severity="error" sx={{ mb: 2 }}>{errorMessage}</Alert>}
+        {displayError && <Alert severity="error" sx={{ mb: 2 }}>{displayError}</Alert>}
 
         {isLoggedIn ? (
           <Box>
