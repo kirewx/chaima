@@ -1,0 +1,33 @@
+# Keep the build context small. .git is intentionally KEPT — hatch-vcs derives
+# the package version from git history during `uv build`.
+
+# Python / venv
+.venv/
+venv/
+env/
+**/__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Node / frontend deps (the build hook reinstalls them)
+node_modules/
+frontend/node_modules/
+frontend/dist/
+
+# Local runtime data — must never leak into the image
+.env
+chaima.db
+chaima.db-shm
+chaima.db-wal
+uploads/
+
+# Dev-only / docs / CI dirs not needed to build the wheel
+notebooks/
+presentation/
+docs/
+tests/
+.claude/
+.agents/
+.superpowers/

@@ -1,0 +1,3 @@
+{$CHAIMA_DOMAIN} {
+	reverse_proxy chaima:8000
+}

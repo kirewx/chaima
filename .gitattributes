@@ -1,0 +1,6 @@
+# Shell scripts and container config must keep LF endings so they work inside
+# Linux images regardless of the checkout platform (autocrlf is on here).
+*.sh text eol=lf
+docker/entrypoint.sh text eol=lf
+Dockerfile text eol=lf
+Caddyfile text eol=lf
