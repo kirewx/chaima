@@ -1,0 +1,28 @@
+services:
+  chaima:
+    image: ghcr.io/kirewx/chaima:latest
+    # To build locally from source instead of pulling the registry image,
+    # run: docker compose up -d --build   (uncomment the next line)
+    # build: .
+    restart: unless-stopped
+    env_file: .env
+    ports:
+      - "8000:8000"
+    volumes:
+      - chaima-data:/data
+    labels:
+      - "com.centurylinklabs.watchtower.enable=true"
+
+  # Auto-updates the chaima container when a new :latest image is pushed.
+  # Only touches containers labelled watchtower.enable=true.
+  watchtower:
+    image: containrrr/watchtower:latest
+    restart: unless-stopped
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    command: --label-enable --cleanup --interval 300
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+
+volumes:
+  chaima-data:
