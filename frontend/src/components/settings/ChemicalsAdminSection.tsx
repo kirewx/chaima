@@ -25,6 +25,10 @@ type RefetchGHSEvent =
   | { id: string; name: string; status: "updated" | "unchanged" | "skipped" | "error" }
   | { summary: { updated: number; unchanged: number; skipped: number; error: number } };
 
+type GestisBackfillEvent =
+  | { id: string; name: string; status: "resolved" | "skipped" | "not_found" | "error" }
+  | { summary: { resolved: number; skipped: number; not_found: number; error: number } };
+
 export function ChemicalsAdminSection({ groupId }: Props) {
   const [open, setOpen] = useState(false);
   const [events, setEvents] = useState<EnrichEvent[]>([]);
@@ -97,6 +101,7 @@ export function ChemicalsAdminSection({ groupId }: Props) {
         )}
 
         {isSuperuser && <RefetchGHSControl groupId={groupId} />}
+        {isSuperuser && <GestisBackfillControl groupId={groupId} />}
       </Stack>
 
       <Dialog open={open} onClose={() => !running && setOpen(false)} fullWidth maxWidth="sm">
@@ -219,6 +224,109 @@ function RefetchGHSControl({ groupId }: { groupId: string }) {
             <Alert severity="success">
               Updated {summary.summary.updated}, unchanged {summary.summary.unchanged},
               skipped {summary.summary.skipped}, errors {summary.summary.error}.
+            </Alert>
+          )}
+          {err && <Alert severity="error">{err}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          {!running && !summary && (
+            <>
+              <Button onClick={() => setOpen(false)}>Cancel</Button>
+              <Button variant="contained" onClick={start}>Start</Button>
+            </>
+          )}
+          {(running || summary) && (
+            <Button onClick={() => { setOpen(false); setEvents([]); }} disabled={running}>Close</Button>
+          )}
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+}
+
+function GestisBackfillControl({ groupId }: { groupId: string }) {
+  const [open, setOpen] = useState(false);
+  const [events, setEvents] = useState<GestisBackfillEvent[]>([]);
+  const [running, setRunning] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const start = async () => {
+    setRunning(true);
+    setEvents([]);
+    setErr(null);
+    try {
+      const resp = await fetch(`/api/v1/groups/${groupId}/chemicals/backfill-gestis`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ chemical_ids: null }),
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const reader = resp.body!.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split("\n");
+        buf = parts.pop()!;
+        for (const line of parts) {
+          if (!line.startsWith("data: ")) continue;
+          const ev = JSON.parse(line.slice(6)) as GestisBackfillEvent;
+          setEvents((prev) => [...prev, ev]);
+        }
+      }
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const summary = events.find((e) => "summary" in e) as
+    | { summary: { resolved: number; skipped: number; not_found: number; error: number } }
+    | undefined;
+  const perChemCount = events.filter((e) => "id" in e).length;
+
+  return (
+    <>
+      <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<ScienceIcon />}
+          onClick={() => setOpen(true)}
+        >
+          Resolve GESTIS links
+        </Button>
+        <Typography variant="body2" color="text.secondary">
+          Superuser-only. Stores the GESTIS substance id for every chemical
+          with a CAS number that has none yet.
+        </Typography>
+      </Stack>
+
+      <Dialog open={open} onClose={() => !running && setOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Resolve GESTIS links</DialogTitle>
+        <DialogContent>
+          {!running && !summary && (
+            <Typography>
+              This resolves the GESTIS substance id (ZVG) for every chemical in
+              this group that has a CAS number but no GESTIS link yet. The full
+              substance list is downloaded once; after that each chemical is a
+              local lookup, so this is fast.
+            </Typography>
+          )}
+          {running && (
+            <Stack spacing={2}>
+              <LinearProgress />
+              <Typography variant="body2">{perChemCount} processed…</Typography>
+            </Stack>
+          )}
+          {summary && (
+            <Alert severity="success">
+              Resolved {summary.summary.resolved}, skipped {summary.summary.skipped},
+              not found {summary.summary.not_found}, errors {summary.summary.error}.
             </Alert>
           )}
           {err && <Alert severity="error">{err}</Alert>}
