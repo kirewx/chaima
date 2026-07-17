@@ -24,6 +24,7 @@ from chaima.services.pubchem import (
 )
 from chaima.services.events import _persist_event
 from chaima.models.analytics import EventType
+from chaima.services import gestis as gestis_service
 
 
 def _merge_synonyms(existing: list[str], incoming: list[str]) -> list[str]:
@@ -79,6 +80,13 @@ async def enrich_one(session: AsyncSession, chemical: Chemical) -> EnrichStatus:
         chemical.smiles = result.smiles
     if result.molar_mass is not None and chemical.molar_mass is None:
         chemical.molar_mass = result.molar_mass
+
+    if chemical.cas and not chemical.zvg:
+        # Warm-index-only GESTIS resolution (never blocks on a download).
+        zvg = gestis_service.get_zvg_if_warm(chemical.cas)
+        if zvg:
+            chemical.zvg = zvg
+
     session.add(chemical)
     await session.flush()
 
