@@ -116,3 +116,14 @@ async def test_update_same_cas_keeps_zvg(session, group, user):
     gestis_service._index = {}
     updated = await chemical_service.update_chemical(session, chem, cas="64-17-5")
     assert updated.zvg == "010420"
+
+
+async def test_update_non_string_cas_clears_cas_and_zvg(session, group, user):
+    _warm_index({"64-17-5": "010420"})
+    chem = await chemical_service.create_chemical(
+        session, group_id=group.id, created_by=user.id,
+        name="Stoff", cas="64-17-5",
+    )
+    updated = await chemical_service.update_chemical(session, chem, cas=123)
+    assert updated.cas is None
+    assert updated.zvg is None

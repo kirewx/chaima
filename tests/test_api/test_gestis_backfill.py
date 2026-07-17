@@ -46,13 +46,17 @@ async def test_backfill_streams_events_and_summary(
         name="Cocaine", cas="50-36-2", group_id=group.id, created_by=superuser.id
     )
     no_cas = Chemical(name="Mystery", group_id=group.id, created_by=superuser.id)
-    session.add_all([resolvable, unknown_cas, no_cas])
+    bad_cas = Chemical(
+        name="Badcas", cas="00-00-0", group_id=group.id, created_by=superuser.id
+    )
+    session.add_all([resolvable, unknown_cas, no_cas, bad_cas])
     await session.commit()
 
     resp = await superuser_client.post(
         f"/api/v1/groups/{group.id}/chemicals/backfill-gestis",
         json={"chemical_ids": [
             str(resolvable.id), str(unknown_cas.id), str(no_cas.id),
+            str(bad_cas.id),
         ]},
     )
     assert resp.status_code == 200
@@ -62,9 +66,10 @@ async def test_backfill_streams_events_and_summary(
         "Ethanol": "resolved",
         "Cocaine": "not_found",
         "Mystery": "skipped",
+        "Badcas": "not_found",
     }
     summary = next(e for e in events if "summary" in e)["summary"]
-    assert summary == {"resolved": 1, "skipped": 1, "not_found": 1, "error": 0}
+    assert summary == {"resolved": 1, "skipped": 1, "not_found": 2, "error": 0}
 
     await session.refresh(resolvable)
     assert resolvable.zvg == "010420"

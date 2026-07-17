@@ -270,6 +270,7 @@ async def backfill_group_gestis(
         "resolved": 0, "skipped": 0, "not_found": 0, "error": 0
     }
     for chem in chemicals:
+        chem_status: GestisBackfillStatus
         if chem.zvg or not chem.cas:
             chem_status = "skipped"
         elif not index_available:
