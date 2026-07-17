@@ -28,10 +28,13 @@ class GroupUpdate(BaseModel):
         New name for the group, if provided.
     description : str or None
         New description for the group, if provided.
+    show_sds_research_links : bool or None
+        New value for the SDS research links flag, if provided.
     """
 
     name: str | None = None
     description: str | None = None
+    show_sds_research_links: bool | None = None
 
 
 class GroupRead(BaseModel):
@@ -45,6 +48,8 @@ class GroupRead(BaseModel):
         The name of the group.
     description : str or None
         Optional description of the group.
+    show_sds_research_links : bool
+        Whether the SDS research links row is shown in the chemical info box.
     created_at : datetime.datetime
         When the group was created.
     """
@@ -52,6 +57,7 @@ class GroupRead(BaseModel):
     id: UUID
     name: str
     description: str | None
+    show_sds_research_links: bool
     created_at: datetime.datetime
 
     model_config = {"from_attributes": True}

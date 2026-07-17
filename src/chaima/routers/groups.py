@@ -173,7 +173,7 @@ async def update_group(
     session: SessionDep,
     member: GroupAdminDep,
 ) -> GroupRead:
-    """Update a group's name or description.
+    """Update a group's name, description, or SDS research links flag.
 
     Parameters
     ----------
@@ -195,6 +195,7 @@ async def update_group(
         group,
         name=body.name,
         description=body.description,
+        show_sds_research_links=body.show_sds_research_links,
     )
     return GroupRead.model_validate(updated)
 

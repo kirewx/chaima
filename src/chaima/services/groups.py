@@ -153,6 +153,7 @@ async def update_group(
     *,
     name: str | None = None,
     description: str | None = None,
+    show_sds_research_links: bool | None = None,
 ) -> Group:
     """Update a group's name and/or description.
 
@@ -166,6 +167,8 @@ async def update_group(
         New name for the group, if provided.
     description : str or None, optional
         New description for the group, if provided.
+    show_sds_research_links : bool or None, optional
+        New value for the SDS research links flag, if provided.
 
     Returns
     -------
@@ -176,6 +179,8 @@ async def update_group(
         group.name = name
     if description is not None:
         group.description = description
+    if show_sds_research_links is not None:
+        group.show_sds_research_links = show_sds_research_links
     session.add(group)
     await session.flush()
     return group

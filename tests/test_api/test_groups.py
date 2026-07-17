@@ -241,3 +241,41 @@ async def test_update_member_role_as_admin(client, session, group, admin_members
     assert result.user_id == other_user.id
     assert result.is_admin is True
     assert result.email == "dave@example.com"
+
+
+@pytest.mark.asyncio
+async def test_group_read_includes_research_links_flag(client, group, membership):
+    """GET /api/v1/groups/{group_id} should expose show_sds_research_links (default true)."""
+    resp = await client.get(f"/api/v1/groups/{group.id}")
+    assert resp.status_code == 200
+    assert resp.json()["show_sds_research_links"] is True
+
+
+@pytest.mark.asyncio
+async def test_update_group_toggles_research_links(client, group, admin_membership):
+    """PATCH /api/v1/groups/{group_id} should toggle show_sds_research_links."""
+    resp = await client.patch(
+        f"/api/v1/groups/{group.id}",
+        json={"show_sds_research_links": False},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["show_sds_research_links"] is False
+    # Other fields untouched by the partial update.
+    assert resp.json()["name"] == group.name
+
+
+@pytest.mark.asyncio
+async def test_update_group_without_flag_keeps_it(client, group, admin_membership):
+    """A patch that omits show_sds_research_links must not change it."""
+    resp = await client.patch(
+        f"/api/v1/groups/{group.id}",
+        json={"show_sds_research_links": False},
+    )
+    assert resp.status_code == 200
+    resp = await client.patch(
+        f"/api/v1/groups/{group.id}",
+        json={"name": "Renamed"},
+    )
+    assert resp.status_code == 200
+    assert resp.json()["show_sds_research_links"] is False
+    assert resp.json()["name"] == "Renamed"
