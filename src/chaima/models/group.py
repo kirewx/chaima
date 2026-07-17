@@ -11,6 +11,7 @@ class Group(SQLModel, table=True):
     id: uuid_pkg.UUID = Field(default_factory=uuid_pkg.uuid4, primary_key=True)
     name: str = Field(unique=True, index=True)
     description: str | None = Field(default=None)
+    show_sds_research_links: bool = Field(default=True)
     created_at: datetime.datetime | None = Field(
         default=None,
         sa_column=Column(DateTime(timezone=True), server_default=func.now(), nullable=False),
