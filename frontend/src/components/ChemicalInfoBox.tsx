@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Alert, Box, Button, Chip, Stack, Typography, Link as MuiLink } from "@mui/material";
 import LinkIcon from "@mui/icons-material/Link";
 import DescriptionIcon from "@mui/icons-material/Description";
@@ -18,6 +18,7 @@ import { HazardStatementsDialog } from "./HazardStatementsDialog";
 import { worstSignalWord } from "../utils/hazardSignal";
 import { useChemicalStructureSvg } from "../api/hooks/useChemicalStructureSvg";
 import { useUploadSDS } from "../api/hooks/useChemicals";
+import { gestisUrl, useGestisResolve } from "../api/hooks/useGestis";
 import { useIsGroupAdmin } from "../api/hooks/useGroups";
 import { useDrawer } from "./drawer/DrawerContext";
 import { useOrders } from "../api/hooks/useOrders";
@@ -54,6 +55,16 @@ export function ChemicalInfoBox({
   const uploadSds = useUploadSDS(groupId, chemical.id);
   const [sdsError, setSdsError] = useState<string | null>(null);
   const isAdmin = useIsGroupAdmin(groupId);
+
+  const resolveGestis = useGestisResolve(groupId, chemical.id);
+  const resolveGestisMutate = resolveGestis.mutate;
+  // Auto-resolve once per opened chemical: only when a CAS exists but no
+  // zvg is stored yet. A miss changes nothing, so the effect won't re-fire
+  // until the box is reopened — misses are retried on the next open.
+  useEffect(() => {
+    if (chemical.zvg || !chemical.cas) return;
+    resolveGestisMutate();
+  }, [chemical.id, chemical.zvg, chemical.cas, resolveGestisMutate]);
 
   const onSdsSelected = async (file: File) => {
     setSdsError(null);
@@ -335,6 +346,19 @@ export function ChemicalInfoBox({
           <Typography variant="caption" color="text.disabled" sx={{ display: "block", mb: 0.5 }}>
             No PubChem link
           </Typography>
+        )}
+        {chemical.zvg && (
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", mb: 0.5 }}>
+            <LinkIcon sx={{ fontSize: 12, color: "primary.main" }} />
+            <MuiLink
+              href={gestisUrl(chemical.zvg)}
+              target="_blank"
+              rel="noopener"
+              sx={{ fontSize: 11 }}
+            >
+              GESTIS {chemical.zvg}
+            </MuiLink>
+          </Stack>
         )}
         {chemical.sds_path ? (
           <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", flexWrap: "wrap" }}>
