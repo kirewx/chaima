@@ -4,6 +4,7 @@ import LinkIcon from "@mui/icons-material/Link";
 import DescriptionIcon from "@mui/icons-material/Description";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import SearchIcon from "@mui/icons-material/Search";
 import type {
   ChemicalRead,
   ContainerRead,
@@ -19,10 +20,11 @@ import { worstSignalWord } from "../utils/hazardSignal";
 import { useChemicalStructureSvg } from "../api/hooks/useChemicalStructureSvg";
 import { useUploadSDS } from "../api/hooks/useChemicals";
 import { gestisUrl, useGestisResolve } from "../api/hooks/useGestis";
-import { useIsGroupAdmin } from "../api/hooks/useGroups";
+import { useGroup, useIsGroupAdmin } from "../api/hooks/useGroups";
 import { useDrawer } from "./drawer/DrawerContext";
 import { useOrders } from "../api/hooks/useOrders";
 import { RoleGate } from "./RoleGate";
+import { casSearchUrl, sdsPdfSearchUrl } from "../utils/sdsResearch";
 
 interface Props {
   chemical: ChemicalRead;
@@ -55,6 +57,7 @@ export function ChemicalInfoBox({
   const uploadSds = useUploadSDS(groupId, chemical.id);
   const [sdsError, setSdsError] = useState<string | null>(null);
   const isAdmin = useIsGroupAdmin(groupId);
+  const { data: group } = useGroup(groupId);
 
   const resolveGestis = useGestisResolve(groupId, chemical.id);
   const resolveGestisMutate = resolveGestis.mutate;
@@ -359,6 +362,32 @@ export function ChemicalInfoBox({
               GESTIS {chemical.zvg}
             </MuiLink>
           </Stack>
+        )}
+        {isAdmin && !chemical.sds_path && chemical.cas && group?.show_sds_research_links && (
+          <>
+            <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", mb: 0.5 }}>
+              <SearchIcon sx={{ fontSize: 12, color: "primary.main" }} />
+              <MuiLink
+                href={casSearchUrl(chemical.cas)}
+                target="_blank"
+                rel="noopener"
+                sx={{ fontSize: 11 }}
+              >
+                CAS-Recherche (Google)
+              </MuiLink>
+            </Stack>
+            <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", mb: 0.5 }}>
+              <SearchIcon sx={{ fontSize: 12, color: "primary.main" }} />
+              <MuiLink
+                href={sdsPdfSearchUrl(chemical.cas)}
+                target="_blank"
+                rel="noopener"
+                sx={{ fontSize: 11 }}
+              >
+                SDS-PDF-Suche (Google)
+              </MuiLink>
+            </Stack>
+          </>
         )}
         {chemical.sds_path ? (
           <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", flexWrap: "wrap" }}>
