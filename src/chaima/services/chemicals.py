@@ -17,6 +17,7 @@ from chaima.models.hazard import ChemicalHazardTag, HazardTag
 from chaima.models.pstatement import ChemicalPStatement, PStatement
 from chaima.models.supplier import Supplier
 from chaima.models.user import User
+from chaima.services import gestis as gestis_service
 
 
 class CrossGroupError(Exception):
@@ -275,11 +276,16 @@ async def create_chemical(
                 created_by=existing_by_cas.created_by,
             )
 
+    # Warm-index-only GESTIS resolution: never waits on a network download
+    # (cold index → zvg stays null; the info-box resolve catches up later).
+    zvg = gestis_service.get_zvg_if_warm(cas) if cas else None
+
     chem = Chemical(
         group_id=group_id,
         created_by=created_by,
         name=name,
         cas=cas,
+        zvg=zvg,
         smiles=smiles,
         cid=cid,
         structure=structure,
@@ -562,6 +568,13 @@ async def update_chemical(
                     created_by=existing_by_cas.created_by,
                 )
         kwargs["cas"] = new_cas
+        # A CAS change invalidates the stored zvg; re-resolve against the
+        # warm index only (a stale deeplink must never point at the wrong
+        # substance, and updates must never wait on GESTIS).
+        if new_cas != chemical.cas:
+            kwargs["zvg"] = (
+                gestis_service.get_zvg_if_warm(new_cas) if new_cas else None
+            )
 
     new_name = kwargs.get("name")
     if isinstance(new_name, str) and new_name.lower() != chemical.name.lower():
