@@ -1,7 +1,7 @@
 # SDS Research Links ("Hilfsliste") — Design
 
 **Date:** 2026-07-17
-**Status:** Approved by user (chat), pending spec review
+**Status:** Approved and implemented on `feat/sds-research-links`
 **Prerequisite:** `feat/gestis-deeplinks` is merged to `main` first; this feature branches from `main` afterwards.
 
 ## Problem
@@ -61,8 +61,9 @@ Rows (styling identical to existing link rows: 11px link, 12px icon,
 ### Frontend — Settings → Chemicals
 
 In `ChemicalsAdminSection` (next to the GESTIS backfill control): a switch
-"SDS-Recherche-Links anzeigen" with a one-line help text, wired to the group
-patch mutation, invalidating the group query on success.
+"Show SDS research links" (English, matching the rest of the Settings UI)
+with a one-line help text, wired to the group patch mutation, invalidating
+the group query on success.
 
 ### Testing
 
