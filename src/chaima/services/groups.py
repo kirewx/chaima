@@ -155,7 +155,7 @@ async def update_group(
     description: str | None = None,
     show_sds_research_links: bool | None = None,
 ) -> Group:
-    """Update a group's name and/or description.
+    """Update a group's name, description, and/or SDS research links flag.
 
     Parameters
     ----------

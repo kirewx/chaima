@@ -248,7 +248,9 @@ async def test_group_read_includes_research_links_flag(client, group, membership
     """GET /api/v1/groups/{group_id} should expose show_sds_research_links (default true)."""
     resp = await client.get(f"/api/v1/groups/{group.id}")
     assert resp.status_code == 200
-    assert resp.json()["show_sds_research_links"] is True
+
+    result = GroupRead.model_validate(resp.json())
+    assert result.show_sds_research_links is True
 
 
 @pytest.mark.asyncio
@@ -259,9 +261,11 @@ async def test_update_group_toggles_research_links(client, group, admin_membersh
         json={"show_sds_research_links": False},
     )
     assert resp.status_code == 200
-    assert resp.json()["show_sds_research_links"] is False
+
+    result = GroupRead.model_validate(resp.json())
+    assert result.show_sds_research_links is False
     # Other fields untouched by the partial update.
-    assert resp.json()["name"] == group.name
+    assert result.name == group.name
 
 
 @pytest.mark.asyncio
@@ -277,5 +281,7 @@ async def test_update_group_without_flag_keeps_it(client, group, admin_membershi
         json={"name": "Renamed"},
     )
     assert resp.status_code == 200
-    assert resp.json()["show_sds_research_links"] is False
-    assert resp.json()["name"] == "Renamed"
+
+    result = GroupRead.model_validate(resp.json())
+    assert result.show_sds_research_links is False
+    assert result.name == "Renamed"
