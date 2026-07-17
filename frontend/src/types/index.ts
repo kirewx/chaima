@@ -88,6 +88,7 @@ export interface ChemicalRead {
   cas: string | null;
   smiles: string | null;
   cid: string | null;
+  zvg: string | null;
   structure: string | null;
   molar_mass: number | null;
   density: number | null;
