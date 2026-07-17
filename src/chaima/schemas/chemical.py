@@ -222,6 +222,8 @@ class ChemicalRead(BaseModel):
         SMILES notation.
     cid : str or None
         PubChem compound ID.
+    zvg : str or None
+        GESTIS internal substance ID (zero-padded to 6 chars).
     structure : str or None
         Structure data.
     molar_mass : float or None
@@ -249,6 +251,7 @@ class ChemicalRead(BaseModel):
     cas: str | None
     smiles: str | None
     cid: str | None
+    zvg: str | None = None
     structure: str | None
     molar_mass: float | None
     density: float | None

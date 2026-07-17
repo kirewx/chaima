@@ -15,6 +15,7 @@ class Chemical(SQLModel, table=True):
     cas: str | None = Field(default=None, index=True)
     smiles: str | None = Field(default=None)
     cid: str | None = Field(default=None)
+    zvg: str | None = Field(default=None)
     structure: str | None = Field(default=None)
     molar_mass: float | None = Field(default=None)
     density: float | None = Field(default=None)
