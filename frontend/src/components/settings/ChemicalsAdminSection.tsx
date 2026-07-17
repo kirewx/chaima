@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import {
   Alert, Autocomplete, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle,
-  LinearProgress, Stack, TextField, Typography,
+  FormControlLabel, LinearProgress, Stack, Switch, TextField, Typography,
 } from "@mui/material";
 import ScienceIcon from "@mui/icons-material/Science";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
@@ -10,6 +10,7 @@ import { useChemicals, useChemicalDetail } from "../../api/hooks/useChemicals";
 import { useHazardTags } from "../../api/hooks/useHazardTags";
 import { useGHSCodes } from "../../api/hooks/useGHSCodes";
 import { useCurrentUser } from "../../api/hooks/useAuth";
+import { useGroup, useUpdateGroup, useIsGroupAdmin } from "../../api/hooks/useGroups";
 import client from "../../api/client";
 import type { ChemicalRead } from "../../types";
 
@@ -37,6 +38,7 @@ export function ChemicalsAdminSection({ groupId }: Props) {
 
   const { data: currentUser } = useCurrentUser();
   const isSuperuser = !!currentUser?.is_superuser;
+  const isGroupAdmin = useIsGroupAdmin(groupId);
 
   const start = async () => {
     setRunning(true);
@@ -84,6 +86,7 @@ export function ChemicalsAdminSection({ groupId }: Props) {
         subtitle="Bulk maintenance operations for this group's chemical database."
       />
       <Stack spacing={2} sx={{ maxWidth: 600 }}>
+        {isGroupAdmin && <ResearchLinksToggle groupId={groupId} />}
         {isSuperuser && (
           <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
             <Button
@@ -457,5 +460,34 @@ function AssignHazardsDebug({ groupId }: { groupId: string }) {
         )}
       </Stack>
     </Box>
+  );
+}
+
+function ResearchLinksToggle({ groupId }: { groupId: string }) {
+  const { data: group } = useGroup(groupId);
+  const update = useUpdateGroup(groupId);
+
+  if (!group) return null;
+  return (
+    <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+      <FormControlLabel
+        control={
+          <Switch
+            size="small"
+            checked={group.show_sds_research_links}
+            disabled={update.isPending}
+            onChange={(e) =>
+              update.mutate({ show_sds_research_links: e.target.checked })
+            }
+          />
+        }
+        label="Show SDS research links"
+        slotProps={{ typography: { variant: "body2" } }}
+      />
+      <Typography variant="body2" color="text.secondary">
+        Admins see Google research links on chemicals with a CAS but no
+        uploaded SDS.
+      </Typography>
+    </Stack>
   );
 }
