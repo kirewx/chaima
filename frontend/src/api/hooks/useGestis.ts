@@ -27,23 +27,28 @@ export function useGestisResolve(groupId: string, chemicalId: string) {
         ["chemicals", groupId, chemicalId],
         (old) => (old ? { ...old, zvg } : old),
       );
-      // List queries: infinite data with paginated pages. The prefix also
-      // matches detail keys, so guard on the "pages" shape.
-      queryClient.setQueriesData<InfiniteData<PaginatedResponse<ChemicalRead>>>(
-        { queryKey: ["chemicals", groupId] },
-        (old) => {
-          if (!old || !("pages" in old)) return old;
-          return {
-            ...old,
-            pages: old.pages.map((page) => ({
-              ...page,
-              items: page.items.map((c) =>
-                c.id === chemicalId ? { ...c, zvg } : c,
-              ),
-            })),
-          };
-        },
-      );
+      // List queries come in two shapes under the ["chemicals", groupId]
+      // prefix: infinite data ({ pages }) from useChemicals, and plain
+      // PaginatedResponse ({ items }) from useMultiGroupChemicals. The
+      // prefix also matches detail keys — anything else passes through.
+      const patchItems = (page: PaginatedResponse<ChemicalRead>) => ({
+        ...page,
+        items: page.items.map((c) =>
+          c.id === chemicalId ? { ...c, zvg } : c,
+        ),
+      });
+      queryClient.setQueriesData<
+        InfiniteData<PaginatedResponse<ChemicalRead>> | PaginatedResponse<ChemicalRead>
+      >({ queryKey: ["chemicals", groupId] }, (old) => {
+        if (!old) return old;
+        if ("pages" in old) {
+          return { ...old, pages: old.pages.map(patchItems) };
+        }
+        if ("items" in old) {
+          return patchItems(old);
+        }
+        return old;
+      });
     },
   });
 }
