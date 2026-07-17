@@ -918,3 +918,25 @@ async def refetch_ghs(
             yield f"data: {json.dumps(event)}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@router.post("/backfill-gestis")
+async def backfill_gestis(
+    group_id: UUID,
+    body: EnrichBody,
+    session: SessionDep,
+    user: SuperuserDep,
+) -> StreamingResponse:
+    """Stream a bulk CAS→ZVG resolution for chemicals in the group.
+
+    Superuser-only. Defaults to every chemical with a CAS and no stored
+    ``zvg``. Resolution is a local index lookup after a single list
+    download, so the stream runs without throttling.
+    """
+    async def generate():
+        async for event in enrich_service.backfill_group_gestis(
+            session, group_id, body.chemical_ids,
+        ):
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")

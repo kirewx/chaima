@@ -39,6 +39,7 @@ def _merge_synonyms(existing: list[str], incoming: list[str]) -> list[str]:
 
 EnrichStatus = Literal["enriched", "skipped", "not_found", "error"]
 RefetchGHSStatus = Literal["updated", "unchanged", "skipped", "error"]
+GestisBackfillStatus = Literal["resolved", "skipped", "not_found", "error"]
 
 
 async def enrich_one(session: AsyncSession, chemical: Chemical) -> EnrichStatus:
@@ -234,5 +235,55 @@ async def refetch_group_ghs(
         yield {"id": str(chem.id), "name": chem.name, "status": status}
         await session.commit()
         await asyncio.sleep(0.25)
+
+    yield {"summary": counts}
+
+
+async def backfill_group_gestis(
+    session: AsyncSession,
+    group_id: UUID,
+    chemical_ids: list[UUID] | None,
+) -> AsyncGenerator[dict, None]:
+    """Yield SSE-style events while resolving GESTIS ZVGs for a group.
+
+    Default selection (``chemical_ids`` None): every chemical with a CAS
+    and no ``zvg`` yet. The index is loaded once up front (the only call
+    that may download the substance list); per-chemical resolution is a
+    local dict lookup, so — unlike the PubChem backfills — the loop needs
+    no throttle delay. One commit per chemical so progress survives
+    interruption.
+    """
+    stmt = select(Chemical).where(Chemical.group_id == group_id)
+    if chemical_ids is not None:
+        stmt = stmt.where(Chemical.id.in_(chemical_ids))
+    else:
+        stmt = stmt.where(
+            Chemical.cas.is_not(None),  # type: ignore[union-attr]
+            Chemical.zvg.is_(None),  # type: ignore[union-attr]
+        )
+    result = await session.exec(stmt)
+    chemicals = list(result.all())
+
+    index_available = await gestis_service.load_index()
+
+    counts: dict[str, int] = {
+        "resolved": 0, "skipped": 0, "not_found": 0, "error": 0
+    }
+    for chem in chemicals:
+        if chem.zvg or not chem.cas:
+            chem_status = "skipped"
+        elif not index_available:
+            chem_status = "error"
+        else:
+            zvg = gestis_service.get_zvg_if_warm(chem.cas)
+            if zvg is None:
+                chem_status = "not_found"
+            else:
+                chem.zvg = zvg
+                session.add(chem)
+                chem_status = "resolved"
+        counts[chem_status] += 1
+        yield {"id": str(chem.id), "name": chem.name, "status": chem_status}
+        await session.commit()
 
     yield {"summary": counts}
