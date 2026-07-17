@@ -37,6 +37,7 @@ from chaima.routers.suppliers import router as suppliers_router
 from chaima.routers.admin_analytics import router as admin_analytics_router
 from chaima.schemas import UserRead, UserUpdate
 from chaima.middleware.slow_request import SlowRequestMiddleware
+from chaima.services.gestis import preload_index
 from chaima.services.seed import run_seeds
 
 logger = logging.getLogger(__name__)
@@ -148,7 +149,11 @@ async def lifespan(app: FastAPI):
     async with async_session_maker() as session:
         await seed_admin(session)
         await run_seeds(session)
+    # Background pre-load of the GESTIS CAS→ZVG index (~8,740 entries, one
+    # request). Never blocks startup; failures degrade to on-demand loads.
+    preload_task = asyncio.create_task(preload_index())
     yield
+    preload_task.cancel()
 
 
 app = FastAPI(title="ChAIMa", lifespan=lifespan)
