@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     # use (secret_key / admin password). Keeps local dev frictionless while
     # letting container deploys hard-fail via CHAIMA_REQUIRE_SECURE_CONFIG=true.
     require_secure_config: bool = False
+    # GESTIS (DGUV hazardous-substance database) API. The shipped key is the
+    # public web-client key from GESTIS's own SPA (env-config.js) — it is
+    # served in cleartext to every browser, so it is public by design, not a
+    # secret. Override via CHAIMA_GESTIS_API_KEY like any other setting.
+    gestis_api_base: str = "https://gestis-api.dguv.de/api"
+    gestis_api_key: str = "dddiiasjhduuvnnasdkkwUUSHhjaPPKMasd"
 
     model_config = SettingsConfigDict(env_prefix="CHAIMA_")
 

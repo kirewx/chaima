@@ -85,6 +85,8 @@ All variables are prefixed `CHAIMA_`. See `.env.example` for the full list.
 | `CHAIMA_DOMAIN` | Domain for the Caddy overlay | empty |
 | `CHAIMA_GEMINI_API_KEY` | Google AI key for label OCR (optional) | empty (feature off) |
 | `CHAIMA_GEMINI_MODEL` | Gemini model for OCR | `gemini-2.5-flash` |
+| `CHAIMA_GESTIS_API_BASE` | Base URL of the GESTIS (DGUV) substance database API | `https://gestis-api.dguv.de/api` |
+| `CHAIMA_GESTIS_API_KEY` | Bearer token for the GESTIS API — override only if DGUV rotates it | GESTIS's public web-client key |
 
 To use Postgres instead of SQLite, set e.g.
 `CHAIMA_DATABASE_URL=postgresql+asyncpg://user:pass@db:5432/chaima` (and add a

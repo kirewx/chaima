@@ -26,6 +26,8 @@ from chaima.schemas.chemical import (
     SynonymRead,
 )
 from chaima.schemas.pagination import PaginatedResponse
+from chaima.schemas.gestis import GestisResolveResult
+from chaima.services import gestis as gestis_service
 from chaima.models.chemical import Chemical
 from chaima.services import chemicals as chemical_service
 from chaima.services.events import log_event, _persist_event
@@ -839,6 +841,45 @@ async def view_sds(
     )
 
 
+@router.post("/{chemical_id}/gestis-resolve", response_model=GestisResolveResult)
+async def resolve_gestis(
+    group_id: UUID,
+    chemical_id: UUID,
+    session: SessionDep,
+    member: GroupMemberDep,
+    user: CurrentUserDep,
+) -> GestisResolveResult:
+    """Resolve the chemical's CAS to a GESTIS ZVG and persist it.
+
+    Idempotent: a stored ``zvg`` is returned without an upstream call.
+    GESTIS being unreachable or the CAS not being listed both yield 200
+    with nulls — upstream problems never surface as 5xx (only auth or
+    ownership errors produce 4xx).
+    """
+    chem = await chemical_service.get_chemical(session, chemical_id)
+    if (
+        chem is None
+        or chem.group_id != group_id
+        or not chemical_service.can_view_chemical(chem, user)
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Chemical not found"
+        )
+    if chem.zvg:
+        return GestisResolveResult(
+            zvg=chem.zvg, url=gestis_service.gestis_url(chem.zvg)
+        )
+    if not chem.cas:
+        return GestisResolveResult(zvg=None, url=None)
+    zvg = await gestis_service.get_zvg(chem.cas)
+    if zvg is None:
+        return GestisResolveResult(zvg=None, url=None)
+    chem.zvg = zvg
+    session.add(chem)
+    await session.commit()
+    return GestisResolveResult(zvg=zvg, url=gestis_service.gestis_url(zvg))
+
+
 class EnrichBody(BaseModel):
     chemical_ids: list[UUID] | None = None
 
@@ -872,6 +913,28 @@ async def refetch_ghs(
     """
     async def generate():
         async for event in enrich_service.refetch_group_ghs(
+            session, group_id, body.chemical_ids,
+        ):
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@router.post("/backfill-gestis")
+async def backfill_gestis(
+    group_id: UUID,
+    body: EnrichBody,
+    session: SessionDep,
+    user: SuperuserDep,
+) -> StreamingResponse:
+    """Stream a bulk CAS→ZVG resolution for chemicals in the group.
+
+    Superuser-only. Defaults to every chemical with a CAS and no stored
+    ``zvg``. Resolution is a local index lookup after a single list
+    download, so the stream runs without throttling.
+    """
+    async def generate():
+        async for event in enrich_service.backfill_group_gestis(
             session, group_id, body.chemical_ids,
         ):
             yield f"data: {json.dumps(event)}\n\n"
