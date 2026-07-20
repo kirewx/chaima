@@ -18,9 +18,11 @@ RUN uv build --wheel --out-dir /dist
 # ---- Runtime: install wheel, migrate, serve ----
 FROM python:3.13-slim AS runtime
 
-# X11 libs required by RDKit's drawing module (rdMolDraw2D).
+# System libs required by RDKit's drawing module (rdMolDraw2D):
+# X11 rendering (libxrender1, libxext6) and XML parsing (libexpat1),
+# none of which ship with python:slim.
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends libxrender1 libxext6 \
+    && apt-get install -y --no-install-recommends libxrender1 libxext6 libexpat1 \
     && rm -rf /var/lib/apt/lists/*
 
 # Non-root runtime user.
