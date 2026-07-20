@@ -18,6 +18,11 @@ RUN uv build --wheel --out-dir /dist
 # ---- Runtime: install wheel, migrate, serve ----
 FROM python:3.13-slim AS runtime
 
+# X11 libs required by RDKit's drawing module (rdMolDraw2D).
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libxrender1 libxext6 \
+    && rm -rf /var/lib/apt/lists/*
+
 # Non-root runtime user.
 RUN groupadd --system chaima \
     && useradd --system --gid chaima --create-home chaima
