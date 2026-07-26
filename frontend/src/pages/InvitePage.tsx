@@ -13,6 +13,7 @@ import {
 import { useInviteInfo, useAcceptInviteNewUser, useAcceptInviteExistingUser } from "../api/hooks/useInvites";
 import { useCurrentUser, useLogin } from "../api/hooks/useAuth";
 import { errorMessage } from "../utils/errorMessage";
+import { Wordmark } from "../components/Wordmark";
 
 export default function InvitePage() {
   const { token } = useParams<{ token: string }>();
@@ -115,7 +116,7 @@ export default function InvitePage() {
   return (
     <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh", p: 2 }}>
       <Paper sx={{ p: 4, maxWidth: 400, width: "100%" }}>
-        <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>ChAIMa</Typography>
+        <Typography variant="h4" sx={{ mb: 1 }}><Wordmark /></Typography>
         <Typography variant="h6" sx={{ mb: 1 }}>
           You've been invited to <strong>{invite.group_name}</strong>
         </Typography>

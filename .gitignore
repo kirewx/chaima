@@ -238,3 +238,4 @@ chaima.db-wal
 # Local-only files
 presentation/
 skills-lock.json
+design/

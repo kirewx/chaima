@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { Box, TextField, Button, Typography, Alert, Paper } from "@mui/material";
 import { useLogin } from "../api/hooks/useAuth";
+import { Wordmark } from "../components/Wordmark";
 
 export default function LoginPage() {
   const [email, setEmail] = useState("");
@@ -17,7 +18,7 @@ export default function LoginPage() {
   return (
     <Box sx={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "100vh", p: 2 }}>
       <Paper sx={{ p: 4, maxWidth: 400, width: "100%" }}>
-        <Typography variant="h4" sx={{ mb: 1, fontWeight: 700 }}>ChAIMa</Typography>
+        <Typography variant="h4" sx={{ mb: 1 }}><Wordmark /></Typography>
         <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>Sign in to your account</Typography>
         {login.isError && <Alert severity="error" sx={{ mb: 2 }}>Invalid email or password</Alert>}
         <Box component="form" onSubmit={handleSubmit}>

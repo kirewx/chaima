@@ -10,6 +10,7 @@ import { useCurrentUser, useLogout } from "../api/hooks/useAuth";
 import { useUpdateMe } from "../api/hooks/useUpdateMe";
 import { DrawerProvider } from "./drawer/DrawerContext";
 import { EditDrawer } from "./drawer/EditDrawer";
+import { Wordmark } from "./Wordmark";
 
 const navItems = [
   { to: "/", label: "Chemicals" },
@@ -47,9 +48,7 @@ export default function Layout() {
         sx={{ borderBottom: "1px solid", borderColor: "divider", bgcolor: "background.paper" }}
       >
         <Toolbar sx={{ minHeight: 52, gap: 2 }}>
-          <Box sx={{ fontWeight: 700, fontSize: 16, letterSpacing: "-0.01em" }}>
-            ChAIMa
-          </Box>
+          <Wordmark sx={{ fontSize: 16 }} />
           <Box sx={{ display: { xs: "none", sm: "flex" }, gap: 0.5, ml: 2 }}>
             {navItems.map((n) => (
               <Button
