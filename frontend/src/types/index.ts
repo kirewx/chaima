@@ -21,6 +21,7 @@ export interface GroupRead {
   name: string;
   description: string | null;
   created_at: string;
+  show_sds_research_links: boolean;
 }
 
 export interface GroupCreate {
@@ -31,6 +32,7 @@ export interface GroupCreate {
 export interface GroupUpdate {
   name?: string;
   description?: string | null;
+  show_sds_research_links?: boolean;
 }
 
 export interface MemberRead {
