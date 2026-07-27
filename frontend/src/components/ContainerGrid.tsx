@@ -2,8 +2,9 @@ import { Box, Button, Stack, Typography } from "@mui/material";
 import AddIcon from "@mui/icons-material/Add";
 import type { ContainerRead } from "../types";
 import { ContainerCard } from "./ContainerCard";
-import { useStorageLocation } from "../api/hooks/useStorageLocations";
+import { useStorageTree } from "../api/hooks/useStorageLocations";
 import { useSupplier } from "../api/hooks/useSuppliers";
+import { displayTrail, findLocationTrail } from "../utils/locationPath";
 
 interface Props {
   groupId: string;
@@ -53,14 +54,17 @@ function ContainerCardWithLookups({
   groupId: string;
   container: ContainerRead;
 }) {
-  const { data: loc } = useStorageLocation(groupId, container.location_id);
+  const { data: tree = [] } = useStorageTree(groupId);
   const { data: supplier } = useSupplier(groupId, container.supplier_id);
+  const trail = findLocationTrail(tree, container.location_id);
+  const names = trail ? displayTrail(trail).map((n) => n.name) : undefined;
+  const leafColor = trail ? trail[trail.length - 1].color : undefined;
   return (
     <ContainerCard
       container={container}
       groupId={groupId}
-      locationName={loc?.name}
-      locationColor={loc?.color}
+      locationNames={names}
+      locationColor={leafColor}
       supplierName={supplier?.name}
     />
   );

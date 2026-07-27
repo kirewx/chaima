@@ -3,6 +3,7 @@ import { useStorageNavigation } from "../hooks/useStorageNavigation";
 import { StorageBreadcrumbs } from "../components/StorageBreadcrumbs";
 import { StorageChildList } from "../components/StorageChildList";
 import { ContainerCard } from "../components/ContainerCard";
+import { displayTrail } from "../utils/locationPath";
 import { useShelfContainers } from "../api/hooks/useStorageLocations";
 import { useLocationConflicts } from "../api/hooks/useCompatibility";
 import { useGroupOptional } from "../components/GroupContext";
@@ -104,7 +105,13 @@ export default function StoragePage() {
               }}
             >
               {containers.data!.items.map((c) => (
-                <ContainerCard key={c.id} container={c} locationColor={nav.current?.color} linkToChemical />
+                <ContainerCard
+                  key={c.id}
+                  container={c}
+                  locationNames={displayTrail(nav.path).map((n) => n.name)}
+                  locationColor={nav.current?.color}
+                  linkToChemical
+                />
               ))}
             </Box>
           )}

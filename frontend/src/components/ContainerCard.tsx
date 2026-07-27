@@ -5,12 +5,14 @@ import type { ReactNode } from "react";
 import type { ContainerRead } from "../types";
 import { ContainerMenu } from "./ContainerMenu";
 import { DEFAULT_STORAGE_COLOR } from "./drawer/StorageForm";
+import { LocationBreadcrumb } from "./LocationBreadcrumb";
 
 interface Props {
   container: ContainerRead;
   /** Group the container belongs to (threaded into the menu's mutations). */
   groupId?: string;
-  locationName?: string;
+  /** Location path segments root → leaf, building level filtered out. */
+  locationNames?: string[];
   locationColor?: string | null;
   supplierName?: string;
   /**
@@ -36,7 +38,7 @@ function chipTextColor(hex: string): string {
 export function ContainerCard({
   container,
   groupId,
-  locationName,
+  locationNames,
   locationColor,
   supplierName,
   linkToChemical,
@@ -105,7 +107,16 @@ export function ContainerCard({
               color: "text.secondary",
             }}
           >
-            <MetaRow k="Location" v={locationName ?? "—"} />
+            <MetaRow
+              k="Location"
+              v={
+                locationNames && locationNames.length > 0 ? (
+                  <LocationBreadcrumb names={locationNames} />
+                ) : (
+                  "—"
+                )
+              }
+            />
             <MetaRow k="Supplier" v={supplierName ?? "—"} />
             <MetaRow k="Received" v={container.purchased_at ?? "—"} />
           </Stack>
@@ -158,7 +169,7 @@ export function ContainerCard({
   );
 }
 
-function MetaRow({ k, v }: { k: string; v: string }) {
+function MetaRow({ k, v }: { k: string; v: ReactNode }) {
   return (
     <Stack direction="row" spacing={0.75}>
       <Box sx={{ minWidth: 60, color: "text.disabled" }}>{k}</Box>
