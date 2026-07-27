@@ -171,7 +171,7 @@ export function ChemicalInfoBox({
               <>
                 <Box
                   className="structure-thumb"
-                  aria-label={`${chemical.name} structure`}
+                  aria-hidden
                   sx={{
                     maxWidth: "100%",
                     maxHeight: "100%",

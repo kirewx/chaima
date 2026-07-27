@@ -27,7 +27,8 @@ export function StructureDialog({ open, onClose, chemicalName, svg }: Props) {
         <Box
           sx={{
             width: "min(80vw, 70vh)",
-            height: "min(80vw, 70vh)",
+            maxWidth: "100%",
+            aspectRatio: "1 / 1",
             color: "text.primary",
             "& svg": { width: "100%", height: "100%", display: "block" },
           }}

@@ -24,16 +24,17 @@ test.describe("Structure lightbox", () => {
     // NOTE: the CAS is deliberately NOT acetone's real CAS (67-64-1) — the
     // dev-seed DB already has a chemical with that CAS ("Aceton"), and the
     // app's duplicate-chemical check (by exact CAS/name match) would block
-    // creation with a 409. It's also derived from the run's timestamp (not
-    // hardcoded) so reruns against the same persistent dev DB don't collide
-    // with a chemical a prior run left behind. The SMILES is still real
-    // acetone so RDKit renders a genuine structure SVG.
+    // creation with a 409. It's also derived from the run's timestamp plus a
+    // random middle segment (not hardcoded) so reruns against the same
+    // persistent dev DB don't collide with a chemical a prior run left
+    // behind — the timestamp tail alone repeats every ~2.8h. The SMILES is
+    // still real acetone so RDKit renders a genuine structure SVG.
     const stamp = Date.now();
     const unique = `E2E Lightbox ${stamp}`;
     const FAKE_LOOKUP = {
       cid: "180",
       name: "propan-2-one",
-      cas: `${String(stamp).slice(-7)}-11-1`,
+      cas: `${String(stamp).slice(-7)}-${Math.floor(Math.random() * 90) + 10}-1`,
       molar_mass: 58.08,
       smiles: "CC(=O)C",
       synonyms: ["Acetone"],
