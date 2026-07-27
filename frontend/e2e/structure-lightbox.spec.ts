@@ -14,27 +14,31 @@ function newChemicalDrawer(page: Page) {
     .filter({ hasText: /new chemical/i });
 }
 
-// NOTE: the CAS below is deliberately NOT acetone's real CAS (67-64-1) —
-// the dev-seed DB already has a chemical with that CAS ("Aceton"), and the
-// app's duplicate-chemical check (by exact CAS/name match) would block
-// creation with a 409. The SMILES is still real acetone so RDKit renders
-// a genuine structure SVG.
-const FAKE_LOOKUP = {
-  cid: "180",
-  name: "propan-2-one",
-  cas: "999999-11-1",
-  molar_mass: 58.08,
-  smiles: "CC(=O)C",
-  synonyms: ["Acetone"],
-  ghs_codes: [],
-};
-
 test.describe("Structure lightbox", () => {
   test("clicking the structure thumbnail opens an enlarged dialog", async ({
     page,
   }) => {
     test.setTimeout(60_000);
     await login(page);
+
+    // NOTE: the CAS is deliberately NOT acetone's real CAS (67-64-1) — the
+    // dev-seed DB already has a chemical with that CAS ("Aceton"), and the
+    // app's duplicate-chemical check (by exact CAS/name match) would block
+    // creation with a 409. It's also derived from the run's timestamp (not
+    // hardcoded) so reruns against the same persistent dev DB don't collide
+    // with a chemical a prior run left behind. The SMILES is still real
+    // acetone so RDKit renders a genuine structure SVG.
+    const stamp = Date.now();
+    const unique = `E2E Lightbox ${stamp}`;
+    const FAKE_LOOKUP = {
+      cid: "180",
+      name: "propan-2-one",
+      cas: `${String(stamp).slice(-7)}-11-1`,
+      molar_mass: 58.08,
+      smiles: "CC(=O)C",
+      synonyms: ["Acetone"],
+      ghs_codes: [],
+    };
 
     await page.route("**/api/v1/pubchem/lookup*", async (route) => {
       await route.fulfill({
@@ -45,7 +49,6 @@ test.describe("Structure lightbox", () => {
     });
 
     // Create a chemical with a SMILES via the mocked PubChem fetch.
-    const unique = `E2E Lightbox ${Date.now()}`;
     await page.getByRole("button", { name: /^new$/i }).click();
     const d = newChemicalDrawer(page);
     await expect(d).toBeVisible({ timeout: 5_000 });
@@ -71,7 +74,7 @@ test.describe("Structure lightbox", () => {
     await thumb.click();
     const dialog = page.getByRole("dialog").filter({ hasText: unique });
     await expect(dialog).toBeVisible();
-    await expect(dialog.locator("svg")).toBeVisible();
+    await expect(dialog.locator(".MuiDialogContent-root svg")).toBeVisible();
 
     // Esc closes it.
     await page.keyboard.press("Escape");

@@ -1,4 +1,5 @@
 import { Box, Dialog, DialogContent, DialogTitle, IconButton } from "@mui/material";
+import CloseIcon from "@mui/icons-material/Close";
 
 interface Props {
   open: boolean;
@@ -17,12 +18,9 @@ export function StructureDialog({ open, onClose, chemicalName, svg }: Props) {
         <IconButton
           aria-label="close"
           onClick={onClose}
-          sx={{ position: "absolute", right: 8, top: 8, fontSize: 20, lineHeight: 1 }}
+          sx={{ position: "absolute", right: 8, top: 8 }}
         >
-          {/* Plain glyph, not an <svg> icon: the dialog's only SVG must be
-              the structure image itself (see structure-lightbox e2e spec,
-              which asserts `dialog.locator("svg")` is a single element). */}
-          ✕
+          <CloseIcon />
         </IconButton>
       </DialogTitle>
       <DialogContent dividers>
