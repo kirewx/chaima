@@ -22,6 +22,8 @@ export default function StoragePage() {
 
   const conflicts = useLocationConflicts(groupId ?? "", nav.current?.id ?? null);
 
+  const locationNames = displayTrail(nav.path).map((n) => n.name);
+
   if (!groupId) {
     return (
       <Box sx={{ p: 4, textAlign: "center" }}>
@@ -108,7 +110,7 @@ export default function StoragePage() {
                 <ContainerCard
                   key={c.id}
                   container={c}
-                  locationNames={displayTrail(nav.path).map((n) => n.name)}
+                  locationNames={locationNames}
                   locationColor={nav.current?.color}
                   linkToChemical
                 />

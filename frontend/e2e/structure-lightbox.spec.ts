@@ -81,4 +81,22 @@ test.describe("Structure lightbox", () => {
     await page.keyboard.press("Escape");
     await expect(dialog).toHaveCount(0);
   });
+
+  test("a chemical without a structure has no clickable box", async ({ page }) => {
+    await login(page);
+    const unique = `E2E NoStruct ${Date.now()}`;
+    await page.getByRole("button", { name: /^new$/i }).click();
+    const d = newChemicalDrawer(page);
+    await expect(d).toBeVisible({ timeout: 5_000 });
+    await d.getByLabel(/^name/i).fill(unique);
+    await d.getByRole("button", { name: /^create$/i }).click();
+    await expect(d).toHaveCount(0, { timeout: 10_000 });
+
+    await page.getByPlaceholder(/search chemical/i).fill(unique);
+    await page.getByText(unique, { exact: true }).click();
+    await expect(page.getByText(/no structure/i)).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.getByRole("button", { name: /enlarged structure/i }),
+    ).toHaveCount(0);
+  });
 });

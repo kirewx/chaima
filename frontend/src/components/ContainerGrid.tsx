@@ -13,6 +13,7 @@ interface Props {
 }
 
 export function ContainerGrid({ groupId, containers, onAdd }: Props) {
+  const { data: tree = [] } = useStorageTree(groupId);
   return (
     <Box sx={{ px: 2, pb: 2 }}>
       <Stack
@@ -39,32 +40,41 @@ export function ContainerGrid({ groupId, containers, onAdd }: Props) {
           gap: 1.25,
         }}
       >
-        {containers.map((c) => (
-          <ContainerCardWithLookups key={c.id} groupId={groupId} container={c} />
-        ))}
+        {containers.map((c) => {
+          const trail = findLocationTrail(tree, c.location_id);
+          return (
+            <ContainerCardWithSupplier
+              key={c.id}
+              groupId={groupId}
+              container={c}
+              locationNames={trail ? displayTrail(trail).map((n) => n.name) : undefined}
+              locationColor={trail ? trail[trail.length - 1].color : undefined}
+            />
+          );
+        })}
       </Box>
     </Box>
   );
 }
 
-function ContainerCardWithLookups({
+function ContainerCardWithSupplier({
   groupId,
   container,
+  locationNames,
+  locationColor,
 }: {
   groupId: string;
   container: ContainerRead;
+  locationNames?: string[];
+  locationColor?: string | null;
 }) {
-  const { data: tree = [] } = useStorageTree(groupId);
   const { data: supplier } = useSupplier(groupId, container.supplier_id);
-  const trail = findLocationTrail(tree, container.location_id);
-  const names = trail ? displayTrail(trail).map((n) => n.name) : undefined;
-  const leafColor = trail ? trail[trail.length - 1].color : undefined;
   return (
     <ContainerCard
       container={container}
       groupId={groupId}
-      locationNames={names}
-      locationColor={leafColor}
+      locationNames={locationNames}
+      locationColor={locationColor}
       supplierName={supplier?.name}
     />
   );

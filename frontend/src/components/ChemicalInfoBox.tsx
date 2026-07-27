@@ -158,8 +158,8 @@ export function ChemicalInfoBox({
               overflow: "hidden",
               position: "relative",
               ...(structureSvg && {
-                cursor: "zoom-in",
                 "@media (hover: hover)": {
+                  cursor: "zoom-in",
                   "&:hover": { borderColor: "primary.main" },
                   "&:hover .structure-thumb": { opacity: 0.55 },
                   "&:hover .structure-zoom-icon": { opacity: 1 },
