@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent } from "react";
 import { Alert, Box, Button, Chip, Stack, Typography, Link as MuiLink } from "@mui/material";
 import LinkIcon from "@mui/icons-material/Link";
 import DescriptionIcon from "@mui/icons-material/Description";
@@ -16,6 +16,7 @@ import { ChemicalMenu } from "./ChemicalMenu";
 import { GHSPictogramRow } from "./GHSPictogramRow";
 import { HazardTagChips } from "./HazardTagChips";
 import { HazardStatementsDialog } from "./HazardStatementsDialog";
+import { StructureDialog } from "./StructureDialog";
 import { worstSignalWord } from "../utils/hazardSignal";
 import { useChemicalStructureSvg } from "../api/hooks/useChemicalStructureSvg";
 import { useUploadSDS } from "../api/hooks/useChemicals";
@@ -53,6 +54,7 @@ export function ChemicalInfoBox({
   groupId,
 }: Props) {
   const [hpOpen, setHpOpen] = useState(false);
+  const [structureOpen, setStructureOpen] = useState(false);
   const sdsInputRef = useRef<HTMLInputElement | null>(null);
   const uploadSds = useUploadSDS(groupId, chemical.id);
   const [sdsError, setSdsError] = useState<string | null>(null);
@@ -128,6 +130,20 @@ export function ChemicalInfoBox({
       <Box sx={{ p: 2.5, display: "flex", gap: 2 }}>
         <Box sx={{ flexShrink: 0 }}>
           <Box
+            {...(structureSvg
+              ? {
+                  role: "button",
+                  tabIndex: 0,
+                  "aria-label": `Show enlarged structure of ${chemical.name}`,
+                  onClick: () => setStructureOpen(true),
+                  onKeyDown: (e: KeyboardEvent) => {
+                    if (e.key === "Enter" || e.key === " ") {
+                      e.preventDefault();
+                      setStructureOpen(true);
+                    }
+                  },
+                }
+              : {})}
             sx={{
               width: { xs: 80, md: 100 },
               height: { xs: 80, md: 100 },
@@ -140,23 +156,47 @@ export function ChemicalInfoBox({
               justifyContent: "center",
               p: 1,
               overflow: "hidden",
+              position: "relative",
+              ...(structureSvg && {
+                "@media (hover: hover)": {
+                  cursor: "zoom-in",
+                  "&:hover": { borderColor: "primary.main" },
+                  "&:hover .structure-thumb": { opacity: 0.55 },
+                  "&:hover .structure-zoom-icon": { opacity: 1 },
+                },
+              }),
             }}
           >
             {structureSvg ? (
-              <Box
-                aria-label={`${chemical.name} structure`}
-                sx={{
-                  maxWidth: "100%",
-                  maxHeight: "100%",
-                  color: "text.primary",
-                  "& svg": {
-                    width: "100%",
-                    height: "100%",
-                    display: "block",
-                  },
-                }}
-                dangerouslySetInnerHTML={{ __html: structureSvg }}
-              />
+              <>
+                <Box
+                  className="structure-thumb"
+                  aria-hidden
+                  sx={{
+                    maxWidth: "100%",
+                    maxHeight: "100%",
+                    color: "text.primary",
+                    transition: "opacity 0.15s",
+                    "& svg": {
+                      width: "100%",
+                      height: "100%",
+                      display: "block",
+                    },
+                  }}
+                  dangerouslySetInnerHTML={{ __html: structureSvg }}
+                />
+                <SearchIcon
+                  className="structure-zoom-icon"
+                  sx={{
+                    position: "absolute",
+                    fontSize: 28,
+                    color: "text.primary",
+                    opacity: 0,
+                    transition: "opacity 0.15s",
+                    pointerEvents: "none",
+                  }}
+                />
+              </>
             ) : svgLoading ? (
               <Typography variant="caption" color="text.disabled">
                 …
@@ -481,6 +521,14 @@ export function ChemicalInfoBox({
         ghsCodes={ghsCodes}
         pStatements={pStatements}
       />
+      {structureSvg && (
+        <StructureDialog
+          open={structureOpen}
+          onClose={() => setStructureOpen(false)}
+          chemicalName={chemical.name}
+          svg={structureSvg}
+        />
+      )}
     </Box>
   );
 }

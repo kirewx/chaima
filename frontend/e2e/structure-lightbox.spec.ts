@@ -1,0 +1,102 @@
+import { test, expect, type Page } from "@playwright/test";
+
+async function login(page: Page) {
+  await page.goto("/login");
+  await page.getByLabel("Email").fill("admin@chaima.dev");
+  await page.getByLabel("Password").fill("changeme");
+  await page.getByRole("button", { name: /sign in/i }).click();
+  await expect(page).toHaveURL("/", { timeout: 15_000 });
+}
+
+function newChemicalDrawer(page: Page) {
+  return page
+    .locator('[role="presentation"]')
+    .filter({ hasText: /new chemical/i });
+}
+
+test.describe("Structure lightbox", () => {
+  test("clicking the structure thumbnail opens an enlarged dialog", async ({
+    page,
+  }) => {
+    test.setTimeout(60_000);
+    await login(page);
+
+    // NOTE: the CAS is deliberately NOT acetone's real CAS (67-64-1) — the
+    // dev-seed DB already has a chemical with that CAS ("Aceton"), and the
+    // app's duplicate-chemical check (by exact CAS/name match) would block
+    // creation with a 409. It's also derived from the run's timestamp plus a
+    // random middle segment (not hardcoded) so reruns against the same
+    // persistent dev DB don't collide with a chemical a prior run left
+    // behind — the timestamp tail alone repeats every ~2.8h. The SMILES is
+    // still real acetone so RDKit renders a genuine structure SVG.
+    const stamp = Date.now();
+    const unique = `E2E Lightbox ${stamp}`;
+    const FAKE_LOOKUP = {
+      cid: "180",
+      name: "propan-2-one",
+      cas: `${String(stamp).slice(-7)}-${Math.floor(Math.random() * 90) + 10}-1`,
+      molar_mass: 58.08,
+      smiles: "CC(=O)C",
+      synonyms: ["Acetone"],
+      ghs_codes: [],
+    };
+
+    await page.route("**/api/v1/pubchem/lookup*", async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify(FAKE_LOOKUP),
+      });
+    });
+
+    // Create a chemical with a SMILES via the mocked PubChem fetch.
+    await page.getByRole("button", { name: /^new$/i }).click();
+    const d = newChemicalDrawer(page);
+    await expect(d).toBeVisible({ timeout: 5_000 });
+    await d.getByLabel(/lookup from pubchem/i).fill("acetone-lightbox");
+    await d.getByRole("button", { name: /^fetch$/i }).click();
+    await expect(d.getByLabel(/^name/i)).toHaveValue("propan-2-one", {
+      timeout: 5_000,
+    });
+    await d.getByLabel(/^name/i).fill(unique);
+    await d.getByRole("button", { name: /^create$/i }).click();
+    await expect(d).toHaveCount(0, { timeout: 10_000 });
+
+    // Expand the chemical; wait for the structure SVG to arrive.
+    // (The chemicals list is paginated/sorted — filter via the search box first.)
+    await page.getByPlaceholder(/search chemical/i).fill(unique);
+    await page.getByText(unique, { exact: true }).click();
+    const thumb = page.getByRole("button", {
+      name: /enlarged structure/i,
+    });
+    await expect(thumb).toBeVisible({ timeout: 15_000 });
+
+    // Open the lightbox.
+    await thumb.click();
+    const dialog = page.getByRole("dialog").filter({ hasText: unique });
+    await expect(dialog).toBeVisible();
+    await expect(dialog.locator(".MuiDialogContent-root svg")).toBeVisible();
+
+    // Esc closes it.
+    await page.keyboard.press("Escape");
+    await expect(dialog).toHaveCount(0);
+  });
+
+  test("a chemical without a structure has no clickable box", async ({ page }) => {
+    await login(page);
+    const unique = `E2E NoStruct ${Date.now()}`;
+    await page.getByRole("button", { name: /^new$/i }).click();
+    const d = newChemicalDrawer(page);
+    await expect(d).toBeVisible({ timeout: 5_000 });
+    await d.getByLabel(/^name/i).fill(unique);
+    await d.getByRole("button", { name: /^create$/i }).click();
+    await expect(d).toHaveCount(0, { timeout: 10_000 });
+
+    await page.getByPlaceholder(/search chemical/i).fill(unique);
+    await page.getByText(unique, { exact: true }).click();
+    await expect(page.getByText(/no structure/i)).toBeVisible({ timeout: 10_000 });
+    await expect(
+      page.getByRole("button", { name: /enlarged structure/i }),
+    ).toHaveCount(0);
+  });
+});

@@ -21,26 +21,12 @@ import { useSuppliers, useCreateSupplier } from "../../api/hooks/useSuppliers";
 import { useExtractFromPhoto } from "../../api/hooks/useExtractFromPhoto";
 import client from "../../api/client";
 import { errorMessage } from "../../utils/errorMessage";
-import type { ContainerPrefill, StorageLocationNode, SupplierRead } from "../../types";
+import type { ContainerPrefill, SupplierRead } from "../../types";
 import { useCurrentUser } from "../../api/hooks/useAuth";
 import { useStorageTree } from "../../api/hooks/useStorageLocations";
 import { useCompatibilityCheck } from "../../api/hooks/useCompatibility";
 import LocationPicker from "../LocationPicker";
-
-/** Resolve the readable "Building > Room > Shelf" path for a location id. */
-function findLocationPath(
-  nodes: StorageLocationNode[],
-  targetId: string,
-  trail: string[] = [],
-): string | null {
-  for (const n of nodes) {
-    const next = [...trail, n.name];
-    if (n.id === targetId) return next.join(" > ");
-    const found = findLocationPath(n.children, targetId, next);
-    if (found) return found;
-  }
-  return null;
-}
+import { findLocationTrail } from "../../utils/locationPath";
 
 function todayIsoDate(): string {
   const d = new Date();
@@ -136,8 +122,8 @@ export function ContainerForm({ chemicalId, containerId, groupId: groupIdProp, p
   useEffect(() => {
     if (!existing.data || locationPath) return;
     if (locationId !== existing.data.location_id) return;
-    const path = findLocationPath(locationTree, existing.data.location_id);
-    if (path) setLocationPath(path);
+    const trail = findLocationTrail(locationTree, existing.data.location_id);
+    if (trail) setLocationPath(trail.map((n) => n.name).join(" > "));
   }, [existing.data, locationTree, locationId, locationPath]);
 
   // If prefill carries a supplier_name, match it to an existing supplier or create one.

@@ -4,6 +4,7 @@ import { useStorageTree } from "../api/hooks/useStorageLocations";
 import { useCurrentUser } from "../api/hooks/useAuth";
 import { useGroupOptional } from "../components/GroupContext";
 import type { StorageLocationNode } from "../types";
+import { findLocationTrail } from "../utils/locationPath";
 
 export interface StorageNavigation {
   loading: boolean;
@@ -25,20 +26,6 @@ export interface StorageNavigation {
   nextChildDisabledReason: string | null;
   /** Title to render at the root view (when no location is selected). For non-SU with a single building, this is the building's name so the page reads "Lab Building" instead of a generic "Storage". */
   rootLabel: string;
-}
-
-function findPath(
-  nodes: StorageLocationNode[],
-  targetId: string,
-  acc: StorageLocationNode[] = [],
-): StorageLocationNode[] | null {
-  for (const n of nodes) {
-    const next = [...acc, n];
-    if (n.id === targetId) return next;
-    const found = findPath(n.children, targetId, next);
-    if (found) return found;
-  }
-  return null;
 }
 
 const CHILD_KIND: Record<string, StorageNavigation["nextChildKind"]> = {
@@ -67,7 +54,7 @@ export function useStorageNavigation(): StorageNavigation {
           building.kind === "building" ? building.children : [building],
         );
 
-    const path = locationId ? findPath(visibleRoots, locationId) ?? [] : [];
+    const path = locationId ? findLocationTrail(visibleRoots, locationId) ?? [] : [];
     const current = path.length ? path[path.length - 1] : null;
     const children = current ? current.children : visibleRoots;
     const isLeaf = current?.kind === "shelf";
