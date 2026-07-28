@@ -15,8 +15,10 @@ services:
 
   # Auto-updates the chaima container when a new :latest image is pushed.
   # Only touches containers labelled watchtower.enable=true.
+  # Maintained fork of containrrr/watchtower (negotiates the Docker API
+  # version instead of pinning 1.25, which newer daemons reject).
   watchtower:
-    image: containrrr/watchtower:latest
+    image: nickfedor/watchtower:latest
     restart: unless-stopped
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
