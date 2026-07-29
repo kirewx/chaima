@@ -33,6 +33,7 @@ async def test_chemical_optional_fields_nullable(session, group, user):
     assert result.cas is None
     assert result.smiles is None
     assert result.molar_mass is None
+    assert result.sds_url is None
 
 
 async def test_create_synonym_with_category(session, chemical):
@@ -129,3 +130,16 @@ async def test_chemical_sds_path_set(session, group, user):
     await session.commit()
     await session.refresh(c)
     assert c.sds_path == "uploads/g1/benz-sds.pdf"
+
+
+async def test_chemical_sds_url_roundtrip(session, group, user):
+    chem = Chemical(
+        name="UrlChem",
+        group_id=group.id,
+        created_by=user.id,
+        sds_url="https://example.com/sds.pdf",
+    )
+    session.add(chem)
+    await session.flush()
+    await session.refresh(chem)
+    assert chem.sds_url == "https://example.com/sds.pdf"

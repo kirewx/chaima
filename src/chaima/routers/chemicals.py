@@ -35,6 +35,7 @@ from chaima.models.analytics import EventType
 from chaima.services import export as export_service
 from chaima.services import files as files_service
 from chaima.services import images as images_service
+from chaima.services import sds_fetch as sds_fetch_service
 from chaima.services import vision as vision_service
 from chaima.services.structure import InvalidSmilesError, render_structure_svg
 
@@ -177,6 +178,7 @@ async def create_chemical(
             comment=body.comment,
             is_secret=body.is_secret,
             sds_path=body.sds_path,
+            sds_url=body.sds_url,
             synonyms=body.synonyms,
             ghs_codes=body.ghs_codes,
         )
@@ -531,6 +533,7 @@ async def update_chemical(
             status_code=status.HTTP_409_CONFLICT,
             detail="A chemical with this name already exists in the group",
         )
+    await session.refresh(updated)
     return ChemicalRead.model_validate(updated, from_attributes=True)
 
 
@@ -841,6 +844,41 @@ async def view_sds(
     )
 
 
+@router.post("/{chemical_id}/sds-fetch", response_model=ChemicalRead)
+async def fetch_sds_from_url(
+    group_id: UUID,
+    chemical_id: UUID,
+    session: SessionDep,
+    admin: GroupAdminDep,
+    user: CurrentUserDep,
+) -> ChemicalRead:
+    """Download the PDF behind the chemical's ``sds_url`` and archive it as
+    ``sds_path`` (fill-only: never replaces a stored PDF — use the upload
+    endpoint to replace). Upstream problems map to 502 with a user-facing
+    reason; the link stays usable as a plain external link.
+    """
+    chem = await session.get(Chemical, chemical_id)
+    if (
+        chem is None
+        or chem.group_id != group_id
+        or not chemical_service.can_view_chemical(chem, user)
+    ):
+        raise HTTPException(status_code=404, detail="Chemical not found")
+    if not chem.sds_url:
+        raise HTTPException(status_code=409, detail="Chemical has no SDS link")
+    if chem.sds_path:
+        raise HTTPException(status_code=409, detail="An SDS PDF is already stored")
+    try:
+        data = await sds_fetch_service.fetch_sds_pdf(chem.sds_url)
+    except sds_fetch_service.SdsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e)) from e
+    chem.sds_path = files_service.save_upload(group_id, "sds.pdf", data)
+    session.add(chem)
+    await session.commit()
+    await session.refresh(chem)
+    return ChemicalRead.model_validate(chem)
+
+
 @router.post("/{chemical_id}/gestis-resolve", response_model=GestisResolveResult)
 async def resolve_gestis(
     group_id: UUID,
@@ -937,6 +975,25 @@ async def backfill_gestis(
         async for event in enrich_service.backfill_group_gestis(
             session, group_id, body.chemical_ids,
         ):
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@router.post("/fetch-sds")
+async def fetch_sds_batch(
+    group_id: UUID,
+    session: SessionDep,
+    admin: GroupAdminDep,
+    user: CurrentUserDep,
+) -> StreamingResponse:
+    """Stream a bulk SDS fetch-and-archive for every chemical in the group
+    with an ``sds_url`` and no stored PDF. Group-admin. Fill-only — stored
+    PDFs are never replaced. Secret chemicals the admin didn't create are
+    excluded from both the fetch and the stream (same visibility rule as
+    everywhere else)."""
+    async def generate():
+        async for event in sds_fetch_service.fetch_group_sds(session, group_id, user):
             yield f"data: {json.dumps(event)}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")

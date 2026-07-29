@@ -30,6 +30,9 @@ def split_quantity_unit(s: str) -> tuple[float | None, str | None]:
 
 
 _HEADER_PATTERNS: list[tuple[str, str]] = [
+    ("sicherheitsdatenblatt", "sds_url"),  # redundant with "datenblatt", kept as documentation of the primary header
+    ("datenblatt", "sds_url"),
+    ("sds", "sds_url"),
     ("cas", "cas"),
     ("mit einheit", "quantity_unit_combined"),
     ("with unit", "quantity_unit_combined"),
@@ -154,6 +157,7 @@ class ParsedRow:
     comment: str | None
     errors: list[str]
     warnings: list[str]
+    sds_url: str | None = None
 
 
 class MappingValidationError(ValueError):
@@ -181,7 +185,7 @@ def apply_column_mapping(
         values: dict[str, str | None] = {t: None for t in [
             "name", "cas", "location_text", "supplier_text", "quantity", "unit",
             "purity", "purchased_at", "ordered_by", "identifier",
-            "created_by_name", "comment",
+            "created_by_name", "comment", "sds_url",
         ]}
         qty: float | None = None
         unit: str | None = None
@@ -203,6 +207,20 @@ def apply_column_mapping(
             else:
                 values[target] = cell or None
 
+        raw_sds = values["sds_url"]
+        if raw_sds:
+            if raw_sds == "-":
+                # "-" is the common sheet placeholder for "no SDS" — drop silently, no warning
+                values["sds_url"] = None
+            elif not raw_sds.startswith(("http://", "https://")):
+                warnings.append(f"Ignored invalid SDS link '{raw_sds}'")
+                values["sds_url"] = None
+            elif len(raw_sds) > 2000:
+                # Mirrors the schema's max_length=2000 (chaima/schemas/chemical.py) -
+                # SQLite doesn't enforce VARCHAR length, Postgres would.
+                warnings.append(f"Ignored overlong SDS link ({len(raw_sds)} chars)")
+                values["sds_url"] = None
+
         parsed.append(ParsedRow(
             index=i,
             name=values["name"],
@@ -219,6 +237,7 @@ def apply_column_mapping(
             comment=values["comment"],
             errors=errors,
             warnings=warnings,
+            sds_url=values["sds_url"],
         ))
     return parsed
 
@@ -351,6 +370,7 @@ async def commit_import(
     if real_errors:
         raise ImportValidationError(real_errors)
     parsed = [r for r in parsed if r.index not in blank_indices]
+    row_by_index: dict[int, ParsedRow] = {r.index: r for r in parsed}
 
     location_text_to_id: dict[str, uuid_pkg.UUID] = {}
     created_locations = 0
@@ -382,6 +402,7 @@ async def commit_import(
     chem_by_name: dict[str, uuid_pkg.UUID] = {
         c.name.strip().lower(): c.id for c in existing_chems
     }
+    chem_obj_by_id: dict[uuid_pkg.UUID, Chemical] = {c.id: c for c in existing_chems}
 
     row_to_chemical: dict[int, uuid_pkg.UUID] = {}
     created_chemicals = 0
@@ -389,13 +410,26 @@ async def commit_import(
         if not (cg.canonical_name or "").strip():
             continue
         key = cg.canonical_name.strip().lower()
+        group_sds_url = next(
+            (
+                row_by_index[i].sds_url
+                for i in cg.row_indices
+                if i in row_by_index and row_by_index[i].sds_url
+            ),
+            None,
+        )
         existing_id = chem_by_name.get(key)
         if existing_id:
             chem_id = existing_id
+            existing_chem = chem_obj_by_id.get(existing_id)
+            if group_sds_url and existing_chem is not None and not existing_chem.sds_url:
+                existing_chem.sds_url = group_sds_url
+                session.add(existing_chem)
         else:
             chem = Chemical(
                 name=cg.canonical_name,
                 cas=cg.canonical_cas,
+                sds_url=group_sds_url,
                 group_id=group_id,
                 created_by=viewer_id,
             )
@@ -403,6 +437,7 @@ async def commit_import(
             await session.flush()
             chem_id = chem.id
             chem_by_name[key] = chem_id
+            chem_obj_by_id[chem_id] = chem
             created_chemicals += 1
         for idx in cg.row_indices:
             row_to_chemical[idx] = chem_id

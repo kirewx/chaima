@@ -120,3 +120,16 @@ export function useUploadSDS(groupId: string, chemicalId: string) {
     onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["chemicals", groupId] }); },
   });
 }
+
+export function useFetchSDS(groupId: string, chemicalId: string) {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: async () => {
+      const { data } = await client.post(
+        `/groups/${groupId}/chemicals/${chemicalId}/sds-fetch`,
+      );
+      return data;
+    },
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["chemicals", groupId] }); },
+  });
+}

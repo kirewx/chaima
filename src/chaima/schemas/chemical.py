@@ -2,7 +2,19 @@
 import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, Field, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+
+def _clean_sds_url(v: str | None) -> str | None:
+    """Normalize an SDS link: blank -> None, enforce http(s)."""
+    if v is None:
+        return None
+    v = v.strip()
+    if not v:
+        return None
+    if not v.startswith(("http://", "https://")):
+        raise ValueError("sds_url must start with http:// or https://")
+    return v
 
 
 class ChemicalCreate(BaseModel):
@@ -44,6 +56,13 @@ class ChemicalCreate(BaseModel):
     comment: str | None = None
     is_secret: bool = False
     sds_path: str | None = None
+    sds_url: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("sds_url")
+    @classmethod
+    def _validate_sds_url(cls, v: str | None) -> str | None:
+        return _clean_sds_url(v)
+
     synonyms: list[str] | None = None
     ghs_codes: list[str] | None = None
 
@@ -66,6 +85,13 @@ class ChemicalUpdate(BaseModel):
     comment: str | None = None
     is_secret: bool | None = None
     sds_path: str | None = None
+    sds_url: str | None = Field(default=None, max_length=2000)
+
+    @field_validator("sds_url")
+    @classmethod
+    def _validate_sds_url(cls, v: str | None) -> str | None:
+        return _clean_sds_url(v)
+
     synonyms: list[str] | None = None
     ghs_codes: list[str] | None = None
 
@@ -265,6 +291,7 @@ class ChemicalRead(BaseModel):
     is_archived: bool
     archived_at: datetime.datetime | None = None
     sds_path: str | None = None
+    sds_url: str | None = None
     synonym_names: list[str] = []
 
     @model_validator(mode="before")
