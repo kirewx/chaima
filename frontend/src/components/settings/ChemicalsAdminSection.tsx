@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import {
   Alert, Autocomplete, Box, Button, Dialog, DialogActions, DialogContent, DialogTitle,
   FormControlLabel, LinearProgress, Stack, Switch, TextField, Typography,
@@ -258,6 +259,7 @@ function FetchSdsControl({ groupId }: { groupId: string }) {
   const [events, setEvents] = useState<FetchSdsEvent[]>([]);
   const [running, setRunning] = useState(false);
   const [err, setErr] = useState<string | null>(null);
+  const queryClient = useQueryClient();
 
   const start = async () => {
     setRunning(true);
@@ -288,6 +290,7 @@ function FetchSdsControl({ groupId }: { groupId: string }) {
       setErr((e as Error).message);
     } finally {
       setRunning(false);
+      queryClient.invalidateQueries({ queryKey: ["chemicals", groupId] });
     }
   };
 
@@ -337,12 +340,11 @@ function FetchSdsControl({ groupId }: { groupId: string }) {
               <Alert severity={summary.summary.failed ? "warning" : "success"}>
                 Fetched {summary.summary.fetched}, failed {summary.summary.failed}.
               </Alert>
-              {!running &&
-                failedEvents.map((e) => (
-                  <Typography key={e.id} variant="caption" color="text.secondary">
-                    {e.name}: {e.reason ?? "failed"}
-                  </Typography>
-                ))}
+              {failedEvents.map((e) => (
+                <Typography key={e.id} variant="caption" color="text.secondary">
+                  {e.name}: {e.reason ?? "failed"}
+                </Typography>
+              ))}
             </Stack>
           )}
           {err && <Alert severity="error">{err}</Alert>}
@@ -355,7 +357,12 @@ function FetchSdsControl({ groupId }: { groupId: string }) {
             </>
           )}
           {(running || summary) && (
-            <Button onClick={() => { setOpen(false); setEvents([]); }} disabled={running}>Close</Button>
+            <Button
+              onClick={() => { setOpen(false); setEvents([]); setErr(null); }}
+              disabled={running}
+            >
+              Close
+            </Button>
           )}
         </DialogActions>
       </Dialog>
