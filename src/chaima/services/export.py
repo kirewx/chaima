@@ -17,7 +17,7 @@ from chaima.services.chemicals import list_chemicals as list_chemicals_service
 
 EXPORT_COLUMNS = [
     "name", "cas", "smiles", "location", "identifier", "quantity", "unit",
-    "purity", "ordered_by", "supplier", "purchased_at", "comment",
+    "purity", "ordered_by", "supplier", "purchased_at", "comment", "sds_url",
     "ghs_codes", "hazard_tags", "is_archived",
 ]
 
@@ -100,7 +100,7 @@ def _row_for_container(chem: Chemical, container: Container | None) -> list[str]
     if container is None:
         return [
             chem.name, chem.cas or "", chem.smiles or "",
-            "", "", "", "", "", "", "", "", chem.comment or "",
+            "", "", "", "", "", "", "", "", chem.comment or "", chem.sds_url or "",
             ghs, tags, str(chem.is_archived),
         ]
     return [
@@ -114,6 +114,7 @@ def _row_for_container(chem: Chemical, container: Container | None) -> list[str]
         container.supplier.name if container.supplier else "",
         container.purchased_at.isoformat() if container.purchased_at else "",
         chem.comment or "",
+        chem.sds_url or "",
         ghs, tags, str(container.is_archived),
     ]
 

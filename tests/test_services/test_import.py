@@ -330,19 +330,21 @@ async def test_commit_import_sets_sds_url_fill_only(session, group, user):
         quantity_unit_combined_column=None,
         columns=["Name", "SDS", "Q", "U"],
         rows=[
-            # First row of the NewChem group has no URL; the second does -
-            # pins that the group scan takes the first *non-empty* URL
-            # across all its rows, not just the first row.
+            # First row of the NewChem group has no URL; the second and third
+            # both do, with DIFFERENT URLs - pins that the group scan takes
+            # the first *non-empty* URL across all its rows (not the last,
+            # and not just the second row).
             ["NewChem", "", "1", "g"],
             ["NewChem", "https://example.com/new.pdf", "1", "g"],
+            ["NewChem", "https://example.com/newer.pdf", "1", "g"],
             ["KeepUrl", "https://example.com/other.pdf", "1", "g"],
             ["FillUrl", "https://example.com/fill.pdf", "1", "g"],
         ],
         location_mapping=[],
         chemical_groups=[
-            import_service.ChemicalGroupPayload(canonical_name="NewChem", canonical_cas=None, row_indices=[0, 1]),
-            import_service.ChemicalGroupPayload(canonical_name="KeepUrl", canonical_cas=None, row_indices=[2]),
-            import_service.ChemicalGroupPayload(canonical_name="FillUrl", canonical_cas=None, row_indices=[3]),
+            import_service.ChemicalGroupPayload(canonical_name="NewChem", canonical_cas=None, row_indices=[0, 1, 2]),
+            import_service.ChemicalGroupPayload(canonical_name="KeepUrl", canonical_cas=None, row_indices=[3]),
+            import_service.ChemicalGroupPayload(canonical_name="FillUrl", canonical_cas=None, row_indices=[4]),
         ],
     )
     await import_service.commit_import(

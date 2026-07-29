@@ -1,4 +1,5 @@
 from io import StringIO, BytesIO
+from uuid import uuid4
 import csv
 
 from openpyxl import load_workbook
@@ -117,3 +118,34 @@ async def test_export_too_large_raises(session, group, user, monkeypatch):
     import pytest
     with pytest.raises(export_service.ExportTooLargeError):
         await export_service.export_chemicals(session, group.id, viewer_id=user.id, filters={}, fmt="csv")
+
+
+def test_export_columns_include_sds_url():
+    from chaima.services.export import EXPORT_COLUMNS
+    assert "sds_url" in EXPORT_COLUMNS
+    assert EXPORT_COLUMNS.index("sds_url") == EXPORT_COLUMNS.index("comment") + 1
+
+
+def test_row_for_container_includes_sds_url():
+    from chaima.services.export import EXPORT_COLUMNS, _row_for_container
+
+    chem = Chemical(
+        name="ExpChem", group_id=uuid4(), created_by=uuid4(),
+        sds_url="https://example.com/sds.pdf",
+    )
+    chem.ghs_links = []
+    chem.hazard_tag_links = []
+    row = _row_for_container(chem, None)
+    assert len(row) == len(EXPORT_COLUMNS)
+    assert row[EXPORT_COLUMNS.index("sds_url")] == "https://example.com/sds.pdf"
+
+
+def test_row_for_container_without_sds_url_is_empty_string():
+    from chaima.services.export import EXPORT_COLUMNS, _row_for_container
+
+    chem = Chemical(name="NoUrlChem", group_id=uuid4(), created_by=uuid4())
+    chem.ghs_links = []
+    chem.hazard_tag_links = []
+    row = _row_for_container(chem, None)
+    assert len(row) == len(EXPORT_COLUMNS)
+    assert row[EXPORT_COLUMNS.index("sds_url")] == ""
