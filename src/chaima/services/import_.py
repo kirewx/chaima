@@ -215,6 +215,11 @@ def apply_column_mapping(
             elif not raw_sds.startswith(("http://", "https://")):
                 warnings.append(f"Ignored invalid SDS link '{raw_sds}'")
                 values["sds_url"] = None
+            elif len(raw_sds) > 2000:
+                # Mirrors the schema's max_length=2000 (chaima/schemas/chemical.py) -
+                # SQLite doesn't enforce VARCHAR length, Postgres would.
+                warnings.append(f"Ignored overlong SDS link ({len(raw_sds)} chars)")
+                values["sds_url"] = None
 
         parsed.append(ParsedRow(
             index=i,

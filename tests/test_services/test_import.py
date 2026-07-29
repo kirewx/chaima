@@ -287,6 +287,7 @@ def test_detect_header_mapping_sds_url():
 
 
 def test_apply_column_mapping_sds_url_normalization():
+    overlong = "https://example.com/" + "a" * 2000
     grid = import_service.Grid(
         columns=["Name", "SDS"],
         rows=[
@@ -294,8 +295,9 @@ def test_apply_column_mapping_sds_url_normalization():
             ["B", "-"],
             ["C", "ftp://nope"],
             ["D", ""],
+            ["E", overlong],
         ],
-        row_count=4,
+        row_count=5,
         sheets=None,
     )
     rows = import_service.apply_column_mapping(
@@ -308,6 +310,8 @@ def test_apply_column_mapping_sds_url_normalization():
     assert rows[2].warnings == ["Ignored invalid SDS link 'ftp://nope'"]
     assert rows[3].sds_url is None
     assert rows[3].warnings == []
+    assert rows[4].sds_url is None
+    assert rows[4].warnings == [f"Ignored overlong SDS link ({len(overlong)} chars)"]
 
 
 async def test_commit_import_sets_sds_url_fill_only(session, group, user):
