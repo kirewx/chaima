@@ -5,6 +5,7 @@ import {
 } from "@mui/material";
 import ScienceIcon from "@mui/icons-material/Science";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
+import DownloadIcon from "@mui/icons-material/Download";
 import { SectionHeader } from "./SectionHeader";
 import { useChemicals, useChemicalDetail } from "../../api/hooks/useChemicals";
 import { useHazardTags } from "../../api/hooks/useHazardTags";
@@ -29,6 +30,10 @@ type RefetchGHSEvent =
 type GestisBackfillEvent =
   | { id: string; name: string; status: "resolved" | "skipped" | "not_found" | "error" }
   | { summary: { resolved: number; skipped: number; not_found: number; error: number } };
+
+type FetchSdsEvent =
+  | { id: string; name: string; status: "fetched" | "failed"; reason?: string }
+  | { summary: { fetched: number; failed: number } };
 
 export function ChemicalsAdminSection({ groupId }: Props) {
   const [open, setOpen] = useState(false);
@@ -87,6 +92,7 @@ export function ChemicalsAdminSection({ groupId }: Props) {
       />
       <Stack spacing={2} sx={{ maxWidth: 600 }}>
         {isGroupAdmin && <ResearchLinksToggle groupId={groupId} />}
+        {isGroupAdmin && <FetchSdsControl groupId={groupId} />}
         {isSuperuser && (
           <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
             <Button
@@ -228,6 +234,116 @@ function RefetchGHSControl({ groupId }: { groupId: string }) {
               Updated {summary.summary.updated}, unchanged {summary.summary.unchanged},
               skipped {summary.summary.skipped}, errors {summary.summary.error}.
             </Alert>
+          )}
+          {err && <Alert severity="error">{err}</Alert>}
+        </DialogContent>
+        <DialogActions>
+          {!running && !summary && (
+            <>
+              <Button onClick={() => setOpen(false)}>Cancel</Button>
+              <Button variant="contained" onClick={start}>Start</Button>
+            </>
+          )}
+          {(running || summary) && (
+            <Button onClick={() => { setOpen(false); setEvents([]); }} disabled={running}>Close</Button>
+          )}
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+}
+
+function FetchSdsControl({ groupId }: { groupId: string }) {
+  const [open, setOpen] = useState(false);
+  const [events, setEvents] = useState<FetchSdsEvent[]>([]);
+  const [running, setRunning] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const start = async () => {
+    setRunning(true);
+    setEvents([]);
+    setErr(null);
+    try {
+      const resp = await fetch(`/api/v1/groups/${groupId}/chemicals/fetch-sds`, {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+      const reader = resp.body!.getReader();
+      const decoder = new TextDecoder();
+      let buf = "";
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += decoder.decode(value, { stream: true });
+        const parts = buf.split("\n");
+        buf = parts.pop()!;
+        for (const line of parts) {
+          if (!line.startsWith("data: ")) continue;
+          const ev = JSON.parse(line.slice(6)) as FetchSdsEvent;
+          setEvents((prev) => [...prev, ev]);
+        }
+      }
+    } catch (e) {
+      setErr((e as Error).message);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  const summary = events.find((e) => "summary" in e) as
+    | { summary: { fetched: number; failed: number } }
+    | undefined;
+  const perChemCount = events.filter((e) => "id" in e).length;
+  const failedEvents = events.filter(
+    (e): e is Extract<FetchSdsEvent, { id: string }> => "id" in e && e.status === "failed",
+  );
+
+  return (
+    <>
+      <Stack direction="row" spacing={1} sx={{ alignItems: "center" }}>
+        <Button
+          variant="outlined"
+          size="small"
+          startIcon={<DownloadIcon />}
+          onClick={() => setOpen(true)}
+        >
+          Fetch missing SDS PDFs
+        </Button>
+        <Typography variant="body2" color="text.secondary">
+          Downloads and archives the PDF behind each chemical's SDS link.
+        </Typography>
+      </Stack>
+
+      <Dialog open={open} onClose={() => !running && setOpen(false)} fullWidth maxWidth="sm">
+        <DialogTitle>Fetch missing SDS PDFs</DialogTitle>
+        <DialogContent>
+          {!running && !summary && (
+            <Typography>
+              For every chemical in this group that has an SDS link but no
+              stored PDF yet, this downloads the file behind the link and
+              archives it as the chemical's safety data sheet. Stored PDFs
+              are never replaced.
+            </Typography>
+          )}
+          {running && (
+            <Stack spacing={2}>
+              <LinearProgress />
+              <Typography variant="body2">{perChemCount} processed…</Typography>
+            </Stack>
+          )}
+          {summary && (
+            <Stack spacing={1}>
+              <Alert severity={summary.summary.failed ? "warning" : "success"}>
+                Fetched {summary.summary.fetched}, failed {summary.summary.failed}.
+              </Alert>
+              {!running &&
+                failedEvents.map((e) => (
+                  <Typography key={e.id} variant="caption" color="text.secondary">
+                    {e.name}: {e.reason ?? "failed"}
+                  </Typography>
+                ))}
+            </Stack>
           )}
           {err && <Alert severity="error">{err}</Alert>}
         </DialogContent>
