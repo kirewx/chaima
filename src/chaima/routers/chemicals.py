@@ -177,6 +177,7 @@ async def create_chemical(
             comment=body.comment,
             is_secret=body.is_secret,
             sds_path=body.sds_path,
+            sds_url=body.sds_url,
             synonyms=body.synonyms,
             ghs_codes=body.ghs_codes,
         )
@@ -531,6 +532,7 @@ async def update_chemical(
             status_code=status.HTTP_409_CONFLICT,
             detail="A chemical with this name already exists in the group",
         )
+    await session.refresh(updated)
     return ChemicalRead.model_validate(updated, from_attributes=True)
 
 

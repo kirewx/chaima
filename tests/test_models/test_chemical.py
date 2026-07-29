@@ -33,6 +33,7 @@ async def test_chemical_optional_fields_nullable(session, group, user):
     assert result.cas is None
     assert result.smiles is None
     assert result.molar_mass is None
+    assert result.sds_url is None
 
 
 async def test_create_synonym_with_category(session, chemical):

@@ -206,6 +206,7 @@ async def create_chemical(
     comment: str | None = None,
     is_secret: bool = False,
     sds_path: str | None = None,
+    sds_url: str | None = None,
     synonyms: list[str] | None = None,
     ghs_codes: list[str] | None = None,
 ) -> Chemical:
@@ -296,6 +297,7 @@ async def create_chemical(
         comment=comment,
         is_secret=is_secret,
         sds_path=sds_path,
+        sds_url=sds_url,
     )
     session.add(chem)
     await session.flush()
