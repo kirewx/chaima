@@ -1,3 +1,6 @@
+import json
+
+
 async def test_create_chemical_with_sds_url(client, group, admin_membership):
     r = await client.post(
         f"/api/v1/groups/{group.id}/chemicals",
@@ -139,4 +142,47 @@ async def test_sds_fetch_forbidden_for_non_admin(client, group, membership):
     )
     cid = r.json()["id"]
     r = await client.post(f"/api/v1/groups/{group.id}/chemicals/{cid}/sds-fetch")
+    assert r.status_code == 403
+
+
+async def test_batch_fetch_sds_streams_events(client, group, admin_membership, monkeypatch):
+    from chaima.services import sds_fetch
+
+    async def fake_fetch(url, **kwargs):
+        if "bad" in url:
+            raise sds_fetch.SdsFetchError("The link is not a PDF")
+        return PDF
+
+    monkeypatch.setattr(sds_fetch, "fetch_sds_pdf", fake_fetch)
+
+    ok_id = await _make_chem_with_url(client, group, "https://example.com/ok.pdf")
+    bad_id = await _make_chem_with_url(client, group, "https://example.com/bad.pdf")
+    r = await client.post(
+        f"/api/v1/groups/{group.id}/chemicals", json={"name": "NoUrlBatch"},
+    )
+    assert r.status_code in (200, 201)
+
+    r = await client.post(f"/api/v1/groups/{group.id}/chemicals/fetch-sds")
+    assert r.status_code == 200
+    events = [
+        json.loads(line[len("data: "):])
+        for line in r.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    per_chem = [e for e in events if "id" in e]
+    summary = next(e for e in events if "summary" in e)
+
+    assert {e["id"] for e in per_chem} == {ok_id, bad_id}
+    assert next(e for e in per_chem if e["id"] == ok_id)["status"] == "fetched"
+    failed = next(e for e in per_chem if e["id"] == bad_id)
+    assert failed["status"] == "failed"
+    assert "not a PDF" in failed["reason"]
+    assert summary["summary"] == {"fetched": 1, "failed": 1}
+
+    r = await client.get(f"/api/v1/groups/{group.id}/chemicals/{ok_id}/sds")
+    assert r.status_code == 200
+
+
+async def test_batch_fetch_sds_forbidden_for_non_admin(client, group, membership):
+    r = await client.post(f"/api/v1/groups/{group.id}/chemicals/fetch-sds")
     assert r.status_code == 403

@@ -1,9 +1,11 @@
 # src/chaima/services/sds_fetch.py
 """Download a safety data sheet (PDF) from a user-supplied URL.
 
-Pure download helper: no models, no session, no storage. Callers (the
-single-chemical endpoint and, later, the batch generator) hand the returned
-bytes to ``files_service.save_upload`` themselves.
+The download core (``fetch_sds_pdf``) is a pure helper: no models, no
+session, no storage. The single-chemical endpoint calls it directly and
+hands the returned bytes to ``files_service.save_upload`` itself. The one
+exception is ``fetch_group_sds`` below, which does take a session — it
+drives a group-wide batch fetch and persists progress as it goes.
 
 Guards applied here: http(s) only, publicly routable hosts only (re-checked
 on every redirect hop), a hard size cap enforced while streaming, and a
@@ -133,7 +135,8 @@ async def fetch_sds_pdf(
                         content_type = resp.headers.get("content-type", "").lower()
                         data = await _read_capped(resp)
             except httpx.HTTPError as e:
-                logger.warning("SDS fetch failed for %s: %s", current, e)
+                safe_url = httpx.URL(current).copy_with(userinfo=b"", query=None)
+                logger.warning("SDS fetch failed for %s: %s", safe_url, e)
                 raise SdsFetchError(f"Download failed: {e.__class__.__name__}") from e
 
             # The response is closed by now; only the values copied out of it
@@ -149,3 +152,48 @@ async def fetch_sds_pdf(
             return data
 
     raise SdsFetchError("Too many redirects")
+
+
+async def fetch_group_sds(session, group_id):
+    """Yield SSE-style events while archiving SDS PDFs for every chemical in
+    the group that has an ``sds_url`` but no stored ``sds_path`` (fill-only).
+    Failures never abort the run. Commits after each chemical so partial
+    progress survives a dropped connection."""
+    import asyncio
+
+    from sqlmodel import select
+
+    from chaima.models.chemical import Chemical
+    from chaima.services import files as files_service
+
+    stmt = select(Chemical).where(
+        Chemical.group_id == group_id,
+        Chemical.sds_url.is_not(None),
+        Chemical.sds_path.is_(None),
+    )
+    chemicals = list((await session.exec(stmt)).all())
+
+    counts = {"fetched": 0, "failed": 0}
+    for chem in chemicals:
+        try:
+            data = await fetch_sds_pdf(chem.sds_url)
+            if not data:
+                raise SdsFetchError("The link returned an empty file")
+        except SdsFetchError as e:
+            counts["failed"] += 1
+            logger.warning("SDS batch fetch failed for chemical %s: %s", chem.id, e)
+            yield {
+                "id": str(chem.id),
+                "name": chem.name,
+                "status": "failed",
+                "reason": str(e),
+            }
+            continue
+        chem.sds_path = files_service.save_upload(group_id, "sds.pdf", data)
+        session.add(chem)
+        await session.commit()
+        counts["fetched"] += 1
+        yield {"id": str(chem.id), "name": chem.name, "status": "fetched"}
+        await asyncio.sleep(0.1)
+
+    yield {"summary": counts}

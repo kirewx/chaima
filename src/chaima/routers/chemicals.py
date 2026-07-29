@@ -980,3 +980,19 @@ async def backfill_gestis(
             yield f"data: {json.dumps(event)}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")
+
+
+@router.post("/fetch-sds")
+async def fetch_sds_batch(
+    group_id: UUID,
+    session: SessionDep,
+    admin: GroupAdminDep,
+) -> StreamingResponse:
+    """Stream a bulk SDS fetch-and-archive for every chemical in the group
+    with an ``sds_url`` and no stored PDF. Group-admin. Fill-only — stored
+    PDFs are never replaced."""
+    async def generate():
+        async for event in sds_fetch_service.fetch_group_sds(session, group_id):
+            yield f"data: {json.dumps(event)}\n\n"
+
+    return StreamingResponse(generate(), media_type="text/event-stream")
