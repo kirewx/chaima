@@ -35,6 +35,7 @@ from chaima.models.analytics import EventType
 from chaima.services import export as export_service
 from chaima.services import files as files_service
 from chaima.services import images as images_service
+from chaima.services import sds_fetch as sds_fetch_service
 from chaima.services import vision as vision_service
 from chaima.services.structure import InvalidSmilesError, render_structure_svg
 
@@ -841,6 +842,43 @@ async def view_sds(
         content_disposition_type="inline",
         filename=f"{chem.name}-SDS.pdf",
     )
+
+
+@router.post("/{chemical_id}/sds-fetch", response_model=ChemicalRead)
+async def fetch_sds_from_url(
+    group_id: UUID,
+    chemical_id: UUID,
+    session: SessionDep,
+    admin: GroupAdminDep,
+    user: CurrentUserDep,
+) -> ChemicalRead:
+    """Download the PDF behind the chemical's ``sds_url`` and archive it as
+    ``sds_path`` (fill-only: never replaces a stored PDF — use the upload
+    endpoint to replace). Upstream problems map to 502 with a user-facing
+    reason; the link stays usable as a plain external link.
+    """
+    chem = await session.get(Chemical, chemical_id)
+    if (
+        chem is None
+        or chem.group_id != group_id
+        or not chemical_service.can_view_chemical(chem, user)
+    ):
+        raise HTTPException(status_code=404, detail="Chemical not found")
+    if not chem.sds_url:
+        raise HTTPException(status_code=409, detail="Chemical has no SDS link")
+    if chem.sds_path:
+        raise HTTPException(status_code=409, detail="An SDS PDF is already stored")
+    try:
+        data = await sds_fetch_service.fetch_sds_pdf(chem.sds_url)
+    except sds_fetch_service.SdsFetchError as e:
+        raise HTTPException(status_code=502, detail=str(e))
+    if not data:
+        raise HTTPException(status_code=502, detail="The link returned an empty file")
+    chem.sds_path = files_service.save_upload(group_id, "sds.pdf", data)
+    session.add(chem)
+    await session.commit()
+    await session.refresh(chem)
+    return ChemicalRead.model_validate(chem)
 
 
 @router.post("/{chemical_id}/gestis-resolve", response_model=GestisResolveResult)
