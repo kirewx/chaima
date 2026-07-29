@@ -871,7 +871,7 @@ async def fetch_sds_from_url(
     try:
         data = await sds_fetch_service.fetch_sds_pdf(chem.sds_url)
     except sds_fetch_service.SdsFetchError as e:
-        raise HTTPException(status_code=502, detail=str(e))
+        raise HTTPException(status_code=502, detail=str(e)) from e
     if not data:
         raise HTTPException(status_code=502, detail="The link returned an empty file")
     chem.sds_path = files_service.save_upload(group_id, "sds.pdf", data)
@@ -987,12 +987,15 @@ async def fetch_sds_batch(
     group_id: UUID,
     session: SessionDep,
     admin: GroupAdminDep,
+    user: CurrentUserDep,
 ) -> StreamingResponse:
     """Stream a bulk SDS fetch-and-archive for every chemical in the group
     with an ``sds_url`` and no stored PDF. Group-admin. Fill-only — stored
-    PDFs are never replaced."""
+    PDFs are never replaced. Secret chemicals the admin didn't create are
+    excluded from both the fetch and the stream (same visibility rule as
+    everywhere else)."""
     async def generate():
-        async for event in sds_fetch_service.fetch_group_sds(session, group_id):
+        async for event in sds_fetch_service.fetch_group_sds(session, group_id, user):
             yield f"data: {json.dumps(event)}\n\n"
 
     return StreamingResponse(generate(), media_type="text/event-stream")

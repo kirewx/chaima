@@ -1,5 +1,7 @@
 import json
 
+from chaima.models.chemical import Chemical
+
 
 async def test_create_chemical_with_sds_url(client, group, admin_membership):
     r = await client.post(
@@ -186,3 +188,49 @@ async def test_batch_fetch_sds_streams_events(client, group, admin_membership, m
 async def test_batch_fetch_sds_forbidden_for_non_admin(client, group, membership):
     r = await client.post(f"/api/v1/groups/{group.id}/chemicals/fetch-sds")
     assert r.status_code == 403
+
+
+async def test_batch_fetch_sds_excludes_secret_from_non_creator(
+    client, session, group, admin_membership, other_user, monkeypatch
+):
+    """Admin A did not create this secret chemical, so it must be invisible
+    to them — neither fetched nor mentioned in the SSE stream."""
+    from chaima.services import sds_fetch
+
+    async def fake_fetch(url, **kwargs):
+        return PDF
+
+    monkeypatch.setattr(sds_fetch, "fetch_sds_pdf", fake_fetch)
+
+    secret = Chemical(
+        group_id=group.id,
+        name="SecretMol",
+        created_by=other_user.id,
+        is_secret=True,
+        sds_url="https://example.com/secret.pdf",
+    )
+    session.add(secret)
+    await session.commit()
+    await session.refresh(secret)
+    secret_id = str(secret.id)
+
+    visible_id = await _make_chem_with_url(client, group, "https://example.com/visible.pdf")
+
+    r = await client.post(f"/api/v1/groups/{group.id}/chemicals/fetch-sds")
+    assert r.status_code == 200
+    events = [
+        json.loads(line[len("data: "):])
+        for line in r.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    per_chem_ids = {e["id"] for e in events if "id" in e}
+
+    assert secret_id not in per_chem_ids
+    assert visible_id in per_chem_ids
+
+    summary = next(e for e in events if "summary" in e)
+    assert summary["summary"] == {"fetched": 1, "failed": 0}
+
+    # The secret chemical's sds_path was never touched.
+    refreshed = await session.get(Chemical, secret.id)
+    assert refreshed.sds_path is None

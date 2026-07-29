@@ -16,9 +16,17 @@ from __future__ import annotations
 import ipaddress
 import logging
 import socket
+from collections.abc import AsyncGenerator
+from typing import TYPE_CHECKING
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+from uuid import UUID
 
 import httpx
+
+if TYPE_CHECKING:
+    from sqlmodel.ext.asyncio.session import AsyncSession
+
+    from chaima.models.user import User
 
 logger = logging.getLogger(__name__)
 
@@ -154,16 +162,23 @@ async def fetch_sds_pdf(
     raise SdsFetchError("Too many redirects")
 
 
-async def fetch_group_sds(session, group_id):
+async def fetch_group_sds(
+    session: AsyncSession, group_id: UUID, user: User
+) -> AsyncGenerator[dict, None]:
     """Yield SSE-style events while archiving SDS PDFs for every chemical in
     the group that has an ``sds_url`` but no stored ``sds_path`` (fill-only).
     Failures never abort the run. Commits after each chemical so partial
-    progress survives a dropped connection."""
+    progress survives a dropped connection.
+
+    Secret chemicals the caller didn't create are excluded, same as every
+    other listing — ``apply_secret_filter`` mirrors ``can_view_chemical``.
+    """
     import asyncio
 
     from sqlmodel import select
 
     from chaima.models.chemical import Chemical
+    from chaima.services import chemicals as chemical_service
     from chaima.services import files as files_service
 
     stmt = select(Chemical).where(
@@ -171,6 +186,7 @@ async def fetch_group_sds(session, group_id):
         Chemical.sds_url.is_not(None),
         Chemical.sds_path.is_(None),
     )
+    stmt = chemical_service.apply_secret_filter(stmt, user)
     chemicals = list((await session.exec(stmt)).all())
 
     counts = {"fetched": 0, "failed": 0}
