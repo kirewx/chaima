@@ -88,6 +88,7 @@ export function ChemicalForm({ chemicalId, groupId: groupIdProp, onDone }: Props
   const [cas, setCas] = useState("");
   const [molarMass, setMolarMass] = useState<string>("");
   const [comment, setComment] = useState("");
+  const [sdsUrl, setSdsUrl] = useState("");
   const [isSecret, setIsSecret] = useState(false);
 
   const [query, setQuery] = useState("");
@@ -119,6 +120,7 @@ export function ChemicalForm({ chemicalId, groupId: groupIdProp, onDone }: Props
       setCas(e.cas ?? "");
       setMolarMass(e.molar_mass != null ? String(e.molar_mass) : "");
       setComment(e.comment ?? "");
+      setSdsUrl(e.sds_url ?? "");
       setIsSecret(e.is_secret);
       setExtras({
         cid: e.cid ?? null,
@@ -295,6 +297,7 @@ export function ChemicalForm({ chemicalId, groupId: groupIdProp, onDone }: Props
       name: name.trim(),
       cas: cas.trim() || null,
       comment: comment.trim() || null,
+      sds_url: sdsUrl.trim() || null,
       is_secret: isSecret,
       molar_mass: Number.isFinite(parsedMolarMass as number)
         ? (parsedMolarMass as number)
@@ -365,6 +368,7 @@ export function ChemicalForm({ chemicalId, groupId: groupIdProp, onDone }: Props
   };
 
   const fetched = extras.cid !== null;
+  const sdsUrlInvalid = !!sdsUrl.trim() && !/^https?:\/\//.test(sdsUrl.trim());
 
   const handleFile = async (file: File) => {
     setExtractError(null);
@@ -700,6 +704,14 @@ export function ChemicalForm({ chemicalId, groupId: groupIdProp, onDone }: Props
         minRows={2}
         size="small"
       />
+      <TextField
+        label="SDS-Link (URL)"
+        value={sdsUrl}
+        onChange={(e) => setSdsUrl(e.target.value)}
+        size="small"
+        error={sdsUrlInvalid}
+        helperText={sdsUrlInvalid ? "Muss mit http:// oder https:// beginnen" : undefined}
+      />
       <FormControlLabel
         control={
           <Switch
@@ -728,7 +740,7 @@ export function ChemicalForm({ chemicalId, groupId: groupIdProp, onDone }: Props
         </Button>
         <Button
           variant="contained"
-          disabled={saving || !name?.trim()}
+          disabled={saving || !name?.trim() || sdsUrlInvalid}
           onClick={onSubmit}
         >
           {chemicalId ? "Save" : "Create"}
