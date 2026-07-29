@@ -872,8 +872,6 @@ async def fetch_sds_from_url(
         data = await sds_fetch_service.fetch_sds_pdf(chem.sds_url)
     except sds_fetch_service.SdsFetchError as e:
         raise HTTPException(status_code=502, detail=str(e)) from e
-    if not data:
-        raise HTTPException(status_code=502, detail="The link returned an empty file")
     chem.sds_path = files_service.save_upload(group_id, "sds.pdf", data)
     session.add(chem)
     await session.commit()

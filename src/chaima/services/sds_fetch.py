@@ -13,20 +13,22 @@ PDF sniff on the payload.
 """
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import logging
 import socket
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 from uuid import UUID
 
 import httpx
+from sqlmodel import select
+from sqlmodel.ext.asyncio.session import AsyncSession
 
-if TYPE_CHECKING:
-    from sqlmodel.ext.asyncio.session import AsyncSession
-
-    from chaima.models.user import User
+from chaima.models.chemical import Chemical
+from chaima.models.user import User
+from chaima.services import chemicals as chemical_service
+from chaima.services import files as files_service
 
 logger = logging.getLogger(__name__)
 
@@ -78,7 +80,9 @@ def _assert_public_http_url(url: str) -> None:
         raise SdsFetchError("URL has no host")
     try:
         infos = socket.getaddrinfo(host, None)
-    except socket.gaierror as e:
+    except (socket.gaierror, UnicodeError) as e:
+        # UnicodeError: e.g. a >63-char hostname label — getaddrinfo raises
+        # this instead of gaierror before it even attempts a lookup.
         raise SdsFetchError(f"Cannot resolve host '{host}'") from e
     for info in infos:
         try:
@@ -143,8 +147,13 @@ async def fetch_sds_pdf(
                         content_type = resp.headers.get("content-type", "").lower()
                         data = await _read_capped(resp)
             except httpx.HTTPError as e:
-                safe_url = httpx.URL(current).copy_with(userinfo=b"", query=None)
-                logger.warning("SDS fetch failed for %s: %s", safe_url, e)
+                # Log scheme+host only: share links (e.g. Dropbox `scl`
+                # links) carry their capability token in the path or query,
+                # not just userinfo, so both must be dropped.
+                u = httpx.URL(current)
+                logger.warning(
+                    "SDS fetch failed for %s://%s: %s", u.scheme, u.host, e
+                )
                 raise SdsFetchError(f"Download failed: {e.__class__.__name__}") from e
 
             # The response is closed by now; only the values copied out of it
@@ -153,6 +162,8 @@ async def fetch_sds_pdf(
                 current = next_url
                 continue
 
+            if not data:
+                raise SdsFetchError("The link returned an empty file")
             if not content_type.startswith("application/pdf") and not data.startswith(
                 b"%PDF-"
             ):
@@ -167,20 +178,14 @@ async def fetch_group_sds(
 ) -> AsyncGenerator[dict, None]:
     """Yield SSE-style events while archiving SDS PDFs for every chemical in
     the group that has an ``sds_url`` but no stored ``sds_path`` (fill-only).
-    Failures never abort the run. Commits after each chemical so partial
-    progress survives a dropped connection.
+    Failures never abort the run — a single chemical's download, save, or
+    commit blowing up is caught and reported as a ``failed`` event, and the
+    loop moves on. Commits after each chemical so partial progress survives
+    a dropped connection.
 
     Secret chemicals the caller didn't create are excluded, same as every
     other listing — ``apply_secret_filter`` mirrors ``can_view_chemical``.
     """
-    import asyncio
-
-    from sqlmodel import select
-
-    from chaima.models.chemical import Chemical
-    from chaima.services import chemicals as chemical_service
-    from chaima.services import files as files_service
-
     stmt = select(Chemical).where(
         Chemical.group_id == group_id,
         Chemical.sds_url.is_not(None),
@@ -189,27 +194,34 @@ async def fetch_group_sds(
     stmt = chemical_service.apply_secret_filter(stmt, user)
     chemicals = list((await session.exec(stmt)).all())
 
+    # Pull the fields the loop below needs *before* any iteration's
+    # rollback runs: Session.rollback() expires every object still tracked
+    # by the session (not just the one that failed), and re-reading an
+    # expired attribute requires an implicit DB round trip that has no
+    # greenlet to run in here — it would blow up the next chemical's turn.
+    items = [(chem, chem.id, chem.name, chem.sds_url) for chem in chemicals]
+
     counts = {"fetched": 0, "failed": 0}
-    for chem in chemicals:
+    for chem, chem_id, chem_name, sds_url in items:
         try:
-            data = await fetch_sds_pdf(chem.sds_url)
-            if not data:
-                raise SdsFetchError("The link returned an empty file")
-        except SdsFetchError as e:
+            data = await fetch_sds_pdf(sds_url)
+            chem.sds_path = files_service.save_upload(group_id, "sds.pdf", data)
+            session.add(chem)
+            await session.commit()
+        except Exception as e:
+            await session.rollback()
             counts["failed"] += 1
-            logger.warning("SDS batch fetch failed for chemical %s: %s", chem.id, e)
+            logger.warning("SDS batch fetch failed for chemical %s: %s", chem_id, e)
+            reason = str(e) if isinstance(e, SdsFetchError) else "Unexpected error"
             yield {
-                "id": str(chem.id),
-                "name": chem.name,
+                "id": str(chem_id),
+                "name": chem_name,
                 "status": "failed",
-                "reason": str(e),
+                "reason": reason,
             }
-            continue
-        chem.sds_path = files_service.save_upload(group_id, "sds.pdf", data)
-        session.add(chem)
-        await session.commit()
-        counts["fetched"] += 1
-        yield {"id": str(chem.id), "name": chem.name, "status": "fetched"}
+        else:
+            counts["fetched"] += 1
+            yield {"id": str(chem_id), "name": chem_name, "status": "fetched"}
         await asyncio.sleep(0.1)
 
     yield {"summary": counts}

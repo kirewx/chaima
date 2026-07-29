@@ -155,3 +155,51 @@ async def test_fetch_rejects_upstream_error(monkeypatch):
     transport = httpx.MockTransport(lambda request: httpx.Response(403))
     with pytest.raises(sds_fetch.SdsFetchError, match="HTTP 403"):
         await sds_fetch.fetch_sds_pdf("https://example.com/sds.pdf", transport=transport)
+
+
+async def test_fetch_rejects_empty_body(monkeypatch):
+    """The empty-body guard lives in the helper itself (not the callers) so
+    every caller gets it for free."""
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo_public)
+    transport = httpx.MockTransport(
+        lambda request: httpx.Response(
+            200, content=b"", headers={"content-type": "application/pdf"},
+        )
+    )
+    with pytest.raises(sds_fetch.SdsFetchError, match="empty file"):
+        await sds_fetch.fetch_sds_pdf("https://example.com/sds.pdf", transport=transport)
+
+
+async def test_fetch_rejects_overlong_hostname_label():
+    # A single DNS label over 63 octets makes socket.getaddrinfo raise
+    # UnicodeError during IDNA encoding, before any lookup is attempted —
+    # exercised here without monkeypatching getaddrinfo since the error
+    # fires before the network is ever touched.
+    host = "a" * 64 + ".example.com"
+    with pytest.raises(sds_fetch.SdsFetchError, match="Cannot resolve host"):
+        await sds_fetch.fetch_sds_pdf(f"https://{host}/sds.pdf")
+
+
+async def test_fetch_logs_redact_path_and_query(monkeypatch, caplog):
+    """Dropbox `scl` share links carry their capability token in the path,
+    not just the query string — both must be scrubbed from the failure log,
+    leaving only scheme+host."""
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo_public)
+
+    def raise_error(request):
+        raise httpx.ConnectError("boom", request=request)
+
+    transport = httpx.MockTransport(raise_error)
+    secret_path = "/scl/fi/abc123/secret-token-xyz"
+    with caplog.at_level("WARNING"):
+        with pytest.raises(sds_fetch.SdsFetchError):
+            await sds_fetch.fetch_sds_pdf(
+                f"https://example.com{secret_path}?rlkey=supersecret",
+                transport=transport,
+            )
+
+    messages = [r.getMessage() for r in caplog.records]
+    assert any("example.com" in m for m in messages)
+    assert not any("rlkey" in m for m in messages)
+    assert not any("supersecret" in m for m in messages)
+    assert not any(secret_path in m for m in messages)

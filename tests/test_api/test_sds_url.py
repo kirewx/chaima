@@ -96,6 +96,7 @@ async def test_sds_fetch_409_without_url(client, group, admin_membership):
     cid = r.json()["id"]
     r = await client.post(f"/api/v1/groups/{group.id}/chemicals/{cid}/sds-fetch")
     assert r.status_code == 409
+    assert "no SDS link" in r.json()["detail"]
 
 
 async def test_sds_fetch_409_when_pdf_already_stored(client, group, admin_membership, monkeypatch):
@@ -110,6 +111,7 @@ async def test_sds_fetch_409_when_pdf_already_stored(client, group, admin_member
     assert r.status_code == 200
     r = await client.post(f"/api/v1/groups/{group.id}/chemicals/{cid}/sds-fetch")
     assert r.status_code == 409
+    assert "already stored" in r.json()["detail"]
 
 
 async def test_sds_fetch_502_on_fetch_error(client, group, admin_membership, monkeypatch):
@@ -123,18 +125,6 @@ async def test_sds_fetch_502_on_fetch_error(client, group, admin_membership, mon
     r = await client.post(f"/api/v1/groups/{group.id}/chemicals/{cid}/sds-fetch")
     assert r.status_code == 502
     assert "not a PDF" in r.json()["detail"]
-
-
-async def test_sds_fetch_502_on_empty_body(client, group, admin_membership, monkeypatch):
-    from chaima.services import sds_fetch
-
-    async def fake_fetch(url, **kwargs):
-        return b""
-
-    monkeypatch.setattr(sds_fetch, "fetch_sds_pdf", fake_fetch)
-    cid = await _make_chem_with_url(client, group, "https://example.com/empty.pdf")
-    r = await client.post(f"/api/v1/groups/{group.id}/chemicals/{cid}/sds-fetch")
-    assert r.status_code == 502
 
 
 async def test_sds_fetch_forbidden_for_non_admin(client, group, membership):
@@ -234,3 +224,82 @@ async def test_batch_fetch_sds_excludes_secret_from_non_creator(
     # The secret chemical's sds_path was never touched.
     refreshed = await session.get(Chemical, secret.id)
     assert refreshed.sds_path is None
+
+
+async def test_batch_fetch_sds_survives_unexpected_error(
+    client, group, admin_membership, monkeypatch
+):
+    """A non-SdsFetchError blowing up on one chemical must not abort the
+    stream, must not leak its message, and must not block later chemicals
+    (and, since fetch_sds_pdf raises before any DB write, must not poison
+    the shared session for the next commit)."""
+    from chaima.services import sds_fetch
+
+    async def fake_fetch(url, **kwargs):
+        if "boom" in url:
+            raise RuntimeError("boom: internal path /etc/passwd leaked here")
+        return PDF
+
+    monkeypatch.setattr(sds_fetch, "fetch_sds_pdf", fake_fetch)
+
+    boom_id = await _make_chem_with_url(client, group, "https://example.com/boom.pdf")
+    ok_id = await _make_chem_with_url(client, group, "https://example.com/ok2.pdf")
+
+    r = await client.post(f"/api/v1/groups/{group.id}/chemicals/fetch-sds")
+    assert r.status_code == 200
+    events = [
+        json.loads(line[len("data: "):])
+        for line in r.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    per_chem = {e["id"]: e for e in events if "id" in e}
+    summary = next(e for e in events if "summary" in e)
+
+    assert per_chem[ok_id]["status"] == "fetched"
+    failed = per_chem[boom_id]
+    assert failed["status"] == "failed"
+    assert failed["reason"] == "Unexpected error"
+    assert "boom" not in failed["reason"]
+    assert "/etc/passwd" not in failed["reason"]
+    assert summary["summary"] == {"fetched": 1, "failed": 1}
+
+
+async def test_batch_fetch_sds_skips_chemical_with_stored_pdf(
+    client, group, admin_membership, monkeypatch
+):
+    """Fill-only guard, mutation-proofed: a chemical that already has both
+    sds_url and sds_path must be excluded from the batch entirely — no
+    event, and its stored path must be untouched."""
+    from chaima.services import sds_fetch
+
+    async def fake_fetch(url, **kwargs):
+        return PDF
+
+    monkeypatch.setattr(sds_fetch, "fetch_sds_pdf", fake_fetch)
+
+    # Store a PDF via the single-fetch endpoint so sds_path is set for real.
+    already_id = await _make_chem_with_url(client, group, "https://example.com/already.pdf")
+    r = await client.post(f"/api/v1/groups/{group.id}/chemicals/{already_id}/sds-fetch")
+    assert r.status_code == 200
+    stored_path = r.json()["sds_path"]
+    assert stored_path
+
+    pending_id = await _make_chem_with_url(client, group, "https://example.com/pending.pdf")
+
+    r = await client.post(f"/api/v1/groups/{group.id}/chemicals/fetch-sds")
+    assert r.status_code == 200
+    events = [
+        json.loads(line[len("data: "):])
+        for line in r.text.splitlines()
+        if line.startswith("data: ")
+    ]
+    per_chem_ids = {e["id"] for e in events if "id" in e}
+
+    assert already_id not in per_chem_ids
+    assert pending_id in per_chem_ids
+
+    summary = next(e for e in events if "summary" in e)
+    assert summary["summary"] == {"fetched": 1, "failed": 0}
+
+    r = await client.get(f"/api/v1/groups/{group.id}/chemicals/{already_id}")
+    assert r.json()["sds_path"] == stored_path
