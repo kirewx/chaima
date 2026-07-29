@@ -34,7 +34,10 @@ def test_rewrite_dropbox_url(url, expected):
 
 
 async def test_fetch_rejects_non_http_scheme():
-    with pytest.raises(sds_fetch.SdsFetchError):
+    # match= matters: without it, httpx's own UnsupportedProtocol would be
+    # wrapped into an SdsFetchError and the test would pass even with the
+    # scheme guard removed.
+    with pytest.raises(sds_fetch.SdsFetchError, match="Only http/https"):
         await sds_fetch.fetch_sds_pdf("ftp://example.com/sds.pdf")
 
 
@@ -103,6 +106,48 @@ async def test_fetch_follows_redirect_and_blocks_private_target(monkeypatch):
     )
     with pytest.raises(sds_fetch.SdsFetchError, match="non-public"):
         await sds_fetch.fetch_sds_pdf("https://public.example/sds.pdf", transport=transport)
+
+
+async def test_fetch_follows_redirect_to_pdf(monkeypatch):
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo_public)
+
+    def handler(request):
+        if request.url.path == "/sds.pdf":
+            return httpx.Response(302, headers={"location": "/real/sds.pdf"})
+        return httpx.Response(
+            200, content=PDF, headers={"content-type": "application/pdf"},
+        )
+
+    transport = httpx.MockTransport(handler)
+    data = await sds_fetch.fetch_sds_pdf(
+        "https://example.com/sds.pdf", transport=transport
+    )
+    assert data == PDF
+
+
+async def test_fetch_rejects_too_many_redirects(monkeypatch):
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo_public)
+    calls = []
+
+    def handler(request):
+        calls.append(str(request.url))
+        return httpx.Response(302, headers={"location": f"/hop{len(calls)}.pdf"})
+
+    transport = httpx.MockTransport(handler)
+    with pytest.raises(sds_fetch.SdsFetchError, match="Too many redirects"):
+        await sds_fetch.fetch_sds_pdf(
+            "https://example.com/sds.pdf", transport=transport
+        )
+    assert len(calls) == sds_fetch.MAX_REDIRECTS + 1
+
+
+async def test_fetch_rejects_redirect_without_location(monkeypatch):
+    monkeypatch.setattr(socket, "getaddrinfo", _fake_getaddrinfo_public)
+    transport = httpx.MockTransport(lambda request: httpx.Response(302))
+    with pytest.raises(sds_fetch.SdsFetchError, match="Redirect without Location"):
+        await sds_fetch.fetch_sds_pdf(
+            "https://example.com/sds.pdf", transport=transport
+        )
 
 
 async def test_fetch_rejects_upstream_error(monkeypatch):

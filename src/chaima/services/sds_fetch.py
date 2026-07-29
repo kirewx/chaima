@@ -12,16 +12,19 @@ PDF sniff on the payload.
 from __future__ import annotations
 
 import ipaddress
+import logging
 import socket
 from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
 
 import httpx
 
-MAX_SDS_BYTES = 20 * 1024 * 1024
+logger = logging.getLogger(__name__)
+
+MAX_SDS_BYTES = 20 * 1024 * 1024  # 20 MB
 FETCH_TIMEOUT = 15.0
 MAX_REDIRECTS = 5
 
-_REDIRECT_STATUS = (301, 302, 303, 307, 308)
+_REDIRECT_STATUSES = frozenset({301, 302, 303, 307, 308})
 
 
 class SdsFetchError(Exception):
@@ -117,7 +120,7 @@ async def fetch_sds_pdf(
             data = b""
             try:
                 async with client.stream("GET", current) as resp:
-                    if resp.status_code in _REDIRECT_STATUS:
+                    if resp.status_code in _REDIRECT_STATUSES:
                         location = resp.headers.get("location")
                         if not location:
                             raise SdsFetchError("Redirect without Location header")
@@ -130,6 +133,7 @@ async def fetch_sds_pdf(
                         content_type = resp.headers.get("content-type", "").lower()
                         data = await _read_capped(resp)
             except httpx.HTTPError as e:
+                logger.warning("SDS fetch failed for %s: %s", current, e)
                 raise SdsFetchError(f"Download failed: {e.__class__.__name__}") from e
 
             # The response is closed by now; only the values copied out of it
