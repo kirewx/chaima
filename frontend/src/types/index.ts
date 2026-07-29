@@ -63,6 +63,7 @@ export interface ChemicalCreate {
   melting_point?: number | null;
   boiling_point?: number | null;
   comment?: string | null;
+  sds_url?: string | null;
   is_secret?: boolean;
   synonyms?: string[];
   ghs_codes?: string[];
@@ -79,6 +80,7 @@ export interface ChemicalUpdate {
   melting_point?: number | null;
   boiling_point?: number | null;
   comment?: string | null;
+  sds_url?: string | null;
   is_secret?: boolean;
   synonyms?: string[];
   ghs_codes?: string[];
@@ -104,6 +106,7 @@ export interface ChemicalRead {
   is_archived: boolean;
   archived_at: string | null;
   sds_path: string | null;
+  sds_url: string | null;
   synonym_names: string[];
 }
 
@@ -416,12 +419,12 @@ export interface ImportCommitResponse {
 export type ImportTarget =
   | "name" | "cas" | "location_text" | "supplier_text" | "quantity" | "unit"
   | "quantity_unit_combined" | "purity" | "purchased_at"
-  | "ordered_by" | "identifier" | "created_by_name" | "comment" | "ignore";
+  | "ordered_by" | "identifier" | "created_by_name" | "comment" | "sds_url" | "ignore";
 
 export const IMPORT_TARGETS: ImportTarget[] = [
   "name", "cas", "location_text", "supplier_text", "quantity", "unit",
   "quantity_unit_combined", "purity", "purchased_at", "ordered_by",
-  "identifier", "created_by_name", "comment", "ignore",
+  "identifier", "created_by_name", "comment", "sds_url", "ignore",
 ];
 
 export type OrderStatus = "ordered" | "received" | "cancelled";
