@@ -705,12 +705,12 @@ export function ChemicalForm({ chemicalId, groupId: groupIdProp, onDone }: Props
         size="small"
       />
       <TextField
-        label="SDS-Link (URL)"
+        label="SDS link (URL)"
         value={sdsUrl}
         onChange={(e) => setSdsUrl(e.target.value)}
         size="small"
         error={sdsUrlInvalid}
-        helperText={sdsUrlInvalid ? "Muss mit http:// oder https:// beginnen" : undefined}
+        helperText={sdsUrlInvalid ? "Must start with http:// or https://" : undefined}
       />
       <FormControlLabel
         control={

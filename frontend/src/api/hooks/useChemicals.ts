@@ -121,7 +121,7 @@ export function useUploadSDS(groupId: string, chemicalId: string) {
   });
 }
 
-export function useFetchSds(groupId: string, chemicalId: string) {
+export function useFetchSDS(groupId: string, chemicalId: string) {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: async () => {

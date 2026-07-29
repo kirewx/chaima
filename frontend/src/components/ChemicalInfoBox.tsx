@@ -5,6 +5,7 @@ import DescriptionIcon from "@mui/icons-material/Description";
 import UploadFileIcon from "@mui/icons-material/UploadFile";
 import WarningAmberIcon from "@mui/icons-material/WarningAmber";
 import SearchIcon from "@mui/icons-material/Search";
+import DownloadIcon from "@mui/icons-material/Download";
 import type {
   ChemicalRead,
   ContainerRead,
@@ -19,7 +20,7 @@ import { HazardStatementsDialog } from "./HazardStatementsDialog";
 import { StructureDialog } from "./StructureDialog";
 import { worstSignalWord } from "../utils/hazardSignal";
 import { useChemicalStructureSvg } from "../api/hooks/useChemicalStructureSvg";
-import { useUploadSDS } from "../api/hooks/useChemicals";
+import { useUploadSDS, useFetchSDS } from "../api/hooks/useChemicals";
 import { gestisUrl, useGestisResolve } from "../api/hooks/useGestis";
 import { useGroup, useIsGroupAdmin } from "../api/hooks/useGroups";
 import { useDrawer } from "./drawer/DrawerContext";
@@ -58,6 +59,8 @@ export function ChemicalInfoBox({
   const sdsInputRef = useRef<HTMLInputElement | null>(null);
   const uploadSds = useUploadSDS(groupId, chemical.id);
   const [sdsError, setSdsError] = useState<string | null>(null);
+  const fetchSds = useFetchSDS(groupId, chemical.id);
+  const [fetchSdsError, setFetchSdsError] = useState<string | null>(null);
   const isAdmin = useIsGroupAdmin(groupId);
   const { data: group } = useGroup(groupId);
 
@@ -403,7 +406,7 @@ export function ChemicalInfoBox({
             </MuiLink>
           </Stack>
         )}
-        {isAdmin && !chemical.sds_path && chemical.cas && group?.show_sds_research_links && (
+        {isAdmin && !chemical.sds_path && !chemical.sds_url && chemical.cas && group?.show_sds_research_links && (
           <>
             <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", mb: 0.5 }}>
               <SearchIcon sx={{ fontSize: 12, color: "primary.main" }} />
@@ -452,6 +455,50 @@ export function ChemicalInfoBox({
                 {uploadSds.isPending ? "Uploading…" : "Replace"}
               </MuiLink>
             )}
+            {chemical.sds_url && (
+              <MuiLink
+                href={chemical.sds_url}
+                target="_blank"
+                rel="noopener noreferrer"
+                sx={{ fontSize: 11, display: "inline-flex", alignItems: "center", gap: 0.25 }}
+              >
+                <LinkIcon sx={{ fontSize: 12 }} />
+                Source
+              </MuiLink>
+            )}
+          </Stack>
+        ) : chemical.sds_url ? (
+          <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", flexWrap: "wrap" }}>
+            <LinkIcon sx={{ fontSize: 12, color: "primary.main" }} />
+            <MuiLink
+              href={chemical.sds_url}
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{ fontSize: 11 }}
+            >
+              SDS link (external)
+            </MuiLink>
+            {isAdmin && (
+              <MuiLink
+                component="button"
+                type="button"
+                disabled={fetchSds.isPending}
+                onClick={async () => {
+                  setFetchSdsError(null);
+                  try {
+                    await fetchSds.mutateAsync();
+                  } catch (e) {
+                    const detail = (e as { response?: { data?: { detail?: string } } })
+                      .response?.data?.detail;
+                    setFetchSdsError(typeof detail === "string" ? detail : "Fetch failed — try again.");
+                  }
+                }}
+                sx={{ fontSize: 11, display: "inline-flex", alignItems: "center", gap: 0.25 }}
+              >
+                <DownloadIcon sx={{ fontSize: 12 }} />
+                {fetchSds.isPending ? "Fetching…" : "Fetch PDF"}
+              </MuiLink>
+            )}
           </Stack>
         ) : isAdmin ? (
           <Stack direction="row" spacing={0.5} sx={{ alignItems: "center", flexWrap: "wrap" }}>
@@ -470,6 +517,11 @@ export function ChemicalInfoBox({
             </MuiLink>
           </Stack>
         ) : null}
+        {fetchSdsError && (
+          <Typography variant="caption" color="error">
+            {fetchSdsError}
+          </Typography>
+        )}
         {isAdmin && (
           <input
             ref={sdsInputRef}
