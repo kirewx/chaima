@@ -299,13 +299,15 @@ def test_apply_column_mapping_sds_url_normalization():
         sheets=None,
     )
     rows = import_service.apply_column_mapping(
-        grid, {"Name": "name", "SDS": "sds_url"}, None,
+        grid, {"Name": "name", "SDS": "sds_url"}, qu_combined_column=None,
     )
     assert rows[0].sds_url == "https://example.com/a.pdf"
-    assert rows[1].sds_url is None and rows[1].warnings == []
+    assert rows[1].sds_url is None
+    assert rows[1].warnings == []
     assert rows[2].sds_url is None
-    assert any("SDS link" in w for w in rows[2].warnings)
-    assert rows[3].sds_url is None and rows[3].warnings == []
+    assert rows[2].warnings == ["Ignored invalid SDS link 'ftp://nope'"]
+    assert rows[3].sds_url is None
+    assert rows[3].warnings == []
 
 
 async def test_commit_import_sets_sds_url_fill_only(session, group, user):
@@ -328,20 +330,25 @@ async def test_commit_import_sets_sds_url_fill_only(session, group, user):
         quantity_unit_combined_column=None,
         columns=["Name", "SDS", "Q", "U"],
         rows=[
+            # First row of the NewChem group has no URL; the second does -
+            # pins that the group scan takes the first *non-empty* URL
+            # across all its rows, not just the first row.
+            ["NewChem", "", "1", "g"],
             ["NewChem", "https://example.com/new.pdf", "1", "g"],
             ["KeepUrl", "https://example.com/other.pdf", "1", "g"],
             ["FillUrl", "https://example.com/fill.pdf", "1", "g"],
         ],
         location_mapping=[],
         chemical_groups=[
-            import_service.ChemicalGroupPayload(canonical_name="NewChem", canonical_cas=None, row_indices=[0]),
-            import_service.ChemicalGroupPayload(canonical_name="KeepUrl", canonical_cas=None, row_indices=[1]),
-            import_service.ChemicalGroupPayload(canonical_name="FillUrl", canonical_cas=None, row_indices=[2]),
+            import_service.ChemicalGroupPayload(canonical_name="NewChem", canonical_cas=None, row_indices=[0, 1]),
+            import_service.ChemicalGroupPayload(canonical_name="KeepUrl", canonical_cas=None, row_indices=[2]),
+            import_service.ChemicalGroupPayload(canonical_name="FillUrl", canonical_cas=None, row_indices=[3]),
         ],
     )
     await import_service.commit_import(
         session, group_id=group.id, viewer_id=user.id, payload=payload,
     )
+    await session.commit()
 
     chems = {
         c.name: c
@@ -352,3 +359,44 @@ async def test_commit_import_sets_sds_url_fill_only(session, group, user):
     assert chems["NewChem"].sds_url == "https://example.com/new.pdf"
     assert chems["KeepUrl"].sds_url == "https://example.com/keep.pdf"
     assert chems["FillUrl"].sds_url == "https://example.com/fill.pdf"
+
+
+async def test_commit_import_sds_url_backfills_across_split_groups_same_name(session, group, user):
+    """Two chemical_groups can share a canonical_name (e.g. partially-filled
+    CAS columns split identity into a cas: bucket and a name: bucket). The
+    second group to resolve to the same, freshly-created chemical must still
+    be able to backfill its URL - not just groups resolved against
+    pre-existing chemicals."""
+    from sqlmodel import select
+    from chaima.models.chemical import Chemical
+
+    payload = import_service.CommitPayload(
+        column_mapping={
+            "Name": "name", "CAS": "cas", "SDS": "sds_url", "Q": "quantity", "U": "unit",
+        },
+        quantity_unit_combined_column=None,
+        columns=["Name", "CAS", "SDS", "Q", "U"],
+        rows=[
+            ["Aceton", "67-64-1", "", "1", "g"],
+            ["Aceton", "", "https://example.com/a.pdf", "1", "g"],
+        ],
+        location_mapping=[],
+        chemical_groups=[
+            import_service.ChemicalGroupPayload(
+                canonical_name="Aceton", canonical_cas="67-64-1", row_indices=[0]
+            ),
+            import_service.ChemicalGroupPayload(
+                canonical_name="Aceton", canonical_cas=None, row_indices=[1]
+            ),
+        ],
+    )
+    await import_service.commit_import(
+        session, group_id=group.id, viewer_id=user.id, payload=payload,
+    )
+    await session.commit()
+
+    chems = (await session.exec(
+        select(Chemical).where(Chemical.group_id == group.id)
+    )).all()
+    assert len(chems) == 1
+    assert chems[0].sds_url == "https://example.com/a.pdf"

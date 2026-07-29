@@ -30,7 +30,7 @@ def split_quantity_unit(s: str) -> tuple[float | None, str | None]:
 
 
 _HEADER_PATTERNS: list[tuple[str, str]] = [
-    ("sicherheitsdatenblatt", "sds_url"),
+    ("sicherheitsdatenblatt", "sds_url"),  # redundant with "datenblatt", kept as documentation of the primary header
     ("datenblatt", "sds_url"),
     ("sds", "sds_url"),
     ("cas", "cas"),
@@ -210,6 +210,7 @@ def apply_column_mapping(
         raw_sds = values["sds_url"]
         if raw_sds:
             if raw_sds == "-":
+                # "-" is the common sheet placeholder for "no SDS" — drop silently, no warning
                 values["sds_url"] = None
             elif not raw_sds.startswith(("http://", "https://")):
                 warnings.append(f"Ignored invalid SDS link '{raw_sds}'")
@@ -364,7 +365,7 @@ async def commit_import(
     if real_errors:
         raise ImportValidationError(real_errors)
     parsed = [r for r in parsed if r.index not in blank_indices]
-    row_by_index = {r.index: r for r in parsed}
+    row_by_index: dict[int, ParsedRow] = {r.index: r for r in parsed}
 
     location_text_to_id: dict[str, uuid_pkg.UUID] = {}
     created_locations = 0
@@ -396,7 +397,7 @@ async def commit_import(
     chem_by_name: dict[str, uuid_pkg.UUID] = {
         c.name.strip().lower(): c.id for c in existing_chems
     }
-    chem_obj_by_id = {c.id: c for c in existing_chems}
+    chem_obj_by_id: dict[uuid_pkg.UUID, Chemical] = {c.id: c for c in existing_chems}
 
     row_to_chemical: dict[int, uuid_pkg.UUID] = {}
     created_chemicals = 0
@@ -431,6 +432,7 @@ async def commit_import(
             await session.flush()
             chem_id = chem.id
             chem_by_name[key] = chem_id
+            chem_obj_by_id[chem_id] = chem
             created_chemicals += 1
         for idx in cg.row_indices:
             row_to_chemical[idx] = chem_id
