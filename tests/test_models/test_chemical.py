@@ -129,3 +129,18 @@ async def test_chemical_sds_path_set(session, group, user):
     await session.commit()
     await session.refresh(c)
     assert c.sds_path == "uploads/g1/benz-sds.pdf"
+
+
+async def test_chemical_sds_url_roundtrip(session, group, user):
+    from chaima.models.chemical import Chemical
+
+    chem = Chemical(
+        name="UrlChem",
+        group_id=group.id,
+        created_by=user.id,
+        sds_url="https://example.com/sds.pdf",
+    )
+    session.add(chem)
+    await session.flush()
+    await session.refresh(chem)
+    assert chem.sds_url == "https://example.com/sds.pdf"
