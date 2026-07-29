@@ -132,8 +132,6 @@ async def test_chemical_sds_path_set(session, group, user):
 
 
 async def test_chemical_sds_url_roundtrip(session, group, user):
-    from chaima.models.chemical import Chemical
-
     chem = Chemical(
         name="UrlChem",
         group_id=group.id,
