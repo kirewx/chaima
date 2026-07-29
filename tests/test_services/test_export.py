@@ -38,6 +38,8 @@ async def test_export_csv_one_row_per_container(session, group, user):
 
     assert header[:7] == ["name", "cas", "smiles", "location", "identifier", "quantity", "unit"]
     assert len(body) == 2
+    for row in body:
+        assert len(row) == len(export_service.EXPORT_COLUMNS)
     e001 = next(r for r in body if r[4] == "E-001")
     assert e001[0] == "Ethanol"
     assert e001[1] == "64-17-5"
@@ -121,31 +123,33 @@ async def test_export_too_large_raises(session, group, user, monkeypatch):
 
 
 def test_export_columns_include_sds_url():
-    from chaima.services.export import EXPORT_COLUMNS
-    assert "sds_url" in EXPORT_COLUMNS
-    assert EXPORT_COLUMNS.index("sds_url") == EXPORT_COLUMNS.index("comment") + 1
+    assert "sds_url" in export_service.EXPORT_COLUMNS
+    assert (
+        export_service.EXPORT_COLUMNS.index("sds_url")
+        == export_service.EXPORT_COLUMNS.index("comment") + 1
+    )
 
 
 def test_row_for_container_includes_sds_url():
-    from chaima.services.export import EXPORT_COLUMNS, _row_for_container
-
     chem = Chemical(
         name="ExpChem", group_id=uuid4(), created_by=uuid4(),
         sds_url="https://example.com/sds.pdf",
     )
+    # Never persisted to the session, so relationship access would try to
+    # lazy-load on a detached instance and raise; stub both to empty lists.
     chem.ghs_links = []
     chem.hazard_tag_links = []
-    row = _row_for_container(chem, None)
-    assert len(row) == len(EXPORT_COLUMNS)
-    assert row[EXPORT_COLUMNS.index("sds_url")] == "https://example.com/sds.pdf"
+    row = export_service._row_for_container(chem, None)
+    assert len(row) == len(export_service.EXPORT_COLUMNS)
+    assert row[export_service.EXPORT_COLUMNS.index("sds_url")] == "https://example.com/sds.pdf"
 
 
 def test_row_for_container_without_sds_url_is_empty_string():
-    from chaima.services.export import EXPORT_COLUMNS, _row_for_container
-
     chem = Chemical(name="NoUrlChem", group_id=uuid4(), created_by=uuid4())
+    # Never persisted to the session, so relationship access would try to
+    # lazy-load on a detached instance and raise; stub both to empty lists.
     chem.ghs_links = []
     chem.hazard_tag_links = []
-    row = _row_for_container(chem, None)
-    assert len(row) == len(EXPORT_COLUMNS)
-    assert row[EXPORT_COLUMNS.index("sds_url")] == ""
+    row = export_service._row_for_container(chem, None)
+    assert len(row) == len(export_service.EXPORT_COLUMNS)
+    assert row[export_service.EXPORT_COLUMNS.index("sds_url")] == ""
