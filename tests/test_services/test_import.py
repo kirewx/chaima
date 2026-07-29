@@ -275,3 +275,80 @@ async def test_commit_import_uses_existing_location(session, group, user):
     await session.commit()
     assert summary.created_locations == 0
     assert summary.created_containers == 1
+
+
+def test_detect_header_mapping_sds_url():
+    cols = [" Sicherheitsdatenblatt(deutsch) -> online zugriff", "SDS", "Datenblatt", "CAS"]
+    mapping = import_service.detect_header_mapping(cols)
+    assert mapping[" Sicherheitsdatenblatt(deutsch) -> online zugriff"] == "sds_url"
+    assert mapping["SDS"] == "sds_url"
+    assert mapping["Datenblatt"] == "sds_url"
+    assert mapping["CAS"] == "cas"
+
+
+def test_apply_column_mapping_sds_url_normalization():
+    grid = import_service.Grid(
+        columns=["Name", "SDS"],
+        rows=[
+            ["A", "https://example.com/a.pdf"],
+            ["B", "-"],
+            ["C", "ftp://nope"],
+            ["D", ""],
+        ],
+        row_count=4,
+        sheets=None,
+    )
+    rows = import_service.apply_column_mapping(
+        grid, {"Name": "name", "SDS": "sds_url"}, None,
+    )
+    assert rows[0].sds_url == "https://example.com/a.pdf"
+    assert rows[1].sds_url is None and rows[1].warnings == []
+    assert rows[2].sds_url is None
+    assert any("SDS link" in w for w in rows[2].warnings)
+    assert rows[3].sds_url is None and rows[3].warnings == []
+
+
+async def test_commit_import_sets_sds_url_fill_only(session, group, user):
+    from sqlmodel import select
+    from chaima.models.chemical import Chemical
+
+    # Pre-existing chemical WITH a URL: must not be overwritten.
+    keep = Chemical(
+        name="KeepUrl", group_id=group.id, created_by=user.id,
+        sds_url="https://example.com/keep.pdf",
+    )
+    # Pre-existing chemical WITHOUT a URL: must be backfilled.
+    fill = Chemical(name="FillUrl", group_id=group.id, created_by=user.id)
+    session.add(keep)
+    session.add(fill)
+    await session.flush()
+
+    payload = import_service.CommitPayload(
+        column_mapping={"Name": "name", "SDS": "sds_url", "Q": "quantity", "U": "unit"},
+        quantity_unit_combined_column=None,
+        columns=["Name", "SDS", "Q", "U"],
+        rows=[
+            ["NewChem", "https://example.com/new.pdf", "1", "g"],
+            ["KeepUrl", "https://example.com/other.pdf", "1", "g"],
+            ["FillUrl", "https://example.com/fill.pdf", "1", "g"],
+        ],
+        location_mapping=[],
+        chemical_groups=[
+            import_service.ChemicalGroupPayload(canonical_name="NewChem", canonical_cas=None, row_indices=[0]),
+            import_service.ChemicalGroupPayload(canonical_name="KeepUrl", canonical_cas=None, row_indices=[1]),
+            import_service.ChemicalGroupPayload(canonical_name="FillUrl", canonical_cas=None, row_indices=[2]),
+        ],
+    )
+    await import_service.commit_import(
+        session, group_id=group.id, viewer_id=user.id, payload=payload,
+    )
+
+    chems = {
+        c.name: c
+        for c in (await session.exec(
+            select(Chemical).where(Chemical.group_id == group.id)
+        )).all()
+    }
+    assert chems["NewChem"].sds_url == "https://example.com/new.pdf"
+    assert chems["KeepUrl"].sds_url == "https://example.com/keep.pdf"
+    assert chems["FillUrl"].sds_url == "https://example.com/fill.pdf"
