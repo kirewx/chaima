@@ -73,15 +73,18 @@ async def get_user_manager(
     yield UserManager(user_db)
 
 
+_SESSION_LIFETIME_SECONDS = settings.session_ttl_hours * 3600
+
 cookie_transport = CookieTransport(
-    cookie_max_age=3600,
+    cookie_max_age=_SESSION_LIFETIME_SECONDS,
     cookie_secure=settings.cookie_secure,
 )
 
 
 def get_jwt_strategy() -> JWTStrategy:
     return JWTStrategy(
-        secret=settings.secret_key.get_secret_value(), lifetime_seconds=3600
+        secret=settings.secret_key.get_secret_value(),
+        lifetime_seconds=_SESSION_LIFETIME_SECONDS,
     )
 
 

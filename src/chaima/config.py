@@ -15,6 +15,17 @@ class Settings(BaseSettings):
     # plain HTTP on a LAN, otherwise browsers reject the cookie and login
     # appears to succeed but `/users/me` returns 401.
     cookie_secure: bool = True
+    # Session lifetime. Feeds BOTH the cookie's max-age and the JWT's own
+    # expiry (see chaima.auth) so the two can never drift apart. 720 h is
+    # 30 days: users reach ChAiMa from a phone and a desktop and should not
+    # have to re-authenticate on every visit.
+    #
+    # Sessions are stateless — the signed token IS the session and no
+    # server-side record of issued tokens exists. A longer lifetime is
+    # therefore also a longer window in which a leaked token stays usable,
+    # and a password reset does not evict an existing session. To invalidate
+    # every session on the instance at once, change CHAIMA_SECRET_KEY.
+    session_ttl_hours: int = 720
     # Base URL used to build invite links (e.g. https://chaima.example.com).
     # When None, the frontend falls back to `window.location.origin`, which
     # leaks `localhost` if an admin generates the link from the dev machine.
