@@ -347,6 +347,12 @@ export interface InviteAccept {
   password: string;
 }
 
+export interface ResetLinkRead {
+  token: string;
+  reset_url: string | null;
+  expires_at: string;
+}
+
 export interface PubChemGHSHit {
   code: string;
   description: string;
