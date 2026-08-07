@@ -24,6 +24,8 @@ class EventType(str, enum.Enum):
     WISHLIST_ADDED = "wishlist_added"
     PHOTO_EXTRACT = "photo_extract"
     PUBCHEM_FETCH = "pubchem_fetch"
+    PASSWORD_RESET_LINK_CREATED = "password_reset_link_created"
+    PASSWORD_RESET_COMPLETED = "password_reset_completed"
 
 
 class Event(SQLModel, table=True):

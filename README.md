@@ -80,8 +80,10 @@ All variables are prefixed `CHAIMA_`. See `.env.example` for the full list.
 | `CHAIMA_ADMIN_PASSWORD` | Initial superuser password | `changeme` |
 | `CHAIMA_REQUIRE_SECURE_CONFIG` | Refuse to start with default secret/password | `false` |
 | `CHAIMA_COOKIE_SECURE` | Mark auth cookies HTTPS-only | `true` |
+| `CHAIMA_SESSION_TTL_HOURS` | Login session lifetime (cookie + JWT expiry), in hours | `720` (30 days) |
 | `CHAIMA_DATABASE_URL` | DB URL (SQLite or `postgresql+asyncpg://…`) | local SQLite |
-| `CHAIMA_PUBLIC_BASE_URL` | Base URL for invite links | window origin |
+| `CHAIMA_PUBLIC_BASE_URL` | Base URL for invite links and password reset links | window origin |
+| `CHAIMA_PASSWORD_RESET_TTL_HOURS` | How long an admin-issued password reset link stays valid, in hours | `24` |
 | `CHAIMA_DOMAIN` | Domain for the Caddy overlay | empty |
 | `CHAIMA_GEMINI_API_KEY` | Google AI key for label OCR (optional) | empty (feature off) |
 | `CHAIMA_GEMINI_MODEL` | Gemini model for OCR | `gemini-2.5-flash` |

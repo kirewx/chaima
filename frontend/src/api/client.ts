@@ -13,7 +13,16 @@ client.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       const path = window.location.pathname;
-      if (path !== "/login" && path !== "/register" && !path.startsWith("/invite")) {
+      // These are public routes rendered under GroupProvider, which always
+      // calls GET /users/me. For a logged-out visitor that 401s, so every
+      // public route must be exempted here or it bounces straight to
+      // /login before it can render. Add new public routes to this list.
+      if (
+        path !== "/login" &&
+        path !== "/register" &&
+        !path.startsWith("/invite") &&
+        !path.startsWith("/reset-password")
+      ) {
         window.location.href = "/login";
       }
     }

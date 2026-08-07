@@ -1,11 +1,14 @@
 """Router for group management endpoints."""
 
+import datetime
 from typing import Literal
 from uuid import UUID
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
 from sqlmodel import select
 
+from chaima.auth import UserManager, get_user_manager
+from chaima.config import admin_settings, settings
 from chaima.dependencies import (
     CurrentUserDep,
     GroupAdminDep,
@@ -13,6 +16,8 @@ from chaima.dependencies import (
     SessionDep,
     SuperuserDep,
 )
+from chaima.models.analytics import EventType
+from chaima.models.group import UserGroupLink
 from chaima.models.user import User
 from chaima.schemas.group import (
     GroupCreate,
@@ -23,8 +28,11 @@ from chaima.schemas.group import (
     MemberUpdate,
 )
 from chaima.schemas.pagination import PaginatedResponse
+from chaima.schemas.password_reset import ResetLinkRead
 from chaima.services import groups as group_service
+from chaima.services.events import log_event
 from chaima.services.groups import LastAdminError, MemberExistsError, MemberNotFoundError
+from chaima.services.password_reset import ResetNotPermittedError, assert_may_reset
 
 router = APIRouter(prefix="/api/v1/groups", tags=["groups"])
 
@@ -363,3 +371,99 @@ async def update_member_role(
         joined_at=link.joined_at,
         email=target_user.email,
     )
+
+
+@router.post(
+    "/{group_id}/members/{user_id}/reset-link",
+    response_model=ResetLinkRead,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_password_reset_link(
+    user_id: UUID,
+    session: SessionDep,
+    current_user: CurrentUserDep,
+    member: GroupAdminDep,
+    background_tasks: BackgroundTasks,
+    user_manager: UserManager = Depends(get_user_manager),
+) -> ResetLinkRead:
+    """Issue a password reset link for a group member.
+
+    The link grants control of the target account, so it must be delivered
+    out of band and only to that person.
+
+    Parameters
+    ----------
+    user_id : UUID
+        The member whose password is to be reset.
+    session : AsyncSession
+        The database session (injected).
+    current_user : User
+        The authenticated user (injected). Needed in addition to ``member``
+        because the permission rule tests ``is_superuser``, which the
+        membership link does not carry.
+    member : tuple[Group, UserGroupLink]
+        The group and admin membership link (injected, requires admin role).
+    background_tasks : BackgroundTasks
+        Runner for the audit write (injected).
+    user_manager : UserManager
+        Builds the token (injected).
+
+    Returns
+    -------
+    ResetLinkRead
+        The token, its URL and its expiry.
+
+    Raises
+    ------
+    HTTPException
+        404 if the user is not a member of this group or does not exist,
+        403 if the caller may not reset this account.
+    """
+    group, _link = member
+
+    # GroupAdminDep only proves the caller administers {group_id}. Without
+    # this check any user ID could be put in the path.
+    link_result = await session.exec(
+        select(UserGroupLink).where(
+            UserGroupLink.user_id == user_id,
+            UserGroupLink.group_id == group.id,
+        )
+    )
+    if link_result.first() is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User is not a member of this group",
+        )
+
+    target = await session.get(User, user_id)
+    if target is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="User not found",
+        )
+
+    try:
+        await assert_may_reset(session, actor=current_user, target=target)
+    except ResetNotPermittedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+
+    # generate_reset_token() hashes synchronously (Argon2, ~33ms), blocking
+    # the event loop. Accepted for this rare admin action; not worth a
+    # threadpool hop.
+    token = user_manager.generate_reset_token(target)
+    expires_at = datetime.datetime.now(datetime.UTC) + datetime.timedelta(
+        hours=admin_settings.password_reset_ttl_hours
+    )
+
+    base = settings.public_base_url
+    reset_url = f"{base.rstrip('/')}/reset-password/{token}" if base else None
+
+    log_event(
+        background_tasks,
+        user_id=current_user.id,
+        group_id=group.id,
+        type=EventType.PASSWORD_RESET_LINK_CREATED,
+        payload={"target_user_id": str(user_id)},
+    )
+
+    return ResetLinkRead(token=token, reset_url=reset_url, expires_at=expires_at)

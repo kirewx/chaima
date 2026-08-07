@@ -24,6 +24,8 @@ import AddIcon from "@mui/icons-material/Add";
 import { SectionHeader } from "./SectionHeader";
 import { useGroup, useGroupMembers, useUpdateMember, useRemoveMember } from "../../api/hooks/useGroups";
 import { useGroupInvites, useCreateInvite, useRevokeInvite } from "../../api/hooks/useInvites";
+import { useCreateResetLink } from "../../api/hooks/usePasswordReset";
+import { errorMessage } from "../../utils/errorMessage";
 import type { MemberRead } from "../../types";
 
 interface Props {
@@ -91,9 +93,34 @@ function MemberRow({
   divider: boolean;
 }) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
+  const [resetOpen, setResetOpen] = useState(false);
+  const [resetUrl, setResetUrl] = useState<string | null>(null);
+  const [resetExpiresAt, setResetExpiresAt] = useState<string | null>(null);
+  const [toast, setToast] = useState(false);
   const update = useUpdateMember(groupId, member.user_id);
   const remove = useRemoveMember(groupId);
+  const createResetLink = useCreateResetLink(groupId);
   const close = () => setAnchor(null);
+
+  const handleResetLink = () => {
+    setResetUrl(null);
+    setResetExpiresAt(null);
+    setResetOpen(true);
+    close();
+    createResetLink.mutate(member.user_id, {
+      onSuccess: (data) => {
+        setResetUrl(
+          data.reset_url ?? `${window.location.origin}/reset-password/${data.token}`,
+        );
+        setResetExpiresAt(data.expires_at);
+      },
+    });
+  };
+
+  const copyUrl = (url: string) => {
+    void navigator.clipboard.writeText(url);
+    setToast(true);
+  };
 
   return (
     <Stack
@@ -148,6 +175,7 @@ function MemberRow({
         >
           {member.is_admin ? "Demote to user" : "Promote to admin"}
         </MenuItem>
+        <MenuItem onClick={handleResetLink}>Generate password reset link</MenuItem>
         <MenuItem
           onClick={async () => {
             if (window.confirm(`Remove ${member.email} from the group?`)) {
@@ -159,6 +187,56 @@ function MemberRow({
           Remove from group
         </MenuItem>
       </Menu>
+
+      <Dialog open={resetOpen} onClose={() => setResetOpen(false)} fullWidth maxWidth="xs">
+        <DialogTitle>Password reset link</DialogTitle>
+        <DialogContent>
+          {createResetLink.isPending && <Typography variant="body2">Generating…</Typography>}
+          {createResetLink.isError && !createResetLink.isPending && (
+            <Alert severity="error">{errorMessage(createResetLink.error)}</Alert>
+          )}
+          {resetUrl && (
+            <Stack spacing={1.5} sx={{ mt: 1 }}>
+              <Alert severity="warning">
+                Anyone with this link can set a new password for {member.email} and
+                take over the account. Give it to that person directly.
+                {resetExpiresAt && (
+                  <>
+                    {" "}It expires {new Date(resetExpiresAt).toLocaleString()}.
+                  </>
+                )}
+              </Alert>
+              <TextField
+                size="small"
+                fullWidth
+                value={resetUrl}
+                slotProps={{
+                  input: {
+                    readOnly: true,
+                    sx: { fontFamily: "'JetBrains Mono', monospace", fontSize: 11 },
+                  },
+                }}
+              />
+            </Stack>
+          )}
+        </DialogContent>
+        <DialogActions>
+          {resetUrl && (
+            <Button onClick={() => copyUrl(resetUrl)} startIcon={<ContentCopyIcon />}>
+              Copy
+            </Button>
+          )}
+          <Button variant="contained" onClick={() => setResetOpen(false)}>
+            Done
+          </Button>
+        </DialogActions>
+      </Dialog>
+      <Snackbar
+        open={toast}
+        autoHideDuration={2000}
+        onClose={() => setToast(false)}
+        message="Copied to clipboard"
+      />
     </Stack>
   );
 }

@@ -9,9 +9,10 @@ from fastapi_users.authentication import (
     JWTStrategy,
 )
 from fastapi_users.db import SQLAlchemyUserDatabase
+from fastapi_users.jwt import generate_jwt
 from sqlmodel.ext.asyncio.session import AsyncSession
 
-from chaima.config import settings
+from chaima.config import admin_settings, settings
 from chaima.db import get_async_session
 from chaima.models.user import User
 
@@ -25,6 +26,43 @@ async def get_user_db(
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = settings.secret_key.get_secret_value()
     verification_token_secret = settings.secret_key.get_secret_value()
+    reset_password_token_lifetime_seconds = (
+        admin_settings.password_reset_ttl_hours * 3600
+    )
+
+    def generate_reset_token(self, user: User) -> str:
+        """Build a password-reset token without delivering it anywhere.
+
+        ``forgot_password()`` passes its token to ``on_after_forgot_password``
+        and returns None, which is the wrong shape when an admin needs the
+        value to hand over out of band. The claims below must stay identical
+        to the ones that method builds, or ``reset_password()`` will reject
+        what we issue.
+
+        The ``password_fgpt`` claim is a hash of the user's current password
+        hash; ``reset_password()`` re-verifies it against the stored value,
+        so any password change invalidates every outstanding token.
+
+        Parameters
+        ----------
+        user : User
+            The user whose password is to be reset.
+
+        Returns
+        -------
+        str
+            A signed JWT accepted by ``reset_password()``.
+        """
+        token_data = {
+            "sub": str(user.id),
+            "password_fgpt": self.password_helper.hash(user.hashed_password),
+            "aud": self.reset_password_token_audience,
+        }
+        return generate_jwt(
+            token_data,
+            self.reset_password_token_secret,
+            self.reset_password_token_lifetime_seconds,
+        )
 
     async def on_after_login(self, user, request=None, response=None):
         """Bump login counters and emit a login_success event.
@@ -73,15 +111,18 @@ async def get_user_manager(
     yield UserManager(user_db)
 
 
+_SESSION_LIFETIME_SECONDS = settings.session_ttl_hours * 3600
+
 cookie_transport = CookieTransport(
-    cookie_max_age=3600,
+    cookie_max_age=_SESSION_LIFETIME_SECONDS,
     cookie_secure=settings.cookie_secure,
 )
 
 
 def get_jwt_strategy() -> JWTStrategy:
     return JWTStrategy(
-        secret=settings.secret_key.get_secret_value(), lifetime_seconds=3600
+        secret=settings.secret_key.get_secret_value(),
+        lifetime_seconds=_SESSION_LIFETIME_SECONDS,
     )
 
 

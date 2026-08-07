@@ -3,6 +3,7 @@ import Layout from "./components/Layout";
 import ProtectedRoute from "./components/ProtectedRoute";
 import LoginPage from "./pages/LoginPage";
 import InvitePage from "./pages/InvitePage";
+import ResetPasswordPage from "./pages/ResetPasswordPage";
 import ChemicalsPage from "./pages/ChemicalsPage";
 import StoragePage from "./pages/StoragePage";
 import OrdersPage from "./pages/OrdersPage";
@@ -13,6 +14,7 @@ export default function App() {
     <Routes>
       <Route path="/login" element={<LoginPage />} />
       <Route path="/invite/:token" element={<InvitePage />} />
+      <Route path="/reset-password/:token" element={<ResetPasswordPage />} />
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
           <Route path="/" element={<ChemicalsPage />} />
