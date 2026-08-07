@@ -1509,12 +1509,12 @@ Expected: no errors
 - [ ] **Step 3: Build the frontend**
 
 Run: `cd frontend && npm run build`
-Expected: build succeeds. Required because the backend serves `src/chaima/static/` in bundled mode.
+Expected: build succeeds. Run it as a verification step only — Vite writes to `src/chaima/static/` (`frontend/vite.config.ts:7`), which is **gitignored** (`.gitignore:221`) and has never been tracked. The bundle is built at deploy time, not shipped in git, so do NOT stage it and do NOT force-add it.
 
 - [ ] **Step 4: Commit**
 
 ```bash
-git add frontend/src/pages/LoginPage.tsx src/chaima/static
+git add frontend/src/pages/LoginPage.tsx
 git commit -m "feat(frontend): point users at their group admin for password recovery"
 ```
 
