@@ -25,6 +25,7 @@ from chaima.routers.pubchem import router as pubchem_router
 from chaima.routers.containers import router as containers_router
 from chaima.routers.ghs import router as ghs_router
 from chaima.routers.groups import router as groups_router
+from chaima.routers.password_reset import router as password_reset_router
 from chaima.routers.users import router as users_custom_router
 from chaima.routers.hazard_tags import router as hazard_tags_router
 from chaima.routers.invites import router as invites_router
@@ -165,6 +166,7 @@ app.include_router(
     tags=["auth"],
 )
 app.include_router(users_custom_router)
+app.include_router(password_reset_router)
 app.include_router(
     fastapi_users.get_users_router(UserRead, UserUpdate),
     prefix="/api/v1/users",

@@ -120,3 +120,97 @@ async def test_expires_at_matches_the_token_s_own_exp_claim(
     expires_at = datetime.datetime.fromisoformat(data["expires_at"])
 
     assert abs((token_exp - expires_at).total_seconds()) < 5
+
+
+@pytest.mark.asyncio
+async def test_redeem_sets_the_new_password(
+    client, session, group, other_user, admin_membership, other_membership
+):
+    from fastapi_users.password import PasswordHelper
+
+    issue = await client.post(
+        f"/api/v1/groups/{group.id}/members/{other_user.id}/reset-link"
+    )
+    token = issue.json()["token"]
+
+    resp = await client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": token, "password": "brandnewpassword"},
+    )
+    assert resp.status_code == 200
+
+    await session.refresh(other_user)
+    verified, _ = PasswordHelper().verify_and_update(
+        "brandnewpassword", other_user.hashed_password
+    )
+    assert verified is True
+
+
+@pytest.mark.asyncio
+async def test_redeeming_twice_fails(
+    client, session, group, other_user, admin_membership, other_membership
+):
+    """Single use, enforced by the password_fgpt claim rather than a table."""
+    issue = await client.post(
+        f"/api/v1/groups/{group.id}/members/{other_user.id}/reset-link"
+    )
+    token = issue.json()["token"]
+
+    first = await client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": token, "password": "brandnewpassword"},
+    )
+    assert first.status_code == 200
+
+    second = await client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": token, "password": "yetanotherpassword"},
+    )
+    assert second.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_redeeming_a_tampered_token_fails(client):
+    resp = await client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": "not-a-real-token", "password": "brandnewpassword"},
+    )
+    assert resp.status_code == 400
+
+
+@pytest.mark.asyncio
+async def test_redeeming_writes_an_audit_event(
+    client, session, group, other_user, admin_membership, other_membership
+):
+    issue = await client.post(
+        f"/api/v1/groups/{group.id}/members/{other_user.id}/reset-link"
+    )
+    token = issue.json()["token"]
+    await client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": token, "password": "brandnewpassword"},
+    )
+
+    events = (
+        await session.exec(
+            select(Event).where(Event.type == "password_reset_completed")
+        )
+    ).all()
+    assert len(events) == 1
+    assert events[0].user_id == other_user.id
+
+
+@pytest.mark.asyncio
+async def test_short_password_is_rejected(
+    client, session, group, other_user, admin_membership, other_membership
+):
+    issue = await client.post(
+        f"/api/v1/groups/{group.id}/members/{other_user.id}/reset-link"
+    )
+    token = issue.json()["token"]
+
+    resp = await client.post(
+        "/api/v1/auth/reset-password",
+        json={"token": token, "password": "short"},
+    )
+    assert resp.status_code == 422

@@ -73,6 +73,6 @@ def test_event_type_enum_has_all_expected_values():
         "login_success", "login_failure", "search_executed",
         "chemical_created", "container_created", "order_created",
         "wishlist_added", "photo_extract", "pubchem_fetch",
-        "password_reset_link_created",
+        "password_reset_link_created", "password_reset_completed",
     }
     assert {v.value for v in EventType} == expected
