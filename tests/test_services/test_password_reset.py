@@ -2,6 +2,7 @@
 import pytest
 
 from chaima.models.group import Group, UserGroupLink
+from chaima.models.user import User
 from chaima.services.password_reset import ResetNotPermittedError, assert_may_reset
 
 
@@ -16,6 +17,29 @@ async def test_superuser_actor_is_always_permitted(session, superuser, other_use
     await _link(session, other_user, group, is_admin=False)
 
     await assert_may_reset(session, actor=superuser, target=other_user)
+
+
+@pytest.mark.asyncio
+async def test_superuser_actor_may_reset_another_superuser(session, superuser, group):
+    """Pins the ORDER of the two guards, not just the outcome.
+
+    Both actor and target are superusers here. The correct result — permitted —
+    only holds because the actor-is-superuser check runs first and short-circuits
+    before the target-is-superuser check is ever reached. If the two `if`
+    statements were swapped as a "cheap check first" optimisation, this case
+    would start raising even though nothing about the permission model changed.
+    """
+    other_superuser = User(
+        email="root2@example.com",
+        hashed_password="fakehash",
+        is_active=True,
+        is_superuser=True,
+        is_verified=True,
+    )
+    session.add(other_superuser)
+    await session.flush()
+
+    await assert_may_reset(session, actor=superuser, target=other_superuser)
 
 
 @pytest.mark.asyncio

@@ -59,6 +59,10 @@ async def assert_may_reset(
         return
 
     if target.is_superuser:
+        # This message tells a group admin the target is a superuser, which
+        # MemberRead never exposes — a deliberate trade, not an oversight.
+        # ChAiMa's admins are trusted lab colleagues, so the leak has little
+        # protective value here, and the explanatory wording is worth more.
         raise ResetNotPermittedError(
             "Only a superuser can reset another superuser's password"
         )
