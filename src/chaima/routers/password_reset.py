@@ -10,18 +10,18 @@ from fastapi_users import exceptions
 
 from chaima.auth import UserManager, get_user_manager
 from chaima.models.analytics import EventType
-from chaima.schemas.password_reset import PasswordResetPerform
+from chaima.schemas.password_reset import PasswordResetDone, PasswordResetPerform
 from chaima.services.events import log_event
 
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
-@router.post("/reset-password")
+@router.post("/reset-password", response_model=PasswordResetDone)
 async def reset_password(
     body: PasswordResetPerform,
     background_tasks: BackgroundTasks,
     user_manager: UserManager = Depends(get_user_manager),
-) -> dict:
+) -> PasswordResetDone:
     """Set a new password using an admin-issued reset token.
 
     There is deliberately no companion endpoint for inspecting a token
@@ -38,7 +38,7 @@ async def reset_password(
 
     Returns
     -------
-    dict
+    PasswordResetDone
         A detail message.
 
     Raises
@@ -74,4 +74,4 @@ async def reset_password(
         payload=None,
     )
 
-    return {"detail": "Password updated"}
+    return PasswordResetDone(detail="Password updated")

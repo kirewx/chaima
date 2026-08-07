@@ -36,3 +36,15 @@ class PasswordResetPerform(BaseModel):
 
     token: str
     password: str = Field(min_length=8)
+
+
+class PasswordResetDone(BaseModel):
+    """Confirmation that a reset token was redeemed.
+
+    Attributes
+    ----------
+    detail : str
+        Human-readable confirmation message.
+    """
+
+    detail: str
