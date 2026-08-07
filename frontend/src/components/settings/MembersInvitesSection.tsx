@@ -95,6 +95,7 @@ function MemberRow({
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
   const [resetOpen, setResetOpen] = useState(false);
   const [resetUrl, setResetUrl] = useState<string | null>(null);
+  const [resetExpiresAt, setResetExpiresAt] = useState<string | null>(null);
   const [toast, setToast] = useState(false);
   const update = useUpdateMember(groupId, member.user_id);
   const remove = useRemoveMember(groupId);
@@ -103,6 +104,7 @@ function MemberRow({
 
   const handleResetLink = () => {
     setResetUrl(null);
+    setResetExpiresAt(null);
     setResetOpen(true);
     close();
     createResetLink.mutate(member.user_id, {
@@ -110,6 +112,7 @@ function MemberRow({
         setResetUrl(
           data.reset_url ?? `${window.location.origin}/reset-password/${data.token}`,
         );
+        setResetExpiresAt(data.expires_at);
       },
     });
   };
@@ -189,7 +192,7 @@ function MemberRow({
         <DialogTitle>Password reset link</DialogTitle>
         <DialogContent>
           {createResetLink.isPending && <Typography variant="body2">Generating…</Typography>}
-          {createResetLink.isError && (
+          {createResetLink.isError && !createResetLink.isPending && (
             <Alert severity="error">{errorMessage(createResetLink.error)}</Alert>
           )}
           {resetUrl && (
@@ -197,6 +200,11 @@ function MemberRow({
               <Alert severity="warning">
                 Anyone with this link can set a new password for {member.email} and
                 take over the account. Give it to that person directly.
+                {resetExpiresAt && (
+                  <>
+                    {" "}It expires {new Date(resetExpiresAt).toLocaleString()}.
+                  </>
+                )}
               </Alert>
               <TextField
                 size="small"
