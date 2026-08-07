@@ -27,6 +27,9 @@ export default function LoginPage() {
           <Button type="submit" variant="contained" fullWidth size="large" disabled={login.isPending}>
             {login.isPending ? "Signing in..." : "Sign in"}
           </Button>
+          <Typography variant="body2" color="text.secondary" sx={{ mt: 2, textAlign: "center" }}>
+            Forgot your password? Ask a group administrator to send you a reset link.
+          </Typography>
         </Box>
       </Paper>
     </Box>
