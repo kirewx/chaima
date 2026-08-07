@@ -60,12 +60,17 @@ class AdminSettings(BaseSettings):
         Name of the seed group.
     invite_ttl_hours : int
         Default time-to-live for invite links in hours.
+    password_reset_ttl_hours : int
+        How long an admin-issued password reset link stays valid, in hours.
+        Separate from session length: how long a recovery link works and how
+        long someone stays logged in are unrelated questions.
     """
 
     admin_email: str = "admin@chaima.dev"
     admin_password: SecretStr = SecretStr(DEFAULT_ADMIN_PASSWORD)
     admin_group_name: str = "Admin"
     invite_ttl_hours: int = 48
+    password_reset_ttl_hours: int = 24
 
     model_config = SettingsConfigDict(env_prefix="CHAIMA_")
 
