@@ -25,12 +25,13 @@ In scope:
 - `POST /api/v1/auth/reset-password` redeeming a token against a new password.
 - A public `/reset-password/:token` page and a menu entry in the members list.
 - Two audit event types.
+- Session lifetime raised from one hour to 30 days, configurable.
 
 Explicitly out of scope:
 
 - **Email delivery.** Added later as `POST /api/v1/auth/forgot-password`. The token format and the redemption endpoint specified here are exactly what that flow needs, so the addition is purely additive.
 - **A CLI recovery command.** If the only superuser forgets their password, the `sqlite3` workaround remains. Deferred by explicit decision.
-- **Session invalidation.** See Known Limitations.
+- **Server-side session invalidation.** Decided against explicitly; see Session Lifetime and Known Limitations.
 - **Revocation of an issued link.** A link is invalidated by issuing and redeeming another one, or by waiting out the TTL.
 
 ## Permission Rule
@@ -49,13 +50,31 @@ Denial is `403` with a message naming the reason, so the frontend can explain it
 
 Separately, and independently of this rule, the endpoint must confirm that the target is a member of the group named in the path. `GroupAdminDep` only proves the caller administers `{group_id}`; without this check a caller could put an arbitrary user ID in the path. A target that is not a member of that group is `404`.
 
+## Session Lifetime
+
+Sessions currently last one hour. Two values enforce that, and both must move together: `cookie_max_age=3600` on the `CookieTransport` (`auth.py:77`) and `lifetime_seconds=3600` on the `JWTStrategy` (`auth.py:84`). Raising only the first leaves the browser holding a cookie whose token has already expired; raising only the second has the browser discard a token that is still valid. Both are driven from one setting so they cannot drift apart.
+
+The new default is **30 days**. Users reach ChAiMa from a phone and a desktop and should not have to re-authenticate on every visit.
+
+Sessions remain **stateless**: the signed JWT is the whole session, and no server-side record of issued tokens is kept. Switching to `DatabaseStrategy` — supported by the already-installed `fastapi_users_db_sqlalchemy` 7.0.0, which ships an `accesstoken` table — would make sessions revocable and was considered and rejected for this iteration. The consequences are recorded under Known Limitations rather than left implicit, because a 30-day stateless session materially changes what the reset feature in this spec can accomplish.
+
 ## Backend Changes
 
 ### Config (`config.py`)
 
-Add `password_reset_ttl_hours: int = 24` to `AdminSettings`, beside the existing `invite_ttl_hours` (`config.py:57`), yielding `CHAIMA_PASSWORD_RESET_TTL_HOURS`.
+Add to `Settings`, beside `cookie_secure` (`config.py:17`):
 
-The `fastapi-users` default is one hour (`manager.py:33`). That is sensible for a link mailed to someone at their desk and too short for one handed over by hand, so the default is raised to 24 hours and made configurable.
+- `session_ttl_hours: int = 720` → `CHAIMA_SESSION_TTL_HOURS`. 720 hours is 30 days.
+
+Add to `AdminSettings`, beside the existing `invite_ttl_hours` (`config.py:57`):
+
+- `password_reset_ttl_hours: int = 24` → `CHAIMA_PASSWORD_RESET_TTL_HOURS`.
+
+The `fastapi-users` default for reset tokens is one hour (`manager.py:33`). That is sensible for a link mailed to someone at their desk and too short for one handed over by hand, so it is raised to 24 hours and made configurable. Note that this is a separate knob from `session_ttl_hours`: how long a recovery link stays usable and how long someone stays logged in are unrelated questions.
+
+### Session configuration (`auth.py`)
+
+Feed `settings.session_ttl_hours * 3600` into both `CookieTransport(cookie_max_age=...)` and `JWTStrategy(lifetime_seconds=...)`.
 
 ### Token generation (`auth.py`)
 
@@ -120,7 +139,17 @@ One unobtrusive line beneath the form: password recovery runs through the user's
 
 ## Known Limitations
 
-**A password change does not end existing sessions.** Auth cookies are stateless signed JWTs with a one-hour lifetime (`auth.py:84`); nothing consults the database on each request, so a session established before the reset stays valid until it expires. For "I forgot my password" this is irrelevant. For "my account is compromised" it means up to an hour of continued access after the password is changed. Closing this requires server-side token invalidation — a redis or database strategy in place of `JWTStrategy` — which is a separate piece of work and is not undertaken here.
+**A password change does not end existing sessions, and sessions now last 30 days.** The session is a stateless signed JWT; nothing consults the database on each request, so a token issued before a reset stays valid until its own expiry. Resetting a password therefore does not evict anyone who is already logged in — for up to 30 days.
+
+This is the deliberate trade for not keeping server-side session state, and it has three consequences worth naming plainly:
+
+- The reset feature specified here recovers *access* for a user who is locked out. It is not a remedy for a compromised account, because it does not revoke the attacker's existing session.
+- Logout clears the cookie in the browser but does not invalidate the token. Anyone who captured the token beforehand can keep using it until it expires.
+- A token leaked from a device now has a 30-day useful life rather than one hour.
+
+The escape hatch, should any of this become a real problem, is `DatabaseStrategy` with the `accesstoken` table from `fastapi_users_db_sqlalchemy`: it makes logout effective, allows a reset to drop every session belonging to the user, and costs one indexed primary-key lookup per request. The change is contained to `auth.py` plus one migration and does not disturb anything specified here, so deferring it forecloses nothing.
+
+Until then, the operational answer for a genuinely compromised account is to reset the password and change `CHAIMA_SECRET_KEY`, which invalidates every session on the instance at once.
 
 **Issued links cannot be revoked before expiry.** Accepted as the cost of holding no token table. The exposure is bounded by the TTL and by automatic invalidation on the next successful password change.
 
@@ -128,8 +157,8 @@ One unobtrusive line beneath the form: password recovery runs through the user's
 
 Backend:
 
-- `src/chaima/config.py` — `password_reset_ttl_hours`
-- `src/chaima/auth.py` — token lifetime, `generate_reset_token`
+- `src/chaima/config.py` — `session_ttl_hours`, `password_reset_ttl_hours`
+- `src/chaima/auth.py` — session lifetime on both transport and strategy, reset token lifetime, `generate_reset_token`
 - `src/chaima/services/password_reset.py` — new, permission rule
 - `src/chaima/schemas/password_reset.py` — new, `ResetLinkRead`, `PasswordResetPerform`
 - `src/chaima/routers/groups.py` — issue endpoint
@@ -168,5 +197,9 @@ No migration: no schema change.
 - the same token redeemed twice → second attempt `400`, since `password_fgpt` no longer matches the stored hash. This is the test that pins the single-use property the design relies on.
 - tampered and expired tokens → `400`
 - both event types are written, following the pattern in `tests/test_api/test_admin_analytics_writes.py` and `tests/test_services/test_auth_login_hooks.py`
+
+`tests/test_config.py` — session lifetime:
+
+- `cookie_max_age` on the transport and `lifetime_seconds` on the strategy both derive from `session_ttl_hours` and are equal. Cheap, and it pins the one failure mode of this change: the two values silently drifting apart.
 
 No frontend e2e tests are added. Nine e2e tests are already failing on `main` for unrelated historical reasons; adding to that suite would park new tests where nobody is currently looking.
