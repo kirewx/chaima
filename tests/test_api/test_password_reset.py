@@ -3,6 +3,7 @@ import datetime
 
 import pytest
 from fastapi_users.jwt import decode_jwt
+from httpx import ASGITransport, AsyncClient
 from sqlmodel import select
 
 from chaima.auth import UserManager
@@ -214,3 +215,99 @@ async def test_short_password_is_rejected(
         json={"token": token, "password": "short"},
     )
     assert resp.status_code == 422
+
+
+@pytest.mark.asyncio
+async def test_session_survives_password_reset(
+    session, group, user, other_user, admin_membership, other_membership, monkeypatch
+):
+    """Pins a deliberately-accepted trade-off, not a bug.
+
+    The design spec (docs/superpowers/specs/2026-08-07-admin-password-reset-
+    link-design.md, "Known Limitations") states that sessions are a stateless
+    signed JWT: nothing consults the database per-request, so a token issued
+    before a password reset remains valid until its own expiry, regardless
+    of the reset. This test proves that behaviour end-to-end through real
+    cookie-login and real token validation (unlike the other tests in this
+    file, which use the `client` fixture's `current_active_user` override —
+    that override would bypass token validation entirely and make an
+    assertion like this one pass vacuously, pinning nothing).
+
+    If this test ever starts failing because someone added session
+    eviction/invalidation on password reset (e.g. switched to
+    `DatabaseStrategy`, or added a token-blacklist / password-changed-at
+    check), that is a *behaviour change*, and the correct response is to
+    update the spec's Known Limitations section to describe the new
+    behaviour -- not to delete or weaken this test.
+    """
+    from fastapi_users.password import PasswordHelper
+
+    import chaima.auth as auth_module
+    from chaima.db import get_async_session
+    from chaima.app import app
+
+    admin_password = "adminpassword123"
+    target_password = "targetpassword123"
+    helper = PasswordHelper()
+    user.hashed_password = helper.hash(admin_password)
+    other_user.hashed_password = helper.hash(target_password)
+    await session.flush()
+
+    # Login sets a `Secure` cookie by default (chaima.config.Settings.
+    # cookie_secure); httpx's cookie jar will not replay a Secure cookie
+    # back over the plain-http ASGI test transport, which would break this
+    # test for a reason unrelated to the behaviour under test. Relax it for
+    # the duration of the test, exactly as CHAIMA_COOKIE_SECURE=false does
+    # for real local-network testing (see config.py).
+    monkeypatch.setattr(auth_module.cookie_transport, "cookie_secure", False)
+
+    async def _override_session():
+        yield session
+
+    app.dependency_overrides[get_async_session] = _override_session
+    try:
+        transport = ASGITransport(app=app)
+        async with AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as admin_client, AsyncClient(
+            transport=transport, base_url="http://test"
+        ) as target_client:
+            # Admin logs in for real (no auth override active) and issues a
+            # reset link for the target user.
+            admin_login = await admin_client.post(
+                "/api/v1/auth/cookie/login",
+                data={"username": user.email, "password": admin_password},
+            )
+            assert admin_login.status_code == 204
+
+            issue = await admin_client.post(
+                f"/api/v1/groups/{group.id}/members/{other_user.id}/reset-link"
+            )
+            assert issue.status_code == 201
+            token = issue.json()["token"]
+
+            # Target user establishes a real session BEFORE the reset.
+            target_login = await target_client.post(
+                "/api/v1/auth/cookie/login",
+                data={"username": other_user.email, "password": target_password},
+            )
+            assert target_login.status_code == 204
+
+            pre_reset = await target_client.get("/api/v1/users/me")
+            assert pre_reset.status_code == 200
+            assert pre_reset.json()["id"] == str(other_user.id)
+
+            # Redeem the reset link, changing the target's password.
+            reset = await admin_client.post(
+                "/api/v1/auth/reset-password",
+                json={"token": token, "password": "brandnewpassword456"},
+            )
+            assert reset.status_code == 200
+
+            # The session cookie obtained BEFORE the reset must still work:
+            # this is the documented, deliberately-accepted trade-off.
+            post_reset = await target_client.get("/api/v1/users/me")
+            assert post_reset.status_code == 200
+            assert post_reset.json()["id"] == str(other_user.id)
+    finally:
+        app.dependency_overrides.clear()
