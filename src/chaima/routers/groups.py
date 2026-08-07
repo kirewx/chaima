@@ -416,7 +416,7 @@ async def create_password_reset_link(
     Raises
     ------
     HTTPException
-        404 if the target is not a member of this group,
+        404 if the user is not a member of this group or does not exist,
         403 if the caller may not reset this account.
     """
     group, _link = member

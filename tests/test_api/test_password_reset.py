@@ -1,33 +1,18 @@
 """API tests for admin-issued password reset links."""
+import datetime
+
 import pytest
-import pytest_asyncio
+from fastapi_users.jwt import decode_jwt
 from sqlmodel import select
 
+from chaima.auth import UserManager
 from chaima.models.analytics import Event
 from chaima.models.group import Group, UserGroupLink
 
 
-@pytest_asyncio.fixture
-async def admin_link(session, user, group):
-    """Make `user` (alice) an admin of `group`."""
-    link = UserGroupLink(user_id=user.id, group_id=group.id, is_admin=True)
-    session.add(link)
-    await session.flush()
-    return link
-
-
-@pytest_asyncio.fixture
-async def target_link(session, other_user, group):
-    """Make `other_user` (bob) a plain member of `group`."""
-    link = UserGroupLink(user_id=other_user.id, group_id=group.id, is_admin=False)
-    session.add(link)
-    await session.flush()
-    return link
-
-
 @pytest.mark.asyncio
 async def test_admin_can_issue_reset_link(
-    client, session, group, other_user, admin_link, target_link
+    client, session, group, other_user, admin_membership, other_membership
 ):
     resp = await client.post(
         f"/api/v1/groups/{group.id}/members/{other_user.id}/reset-link"
@@ -40,7 +25,7 @@ async def test_admin_can_issue_reset_link(
 
 @pytest.mark.asyncio
 async def test_issuing_writes_an_audit_event_naming_the_actor(
-    client, session, group, user, other_user, admin_link, target_link
+    client, session, group, user, other_user, admin_membership, other_membership
 ):
     """The event records WHO authorised the reset, with the target in the payload."""
     await client.post(f"/api/v1/groups/{group.id}/members/{other_user.id}/reset-link")
@@ -58,7 +43,7 @@ async def test_issuing_writes_an_audit_event_naming_the_actor(
 
 @pytest.mark.asyncio
 async def test_plain_member_cannot_issue(
-    client, session, group, other_user, membership, target_link
+    client, session, group, other_user, membership, other_membership
 ):
     """`membership` makes alice a NON-admin member, so GroupAdminDep refuses."""
     resp = await client.post(
@@ -69,7 +54,7 @@ async def test_plain_member_cannot_issue(
 
 @pytest.mark.asyncio
 async def test_cannot_issue_for_user_in_an_unadministered_group(
-    client, session, group, other_user, admin_link, target_link
+    client, session, group, other_user, admin_membership, other_membership
 ):
     """Bob also belongs to a group alice does not administer."""
     foreign = Group(name="Lab Beta")
@@ -86,7 +71,7 @@ async def test_cannot_issue_for_user_in_an_unadministered_group(
 
 @pytest.mark.asyncio
 async def test_cannot_issue_for_superuser(
-    client, session, group, superuser, admin_link
+    client, session, group, superuser, admin_membership
 ):
     session.add(UserGroupLink(user_id=superuser.id, group_id=group.id, is_admin=True))
     await session.flush()
@@ -99,7 +84,7 @@ async def test_cannot_issue_for_superuser(
 
 @pytest.mark.asyncio
 async def test_target_must_be_a_member_of_the_group_in_the_path(
-    client, session, group, other_user, admin_link
+    client, session, group, other_user, admin_membership
 ):
     """GroupAdminDep only proves alice administers THIS group.
 
@@ -110,3 +95,28 @@ async def test_target_must_be_a_member_of_the_group_in_the_path(
         f"/api/v1/groups/{group.id}/members/{other_user.id}/reset-link"
     )
     assert resp.status_code == 404
+
+
+@pytest.mark.asyncio
+async def test_expires_at_matches_the_token_s_own_exp_claim(
+    client, session, group, other_user, admin_membership, other_membership
+):
+    """`expires_at` and the JWT `exp` claim are computed separately (one in
+    routers/groups.py from admin_settings, one in auth.py from the
+    UserManager) and could silently drift apart if either changes alone.
+    """
+    resp = await client.post(
+        f"/api/v1/groups/{group.id}/members/{other_user.id}/reset-link"
+    )
+    assert resp.status_code == 201
+    data = resp.json()
+
+    payload = decode_jwt(
+        data["token"],
+        UserManager.reset_password_token_secret,
+        [UserManager.reset_password_token_audience],
+    )
+    token_exp = datetime.datetime.fromtimestamp(payload["exp"], tz=datetime.UTC)
+    expires_at = datetime.datetime.fromisoformat(data["expires_at"])
+
+    assert abs((token_exp - expires_at).total_seconds()) < 5
